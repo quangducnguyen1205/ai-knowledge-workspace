@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${WORKSPACE_CORE_POSTGRES_DB:-workspace_core}
+      POSTGRES_USER: ${WORKSPACE_CORE_POSTGRES_USER:-workspace_core}
+      POSTGRES_PASSWORD: ${WORKSPACE_CORE_POSTGRES_PASSWORD:-workspace_core}
+    ports:
+      - "${WORKSPACE_CORE_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - workspace_core_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${WORKSPACE_CORE_POSTGRES_USER:-workspace_core} -d ${WORKSPACE_CORE_POSTGRES_DB:-workspace_core}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.11.1}
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+    ports:
+      - "${ELASTICSEARCH_PORT:-9201}:9200"
+    volumes:
+      - workspace_core_elasticsearch_data:/usr/share/elasticsearch/data
+
+  # Redis is optional for the first milestone.
+  # Uncomment this service only when workspace-core actually needs it.
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "${WORKSPACE_CORE_REDIS_PORT:-6380}:6379"
+  #   volumes:
+  #     - workspace_core_redis_data:/data
+
+volumes:
+  workspace_core_postgres_data:
+  workspace_core_elasticsearch_data:
+  # workspace_core_redis_data:
