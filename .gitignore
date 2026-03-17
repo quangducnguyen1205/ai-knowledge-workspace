@@ -28,3 +28,5 @@ out/
 # Node
 node_modules/
 
+
+/tmp/

@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: workspace-core
+
+integration:
+  fastapi:
+    base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+    connect-timeout: ${FASTAPI_CONNECT_TIMEOUT:5s}
+    read-timeout: ${FASTAPI_READ_TIMEOUT:30s}
