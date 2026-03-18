@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15
     environment:
       POSTGRES_DB: ${WORKSPACE_CORE_POSTGRES_DB:-workspace_core}
       POSTGRES_USER: ${WORKSPACE_CORE_POSTGRES_USER:-workspace_core}
