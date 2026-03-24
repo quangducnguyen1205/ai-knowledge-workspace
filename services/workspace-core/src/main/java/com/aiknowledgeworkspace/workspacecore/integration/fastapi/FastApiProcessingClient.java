@@ -5,7 +5,7 @@ import org.springframework.core.io.Resource;
 
 public interface FastApiProcessingClient {
 
-    FastApiUploadResponse uploadVideo(Resource videoResource, String filename);
+    FastApiUploadResponse uploadVideo(Resource videoResource, String filename, String title);
 
     FastApiTaskStatusResponse getTaskStatus(String taskId);
 
