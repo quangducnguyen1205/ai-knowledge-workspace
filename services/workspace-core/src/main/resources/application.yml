@@ -1,6 +1,18 @@
 spring:
   application:
     name: workspace-core
+  datasource:
+    url: jdbc:postgresql://${WORKSPACE_CORE_POSTGRES_HOST:localhost}:${WORKSPACE_CORE_POSTGRES_PORT:5433}/${WORKSPACE_CORE_POSTGRES_DB:workspace_core}
+    username: ${WORKSPACE_CORE_POSTGRES_USER:workspace_core}
+    password: ${WORKSPACE_CORE_POSTGRES_PASSWORD:workspace_core}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
 
 server:
   port: ${SERVER_PORT:8080}
