@@ -26,6 +26,11 @@ public class AssetController {
         return assetService.getAsset(assetId);
     }
 
+    @GetMapping("/{assetId}/status")
+    public AssetStatusResponse getAssetStatus(@PathVariable UUID assetId) {
+        return assetService.getAssetStatus(assetId);
+    }
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<AssetUploadResponse> uploadAsset(
             @RequestParam("file") MultipartFile file,

@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTaskStatusResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
@@ -38,6 +39,48 @@ public class AssetService {
     }
 
     @Transactional
+    public AssetStatusResponse getAssetStatus(UUID assetId) {
+        Asset asset = getAsset(assetId);
+        ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Asset is missing its processing job"
+                ));
+
+        if (isTerminal(processingJob.getProcessingJobStatus())) {
+            return new AssetStatusResponse(
+                    asset.getId(),
+                    processingJob.getId(),
+                    asset.getStatus(),
+                    processingJob.getProcessingJobStatus()
+            );
+        }
+
+        FastApiTaskStatusResponse upstreamTaskStatus = fastApiProcessingClient.getTaskStatus(processingJob.getFastapiTaskId());
+        validateUpstreamTaskStatusResponse(upstreamTaskStatus);
+
+        ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
+        AssetStatus updatedAssetStatus = mapAssetStatusFromTaskStatus(updatedProcessingJobStatus);
+
+        processingJob.setProcessingJobStatus(updatedProcessingJobStatus);
+        processingJob.setRawUpstreamTaskState(upstreamTaskStatus.status());
+        processingJobRepository.save(processingJob);
+
+        asset.setStatus(updatedAssetStatus);
+        assetRepository.save(asset);
+
+        // TODO: when transcript fetch is added, use transcript presence to move an asset from
+        // TODO: PROCESSING to TRANSCRIPT_READY instead of relying on task success alone.
+
+        return new AssetStatusResponse(
+                asset.getId(),
+                processingJob.getId(),
+                asset.getStatus(),
+                processingJob.getProcessingJobStatus()
+        );
+    }
+
+    @Transactional
     public AssetUploadResponse uploadAsset(MultipartFile file, String requestedTitle) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A non-empty file is required");
@@ -54,7 +97,7 @@ public class AssetService {
 
         validateUpstreamUploadResponse(upstreamResponse);
 
-        ProcessingJobStatus initialProcessingStatus = mapInitialProcessingStatus(upstreamResponse.status());
+        ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
         AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
                 ? AssetStatus.FAILED
                 : AssetStatus.PROCESSING;
@@ -88,6 +131,15 @@ public class AssetService {
         }
     }
 
+    private void validateUpstreamTaskStatusResponse(FastApiTaskStatusResponse upstreamResponse) {
+        if (upstreamResponse == null) {
+            throw new InvalidFastApiResponseException("FastAPI task status response body was empty");
+        }
+        if (!StringUtils.hasText(upstreamResponse.status())) {
+            throw new InvalidFastApiResponseException("FastAPI task status response did not include status");
+        }
+    }
+
     private String resolveOriginalFilename(MultipartFile file) {
         String originalFilename = file.getOriginalFilename();
         if (StringUtils.hasText(originalFilename)) {
@@ -103,7 +155,7 @@ public class AssetService {
         return originalFilename;
     }
 
-    private ProcessingJobStatus mapInitialProcessingStatus(String upstreamStatus) {
+    private ProcessingJobStatus mapUpstreamTaskStatus(String upstreamStatus) {
         if (!StringUtils.hasText(upstreamStatus)) {
             return ProcessingJobStatus.PENDING;
         }
@@ -116,5 +168,17 @@ public class AssetService {
             case "failed", "error" -> ProcessingJobStatus.FAILED;
             default -> ProcessingJobStatus.RUNNING;
         };
+    }
+
+    private AssetStatus mapAssetStatusFromTaskStatus(ProcessingJobStatus processingJobStatus) {
+        return switch (processingJobStatus) {
+            case FAILED -> AssetStatus.FAILED;
+            case PENDING, RUNNING, SUCCEEDED -> AssetStatus.PROCESSING;
+        };
+    }
+
+    private boolean isTerminal(ProcessingJobStatus processingJobStatus) {
+        return processingJobStatus == ProcessingJobStatus.SUCCEEDED
+                || processingJobStatus == ProcessingJobStatus.FAILED;
     }
 }
