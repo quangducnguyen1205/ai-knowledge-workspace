@@ -86,7 +86,7 @@ public class FastApiProcessingClientImpl implements FastApiProcessingClient {
         try {
             return operation.get();
         } catch (ResourceAccessException exception) {
-            throw new FastApiTimeoutException("FastAPI timeout while trying to " + description, exception);
+            throw new FastApiConnectivityException("FastAPI timeout while trying to " + description, exception);
         } catch (RestClientResponseException exception) {
             throw new FastApiIntegrationException(
                     "FastAPI returned HTTP " + exception.getStatusCode().value() + " while trying to " + description,

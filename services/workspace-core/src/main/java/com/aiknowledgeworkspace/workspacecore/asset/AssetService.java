@@ -11,7 +11,6 @@ import java.util.Locale;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,15 +21,18 @@ public class AssetService {
     private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
     private final FastApiProcessingClient fastApiProcessingClient;
+    private final AssetPersistenceService assetPersistenceService;
 
     public AssetService(
             AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
-            FastApiProcessingClient fastApiProcessingClient
+            FastApiProcessingClient fastApiProcessingClient,
+            AssetPersistenceService assetPersistenceService
     ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.fastApiProcessingClient = fastApiProcessingClient;
+        this.assetPersistenceService = assetPersistenceService;
     }
 
     public Asset getAsset(UUID assetId) {
@@ -38,7 +40,6 @@ public class AssetService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
     }
 
-    @Transactional
     public AssetStatusResponse getAssetStatus(UUID assetId) {
         Asset asset = getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
@@ -62,25 +63,18 @@ public class AssetService {
         ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
         AssetStatus updatedAssetStatus = mapAssetStatusFromTaskStatus(updatedProcessingJobStatus);
 
-        processingJob.setProcessingJobStatus(updatedProcessingJobStatus);
-        processingJob.setRawUpstreamTaskState(upstreamTaskStatus.status());
-        processingJobRepository.save(processingJob);
-
-        asset.setStatus(updatedAssetStatus);
-        assetRepository.save(asset);
-
         // TODO: when transcript fetch is added, use transcript presence to move an asset from
         // TODO: PROCESSING to TRANSCRIPT_READY instead of relying on task success alone.
 
-        return new AssetStatusResponse(
-                asset.getId(),
-                processingJob.getId(),
-                asset.getStatus(),
-                processingJob.getProcessingJobStatus()
+        return assetPersistenceService.refreshAssetStatus(
+                asset,
+                processingJob,
+                upstreamTaskStatus.status(),
+                updatedProcessingJobStatus,
+                updatedAssetStatus
         );
     }
 
-    @Transactional
     public AssetUploadResponse uploadAsset(MultipartFile file, String requestedTitle) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A non-empty file is required");
@@ -102,22 +96,19 @@ public class AssetService {
                 ? AssetStatus.FAILED
                 : AssetStatus.PROCESSING;
 
-        Asset asset = assetRepository.save(new Asset(originalFilename, title, initialAssetStatus));
-
-        ProcessingJob processingJob = new ProcessingJob(
-                asset.getId(),
-                upstreamResponse.taskId(),
-                upstreamResponse.videoId(),
-                initialProcessingStatus,
-                upstreamResponse.status()
-        );
-        processingJob = processingJobRepository.save(processingJob);
-
         // TODO: replace the implicit default workspace assumption with real workspace persistence.
         // TODO: decide how to reconcile orphaned upstream tasks if FastAPI accepts upload but DB persistence fails.
 
-        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus());
+
+        return assetPersistenceService.persistUploadResult(
+                originalFilename,
+                title,
+                initialAssetStatus,
+                initialProcessingStatus,
+                upstreamResponse
+        );
     }
+
 
     private void validateUpstreamUploadResponse(FastApiUploadResponse upstreamResponse) {
         if (upstreamResponse == null) {
@@ -142,17 +133,44 @@ public class AssetService {
 
     private String resolveOriginalFilename(MultipartFile file) {
         String originalFilename = file.getOriginalFilename();
-        if (StringUtils.hasText(originalFilename)) {
-            return originalFilename;
+        // Strip any path information that might be included by the client
+        String cleanedFilename = StringUtils.getFilename(originalFilename);
+
+        // Fallback to a safe default if nothing usable is provided
+        if (!StringUtils.hasText(cleanedFilename)) {
+            return "upload.bin";
         }
-        return "upload.bin";
+
+        // Enforce a maximum length (matches typical @Column(length = 255) constraints)
+        final int MAX_FILENAME_LENGTH = 255;
+        if (cleanedFilename.length() <= MAX_FILENAME_LENGTH) {
+            return cleanedFilename;
+        }
+
+        // Try to preserve the file extension when truncating
+        int lastDotIndex = originalFilename.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < originalFilename.length() - 1) {
+            String extension = originalFilename.substring(lastDotIndex);
+            int truncatedLength = MAX_FILENAME_LENGTH - extension.length();
+            if (truncatedLength > 0) {
+                return cleanedFilename.substring(0, truncatedLength) + extension;
+            }
+        }
+        return cleanedFilename.substring(0, MAX_FILENAME_LENGTH);
     }
 
     private String resolveTitle(String requestedTitle, String originalFilename) {
+        String title;
         if (StringUtils.hasText(requestedTitle)) {
-            return requestedTitle.trim();
+            title = requestedTitle.trim();
+        } else {
+            title = originalFilename;
         }
-        return originalFilename;
+        int maxLength = 255;
+        if (title.length() > maxLength) {
+            title = title.substring(0, maxLength);
+        }
+        return title;
     }
 
     private ProcessingJobStatus mapUpstreamTaskStatus(String upstreamStatus) {

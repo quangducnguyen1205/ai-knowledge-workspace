@@ -21,7 +21,7 @@ public class ProcessingJob {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private UUID assetId;
 
     @Column(nullable = false, length = 128)
