@@ -142,17 +142,44 @@ public class AssetService {
 
     private String resolveOriginalFilename(MultipartFile file) {
         String originalFilename = file.getOriginalFilename();
-        if (StringUtils.hasText(originalFilename)) {
-            return originalFilename;
+        // Strip any path information that might be included by the client
+        String cleanedFilename = StringUtils.getFilename(originalFilename);
+
+        // Fallback to a safe default if nothing usable is provided
+        if (!StringUtils.hasText(cleanedFilename)) {
+            return "upload.bin";
         }
-        return "upload.bin";
+
+        // Enforce a maximum length (matches typical @Column(length = 255) constraints)
+        final int MAX_FILENAME_LENGTH = 255;
+        if (cleanedFilename.length() <= MAX_FILENAME_LENGTH) {
+            return cleanedFilename;
+        }
+
+        // Try to preserve the file extension when truncating
+        int lastDotIndex = originalFilename.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < originalFilename.length() - 1) {
+            String extension = originalFilename.substring(lastDotIndex);
+            int truncatedLength = MAX_FILENAME_LENGTH - extension.length();
+            if (truncatedLength > 0) {
+                return cleanedFilename.substring(0, truncatedLength) + extension;
+            }
+        }
+        return cleanedFilename.substring(0, MAX_FILENAME_LENGTH);
     }
 
     private String resolveTitle(String requestedTitle, String originalFilename) {
+        String title;
         if (StringUtils.hasText(requestedTitle)) {
-            return requestedTitle.trim();
+            title = requestedTitle.trim();
+        } else {
+            title = originalFilename;
         }
-        return originalFilename;
+        int maxLength = 255;
+        if (title.length() > maxLength) {
+            title = title.substring(0, maxLength);
+        }
+        return title;
     }
 
     private ProcessingJobStatus mapUpstreamTaskStatus(String upstreamStatus) {
