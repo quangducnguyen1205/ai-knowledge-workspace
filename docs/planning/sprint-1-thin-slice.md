@@ -2,83 +2,114 @@
 
 ## Sprint Goal
 
-Deliver the first end-to-end product slice in which Spring Boot accepts a lecture video upload, forwards it to the separate FastAPI processing service, stores the upstream `task_id` and `video_id`, tracks processing until completion, fetches transcript rows, indexes those rows into Elasticsearch, and exposes a simple product-facing search endpoint.
+Complete a narrow, working backend slice in which Spring Boot owns the product-facing flow for lecture-video upload, asset status, and transcript retrieval, while keeping Elasticsearch indexing and product-facing search as the main remaining implementation focus.
 
-The goal is not a polished product. The goal is to prove the core product flow and the service boundary.
+The goal is still to prove the product boundary and data flow, not to build a polished end-user product.
 
-## User Stories
+## Already Implemented
 
-### Story 1: Upload And Start Processing
+### Product-Facing Endpoints
 
-As a learner, I want to upload a lecture video through the product backend so that the system can begin processing it without requiring me to call FastAPI directly.
+- `POST /api/assets/upload`
+- `GET /api/assets/{assetId}/status`
+- `GET /api/assets/{assetId}/transcript`
 
-### Story 2: Track Processing Outcome
+### Product Core Behavior
 
-As a learner, I want the product backend to track the processing state of my uploaded asset so that I know whether transcript-based retrieval is available yet.
+- Spring accepts lecture-video uploads through the product API.
+- Spring forwards upload requests to FastAPI `POST /videos/upload`.
+- Spring validates the live FastAPI upload response.
+- Spring persists `Asset` and `ProcessingJob`.
+- Spring stores:
+  - `fastapiTaskId`
+  - `fastapiVideoId`
+  - `processingJobStatus`
+  - `rawUpstreamTaskState`
+- Spring performs on-demand task polling through the asset status read path.
+- Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
+- Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
 
-### Story 3: Search Recovered Transcript Content
+### Transcript Handling
 
-As a learner, I want to search processed transcript content through the product backend so that I can recover the relevant explanation without interacting with legacy upstream endpoints directly.
-
-## Acceptance Criteria
-
-- Spring Boot exposes a product-facing upload endpoint for a lecture video.
-- The upload flow forwards the media to FastAPI `POST /videos/upload`.
-- Spring stores both upstream identifiers returned by FastAPI: `task_id` and `video_id`.
-- Spring can retrieve task status from FastAPI `GET /videos/tasks/{task_id}`.
-- Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
-- The transcript row model used by Spring only depends on the confirmed upstream fields:
+- Spring only depends on the confirmed transcript fields:
   - `id`
   - `video_id`
   - `segment_index`
   - `text`
   - `created_at`
-- Spring does not use `/videos/search` as its product search contract.
-- Transcript rows are indexed into Elasticsearch in a form that supports simple product-facing retrieval.
-- Spring exposes a product-facing search endpoint that returns transcript-based results from Elasticsearch.
-- The end-to-end path works for at least one lecture video in local development.
-- If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as searchable by default.
+- Spring does not assume timestamps or richer transcript metadata exist.
+- Empty transcript is handled explicitly as not usable and is not treated as transcript-ready or searchable.
+
+## Remaining Work
+
+### Elasticsearch Indexing
+
+- Define the Elasticsearch document shape for transcript-row indexing.
+- Decide what asset and processing metadata must be included in indexed documents.
+- Implement transcript indexing from Spring after transcript retrieval succeeds.
+- Define how indexing success or failure changes local asset state.
+
+### Product-Facing Search
+
+- Define the product search response contract in Spring.
+- Implement Spring-owned search against Elasticsearch.
+- Keep `/videos/search` out of the product contract.
+- Return transcript-based search results through Spring rather than exposing legacy upstream behavior.
+
+### Local Verification And Demo Completion
+
+- Verify the full thin slice with indexing included.
+- Verify that search works only on transcript content Spring considers usable.
+- Update the demo flow to include indexing and product-facing search once those pieces exist.
+
+## Still-Open Decisions
+
+- What is the minimal Elasticsearch document structure for transcript rows in phase 1?
+- Should indexing happen immediately after transcript retrieval or through a separate explicit step?
+- Which asset state transition should represent “indexed and searchable” in the first version?
+- What is the simplest product-facing search response shape that stays stable while search evolves?
+
+## Acceptance Criteria
+
+### Completed
+
+- Done: Spring Boot exposes a product-facing upload endpoint for lecture video.
+- Done: The upload flow forwards media to FastAPI `POST /videos/upload`.
+- Done: Spring stores both upstream identifiers returned by FastAPI: `task_id` and `video_id`.
+- Done: Spring persists both `Asset` and `ProcessingJob`.
+- Done: Spring can retrieve task status from FastAPI `GET /videos/tasks/{task_id}` through the asset-centric status path.
+- Done: Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
+- Done: The transcript row model used by Spring only depends on the confirmed upstream fields.
+- Done: Spring does not use `/videos/search` as its product search contract.
+- Done: The end-to-end path works through upload, status tracking, and transcript retrieval in local development.
+- Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
+
+### Pending
+
+- Pending: Transcript rows are indexed into Elasticsearch in a form that supports simple product-facing retrieval.
+- Pending: Spring exposes a product-facing search endpoint that returns transcript-based results from Elasticsearch.
+- Pending: The thin slice is demoable through upload, status, transcript retrieval, indexing, and product-facing search as one complete flow.
 
 ## Engineering Tasks
 
-### Product API And Domain
+### Search And Indexing
 
-- Define a product-facing upload endpoint in Spring Boot.
-- Define a product-facing status endpoint for assets or processing jobs.
-- Define a simple product-facing search endpoint in Spring Boot.
-- Add persistence models for `Asset` and `ProcessingJob`.
-- Ensure `ProcessingJob` persists both `fastapiTaskId` and `fastapiVideoId`.
-- Keep the workspace boundary simple and single-user for phase 1.
+- Define the first Elasticsearch index shape for transcript rows.
+- Implement indexing from Spring using transcript data already retrieved through the product flow.
+- Add explicit asset-state handling around indexing completion and indexing failure.
+- Implement a narrow Spring search endpoint backed by Elasticsearch.
 
-### FastAPI Integration
+### Product Contract Cleanup
 
-- Finalize the `FastApiProcessingClient` for upload, task lookup, video lookup, and transcript fetch.
-- Confirm the minimum upstream response fields needed for `task status` and `video read`.
-- Make upload handling work with the FastAPI task-oriented response contract.
-- Add basic error handling for upstream timeout, upstream failure, and invalid upstream responses.
+- Define a stable search response shape owned by Spring.
+- Decide which internal asset states are enough for phase 1 once indexing is added.
+- Keep the product API asset-centric and avoid leaking legacy FastAPI concepts into search.
 
-### Processing Flow
+### Verification
 
-- Decide where Spring will trigger polling for task status in the first milestone.
-- Implement a simple polling approach without Temporal or Kafka.
-- Persist intermediate and terminal processing states in Spring.
-- Add explicit handling for the edge case where FastAPI reports ready but transcript rows are empty.
-- Prevent transcript fetch and indexing from being treated as successful if no rows are returned.
-
-### Transcript Storage And Search
-
-- Decide how transcript rows will be stored in Spring-owned persistence before or alongside indexing.
-- Define the Elasticsearch document shape for transcript-row search.
-- Index transcript rows with enough metadata to support asset-level and workspace-level filtering later.
-- Implement a narrow search endpoint that returns transcript text results from Elasticsearch.
-- Keep the first search implementation simple; no ranking tuning is required in this sprint.
-
-### Local Development And Verification
-
-- Verify the thin slice against the separate FastAPI repository running as Repo A.
-- Use `FASTAPI_BASE_URL` as the only integration boundary to Repo A.
-- Document the startup sequence and local verification steps.
-- Add a minimal test plan covering upload, polling, transcript fetch, and search.
+- Run the thin slice end to end with Repo A and Repo B separately.
+- Verify that empty-transcript assets are excluded from any indexing/search path.
+- Add a minimal manual verification checklist for indexing and search.
 
 ## Explicit Non-Goals
 
@@ -94,47 +125,43 @@ As a learner, I want to search processed transcript content through the product 
 
 ## Risks
 
-### Upstream Contract Gaps
-
-The transcript row contract is partially verified, but the exact `task status` and `video read` shapes may still need confirmation.
-
 ### Empty Transcript Edge Case
 
-FastAPI may report a ready or successful outcome even when the transcript is empty. This can create a false positive if Spring treats readiness as searchability.
-
-### Polling Simplicity
-
-Without Temporal, the first polling implementation should stay simple. A fragile or over-engineered polling design would be a poor use of sprint time.
+FastAPI success still does not guarantee usable transcript rows. This remains a product risk until indexing and search explicitly exclude empty-transcript assets.
 
 ### Search Scope Creep
 
-It is easy to overreach into search ranking, embeddings strategy, or UI design. Sprint 1 should focus on proving the end-to-end data flow first.
+Indexing and search can expand quickly into ranking, filtering, and API-shape work. Sprint 1 should stay focused on a narrow first retrieval path.
+
+### Upstream Contract Drift
+
+The current Spring implementation relies on the verified upload, task, and transcript contracts. If upstream response shapes change, the thin slice may need adjustment.
 
 ### Separate Repo Coordination
 
-Because Repo A and Repo B remain separate, local setup and contract verification can slow development if not kept explicit and lightweight.
+Repo A and Repo B still run separately. This keeps boundaries clear, but local verification depends on both stacks being available and correctly configured.
 
 ## End-Of-Sprint Demo Script
 
 1. Start Repo A and confirm FastAPI is reachable.
 2. Start Repo B infrastructure and Spring Boot.
-3. Call the Spring Boot upload endpoint with one lecture video.
-4. Show that Spring returns a product response and stores the upstream `task_id` and `video_id`.
-5. Show the Spring status endpoint while processing is still running or after it completes.
-6. Show that Spring fetches transcript rows from FastAPI after processing completes.
-7. Show transcript rows indexed into Elasticsearch.
-8. Call the Spring product-facing search endpoint with a simple lecture query.
-9. Show transcript-based search results returned by Spring.
-10. Call out that the demo returns transcript text results only and does not promise timestamp-based seek.
+3. Upload one lecture video through `POST /api/assets/upload`.
+4. Show that Spring returns product-owned identifiers and persists processing state internally.
+5. Call `GET /api/assets/{assetId}/status` until processing reaches terminal success or failure.
+6. Call `GET /api/assets/{assetId}/transcript`.
+7. Show that Spring returns transcript rows only when they are non-empty.
+8. Show that empty transcript is handled as not usable.
+9. If indexing is completed in this sprint, show transcript indexing into Elasticsearch.
+10. If search is completed in this sprint, show product-facing search through Spring and explicitly note that it does not depend on FastAPI `/videos/search`.
 
 ## Sprint Outcome Checklist
 
-- [ ] Product-facing upload flow exists in Spring
-- [ ] Upstream FastAPI upload integration works
-- [ ] `task_id` and `video_id` are persisted in Spring
-- [ ] Polling or status refresh works for the first milestone
-- [ ] Transcript rows can be fetched from FastAPI
-- [ ] Empty transcript handling is explicit
+- [x] Product-facing upload flow exists in Spring
+- [x] Upstream FastAPI upload integration works
+- [x] `task_id` and `video_id` are persisted in Spring
+- [x] On-demand polling or status refresh works
+- [x] Transcript rows can be fetched from FastAPI
+- [x] Empty transcript handling is explicit
 - [ ] Transcript rows can be indexed into Elasticsearch
 - [ ] Product-facing search returns results from Spring
-- [ ] Thin slice is demoable locally with Repo A and Repo B running separately
+- [ ] Thin slice is demoable locally with indexing and search included
