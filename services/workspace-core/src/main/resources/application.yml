@@ -15,7 +15,7 @@ spring:
           time_zone: UTC
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8081}
 
 integration:
   fastapi:
