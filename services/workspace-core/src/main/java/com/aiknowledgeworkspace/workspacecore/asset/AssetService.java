@@ -2,11 +2,13 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTaskStatusResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -73,6 +75,41 @@ public class AssetService {
                 updatedProcessingJobStatus,
                 updatedAssetStatus
         );
+    }
+
+    public List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
+        Asset asset = getAsset(assetId);
+        ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
+
+        if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Transcript is not ready until processing reaches terminal success"
+            );
+        }
+
+        List<FastApiTranscriptRowResponse> transcriptRows = fastApiProcessingClient.getTranscript(processingJob.getFastapiVideoId());
+
+        if (transcriptRows.isEmpty()) {
+            assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Transcript is empty for this asset"
+            );
+        }
+
+        AssetStatus updatedAssetStatus = asset.getStatus() == AssetStatus.SEARCHABLE
+                ? AssetStatus.SEARCHABLE
+                : AssetStatus.TRANSCRIPT_READY;
+        assetPersistenceService.updateAssetStatus(asset, updatedAssetStatus);
+
+        // TODO: after transcript rows are indexed successfully, move TRANSCRIPT_READY to SEARCHABLE.
+        // TODO: if repeated transcript reads become common, consider a local transcript cache or table.
+
+        return transcriptRows.stream()
+                .map(this::toAssetTranscriptRowResponse)
+                .toList();
     }
 
     public AssetUploadResponse uploadAsset(MultipartFile file, String requestedTitle) {
@@ -148,9 +185,9 @@ public class AssetService {
         }
 
         // Try to preserve the file extension when truncating
-        int lastDotIndex = originalFilename.lastIndexOf('.');
-        if (lastDotIndex > 0 && lastDotIndex < originalFilename.length() - 1) {
-            String extension = originalFilename.substring(lastDotIndex);
+        int lastDotIndex = cleanedFilename.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < cleanedFilename.length() - 1) {
+            String extension = cleanedFilename.substring(lastDotIndex);
             int truncatedLength = MAX_FILENAME_LENGTH - extension.length();
             if (truncatedLength > 0) {
                 return cleanedFilename.substring(0, truncatedLength) + extension;
@@ -198,5 +235,15 @@ public class AssetService {
     private boolean isTerminal(ProcessingJobStatus processingJobStatus) {
         return processingJobStatus == ProcessingJobStatus.SUCCEEDED
                 || processingJobStatus == ProcessingJobStatus.FAILED;
+    }
+
+    private AssetTranscriptRowResponse toAssetTranscriptRowResponse(FastApiTranscriptRowResponse transcriptRow) {
+        return new AssetTranscriptRowResponse(
+                transcriptRow.id(),
+                transcriptRow.videoId(),
+                transcriptRow.segmentIndex(),
+                transcriptRow.text(),
+                transcriptRow.createdAt()
+        );
     }
 }
