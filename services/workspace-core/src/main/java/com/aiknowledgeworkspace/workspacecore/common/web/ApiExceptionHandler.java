@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class ApiExceptionHandler {
 
     @ExceptionHandler(FastApiConnectivityException.class)
-    public ResponseEntity<ApiErrorResponse> handleFastApiTimeout(FastApiConnectivityException exception) {
+    public ResponseEntity<ApiErrorResponse> handleFastApiConnectivity(FastApiConnectivityException exception) {
         return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
-                .body(new ApiErrorResponse("FASTAPI_TIMEOUT", exception.getMessage()));
+                .body(new ApiErrorResponse("FASTAPI_CONNECTIVITY_ERROR", exception.getMessage()));
     }
 
     @ExceptionHandler(FastApiIntegrationException.class)

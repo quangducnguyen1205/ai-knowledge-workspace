@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,11 @@ public class AssetController {
     @GetMapping("/{assetId}/status")
     public AssetStatusResponse getAssetStatus(@PathVariable UUID assetId) {
         return assetService.getAssetStatus(assetId);
+    }
+
+    @GetMapping("/{assetId}/transcript")
+    public List<AssetTranscriptRowResponse> getAssetTranscript(@PathVariable UUID assetId) {
+        return assetService.getAssetTranscript(assetId);
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -82,4 +82,12 @@ public class AssetPersistenceService {
                 processingJob.getProcessingJobStatus()
         );
     }
+
+    @Transactional
+    public void updateAssetStatus(Asset asset, AssetStatus updatedAssetStatus) {
+        if (asset.getStatus() != updatedAssetStatus) {
+            asset.setStatus(updatedAssetStatus);
+            assetRepository.save(asset);
+        }
+    }
 }
