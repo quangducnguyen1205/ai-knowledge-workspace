@@ -65,8 +65,8 @@ public class AssetService {
         ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
         AssetStatus updatedAssetStatus = mapAssetStatusFromTaskStatus(updatedProcessingJobStatus);
 
-        // TODO: when transcript fetch is added, use transcript presence to move an asset from
-        // TODO: PROCESSING to TRANSCRIPT_READY instead of relying on task success alone.
+        // TODO: if status reads should reflect transcript usability automatically,
+        // TODO: check transcript presence here before moving beyond PROCESSING.
 
         return assetPersistenceService.refreshAssetStatus(
                 asset,
@@ -82,6 +82,12 @@ public class AssetService {
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
 
+        return loadUsableTranscriptRows(asset, processingJob).stream()
+                .map(this::toAssetTranscriptRowResponse)
+                .toList();
+    }
+
+    public List<FastApiTranscriptRowResponse> loadUsableTranscriptRows(Asset asset, ProcessingJob processingJob) {
         if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -106,10 +112,7 @@ public class AssetService {
 
         // TODO: after transcript rows are indexed successfully, move TRANSCRIPT_READY to SEARCHABLE.
         // TODO: if repeated transcript reads become common, consider a local transcript cache or table.
-
-        return transcriptRows.stream()
-                .map(this::toAssetTranscriptRowResponse)
-                .toList();
+        return transcriptRows;
     }
 
     public AssetUploadResponse uploadAsset(MultipartFile file, String requestedTitle) {

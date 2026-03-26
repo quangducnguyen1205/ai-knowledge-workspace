@@ -22,3 +22,8 @@ integration:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
     connect-timeout: ${FASTAPI_CONNECT_TIMEOUT:5s}
     read-timeout: ${FASTAPI_READ_TIMEOUT:30s}
+  elasticsearch:
+    base-url: ${ELASTICSEARCH_BASE_URL:http://localhost:9201}
+    connect-timeout: ${ELASTICSEARCH_CONNECT_TIMEOUT:3s}
+    read-timeout: ${ELASTICSEARCH_READ_TIMEOUT:10s}
+    transcript-index-name: ${ELASTICSEARCH_TRANSCRIPT_INDEX_NAME:asset-transcript-rows}

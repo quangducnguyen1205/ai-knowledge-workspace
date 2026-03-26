@@ -2,6 +2,8 @@ package com.aiknowledgeworkspace.workspacecore.common.web;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,5 +22,21 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleFastApiIntegration(FastApiIntegrationException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ApiErrorResponse("FASTAPI_INTEGRATION_ERROR", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ElasticsearchConnectivityException.class)
+    public ResponseEntity<ApiErrorResponse> handleElasticsearchConnectivity(
+            ElasticsearchConnectivityException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse("ELASTICSEARCH_UNAVAILABLE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ElasticsearchIntegrationException.class)
+    public ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(
+            ElasticsearchIntegrationException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
     }
 }

@@ -6,10 +6,10 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-public class FastApiClientConfig {
+public class ElasticsearchClientConfig {
 
-    @Bean("fastApiRestClient")
-    RestClient fastApiRestClient(FastApiProperties properties) {
+    @Bean("elasticsearchRestClient")
+    RestClient elasticsearchRestClient(ElasticsearchProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeout().toMillis()));
         requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeout().toMillis()));
