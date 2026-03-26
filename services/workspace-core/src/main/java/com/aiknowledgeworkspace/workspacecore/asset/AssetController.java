@@ -11,15 +11,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 
 @RestController
 @RequestMapping("/api/assets")
 public class AssetController {
 
     private final AssetService assetService;
+    private final TranscriptIndexingService transcriptIndexingService;
 
-    public AssetController(AssetService assetService) {
+    public AssetController(AssetService assetService, TranscriptIndexingService transcriptIndexingService) {
         this.assetService = assetService;
+        this.transcriptIndexingService = transcriptIndexingService;
     }
 
     @GetMapping("/{assetId}")
@@ -35,6 +38,11 @@ public class AssetController {
     @GetMapping("/{assetId}/transcript")
     public List<AssetTranscriptRowResponse> getAssetTranscript(@PathVariable UUID assetId) {
         return assetService.getAssetTranscript(assetId);
+    }
+
+    @PostMapping("/{assetId}/index")
+    public AssetIndexResponse indexAssetTranscript(@PathVariable UUID assetId) {
+        return transcriptIndexingService.indexAssetTranscript(assetId);
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.integration.fastapi;
 
 import java.util.List;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -19,7 +20,7 @@ public class FastApiProcessingClientImpl implements FastApiProcessingClient {
 
     private final RestClient fastApiRestClient;
 
-    public FastApiProcessingClientImpl(RestClient fastApiRestClient) {
+    public FastApiProcessingClientImpl(@Qualifier("fastApiRestClient") RestClient fastApiRestClient) {
         this.fastApiRestClient = fastApiRestClient;
     }
 
