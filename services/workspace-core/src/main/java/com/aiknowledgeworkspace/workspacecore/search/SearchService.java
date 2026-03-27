@@ -143,6 +143,9 @@ public class SearchService {
         if (fieldNode.isMissingNode() || fieldNode.isNull()) {
             return null;
         }
+        if (!fieldNode.isInt() || !fieldNode.canConvertToInt()) {
+            throw new ElasticsearchIntegrationException("Elasticsearch search hit included a non-numeric value for " + fieldName);
+        }
         return fieldNode.asInt();
     }
 
