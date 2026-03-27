@@ -168,18 +168,84 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 - [ ] Repo A returns `4xx` or `5xx` for upload/status/transcript -> expect `502`
 - [ ] Repo A returns invalid response body for a required contract -> expect `502`
 
-## 8. Not-Yet-In-Scope Checks
+## 8. Product Indexing Checks
+
+### Implemented And Testable Now
+
+- [ ] Use an asset that already has a non-empty transcript response through Spring.
+- [ ] Call `POST /api/assets/{assetId}/index`.
+- [ ] Expect HTTP `200`.
+- [ ] Expect JSON with:
+  - [ ] `assetId`
+  - [ ] `assetStatus = "SEARCHABLE"`
+  - [ ] `indexedDocumentCount` greater than `0`
+- [ ] Call `GET /api/assets/{assetId}/status` after indexing.
+- [ ] Confirm the returned `assetStatus` is `SEARCHABLE`.
+
+### Failure Path
+
+- [ ] Stop Elasticsearch or point Repo B at an unavailable Elasticsearch host.
+- [ ] Call `POST /api/assets/{assetId}/index` for an asset with usable transcript rows.
+- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] If a structured integration error body is returned, confirm:
+  - [ ] `code = "ELASTICSEARCH_UNAVAILABLE"` or `ELASTICSEARCH_INTEGRATION_ERROR`
+  - [ ] non-empty `message`
+- [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
+- [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
+
+## 9. Product Search Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `GET /api/search?q=your-query` after at least one asset has been indexed successfully.
+- [ ] Expect HTTP `200`.
+- [ ] Expect JSON with:
+  - [ ] `query`
+  - [ ] `assetIdFilter`
+  - [ ] `resultCount`
+  - [ ] `results`
+- [ ] Confirm each result only contains:
+  - [ ] `assetId`
+  - [ ] `assetTitle`
+  - [ ] `transcriptRowId`
+  - [ ] `segmentIndex`
+  - [ ] `text`
+  - [ ] `createdAt`
+  - [ ] `score`
+- [ ] Confirm results come from Spring's product response shape, not a FastAPI search response.
+- [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
+
+### Optional Asset Filter Check
+
+- [ ] Call `GET /api/search?q=your-query&assetId=<known-asset-id>`.
+- [ ] Confirm results are restricted to that asset.
+
+### Validation Path
+
+- [ ] Call `GET /api/search?q=` with a blank or whitespace-only query value.
+- [ ] Expect HTTP `400`.
+
+### Elasticsearch Failure Path
+
+- [ ] Stop Elasticsearch or point Repo B at an unavailable Elasticsearch host.
+- [ ] Call `GET /api/search?q=test`.
+- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] If a structured integration error body is returned, confirm:
+  - [ ] `code = "ELASTICSEARCH_UNAVAILABLE"` or `ELASTICSEARCH_INTEGRATION_ERROR`
+  - [ ] non-empty `message`
+
+## 10. Not-Yet-In-Scope Checks
 
 ### Not Implemented Yet
 
-- [ ] Elasticsearch indexing of transcript rows
-- [ ] Product-facing search endpoint in Spring
-- [ ] Verification that transcript rows become searchable after indexing
-- [ ] Verification of search results scoped through the product search contract
+- [ ] Real workspace-scoped search enforcement
+- [ ] Local transcript-table persistence
+- [ ] Hybrid or vector-assisted ranking
+- [ ] Search snippets, highlights, or richer retrieval UX
 
 ### Placeholder Checks For Later
 
-- [ ] When indexing exists, verify only non-empty transcripts are indexed.
-- [ ] When indexing exists, verify failed or empty-transcript assets are excluded from indexing.
-- [ ] When search exists, verify Repo B does not depend on FastAPI `/videos/search`.
-- [ ] When search exists, verify search responses come from Spring’s product contract, not the legacy upstream shape.
+- [ ] When workspace persistence exists, verify search and indexing respect product-side ownership scope.
+- [ ] When hybrid retrieval exists, verify lexical-only fallback behavior remains understandable.
+- [ ] When transcript persistence exists, verify transcript fetch behavior stays consistent with the product API.
+- [ ] Keep verifying that Repo B does not depend on FastAPI `/videos/search`.

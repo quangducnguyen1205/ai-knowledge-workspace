@@ -13,6 +13,8 @@ The currently implemented product-facing endpoints are:
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
+- `POST /api/assets/{assetId}/index`
+- `GET /api/search`
 
 The implemented flow is:
 
@@ -22,6 +24,8 @@ The implemented flow is:
 4. Spring persists a local `Asset` and `ProcessingJob`.
 5. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
 6. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
+7. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
+8. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -63,18 +67,28 @@ Transcript reads are also product-facing.
 - Spring does not treat task success alone as proof of usable transcript data.
 - If transcript rows are empty, Spring explicitly does not treat the asset as usable.
 - A non-empty transcript can move the asset to `TRANSCRIPT_READY`.
-- `SEARCHABLE` is reserved for a later indexing/search step.
+- Successful indexing moves the asset to `SEARCHABLE`.
+
+Indexing and search are also product-facing.
+
+- Indexing is explicit through `POST /api/assets/{assetId}/index`.
+- Indexing only uses usable non-empty transcript rows.
+- If Elasticsearch indexing fails after transcript data is usable, Spring does not collapse the asset back to `FAILED`.
+- Search runs through Spring, not FastAPI.
+- Search only returns transcript-row documents for assets currently marked `SEARCHABLE`.
+- The current search baseline is a simple Elasticsearch text query over transcript text and asset title.
 
 ## What Is Intentionally Not Implemented Yet
 
-- Elasticsearch indexing
-- Product-facing search
 - Local transcript-table persistence
+- Real workspace persistence and workspace-scoped enforcement
+- Background scheduling or workflow orchestration for polling/indexing
+- Search tuning beyond the current baseline text query
 
 ## Guardrails For The Next Step
 
 - Keep Spring as the product-facing boundary for indexing and search.
 - Do not treat FastAPI `/videos/search` as the product search contract.
-- Only move an asset to `SEARCHABLE` after indexing is actually implemented and succeeds.
+- Keep search results product-owned and avoid leaking raw FastAPI IDs.
 - Keep transcript indexing grounded in the currently verified transcript fields.
-- Avoid broad domain redesign while adding the first indexing and search slice.
+- Avoid broad domain redesign while hardening the current flow.
