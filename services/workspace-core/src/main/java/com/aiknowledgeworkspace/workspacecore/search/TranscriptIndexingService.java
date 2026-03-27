@@ -58,9 +58,6 @@ public class TranscriptIndexingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
 
         List<FastApiTranscriptRowResponse> transcriptRows = assetService.loadUsableTranscriptRows(asset, processingJob);
-        if (transcriptRows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Transcript is empty for this asset");
-        }
 
         AssetStatus fallbackStatus = asset.getStatus() == AssetStatus.SEARCHABLE
                 ? AssetStatus.SEARCHABLE
