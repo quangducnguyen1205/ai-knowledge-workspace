@@ -11,7 +11,7 @@ A serious personal software engineering project for building a knowledge-centere
 
 ## Current Status
 
-- [ ] Scaffold `workspace-core`
-- [ ] Reuse and integrate `ai-processing-service`
-- [ ] Define infrastructure baseline
-- [ ] Document initial architecture decisions
+- `workspace-core` now exposes the current product-facing backend slice for upload, status, transcript retrieval, explicit indexing, and search.
+- Repo A remains a separate FastAPI processing dependency.
+- Repo B persists `Asset` and `ProcessingJob` in PostgreSQL and uses Elasticsearch for the current search slice.
+- Docs are maintained in `docs/`, with current API and persistence summaries in `docs/api/API.md` and `docs/data/Database.md`.

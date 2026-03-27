@@ -8,7 +8,10 @@ This directory is the docs-as-code home for product thinking, architecture decis
 - `architecture/`: system-level design and service boundaries
 - `adr/`: architectural decision records
 - `api/`: API contracts and interface notes
+- `data/`: current persistence notes for Repo B
 - `planning/`: execution plans and early delivery milestones
+- `testing/`: smoke and verification checklists
+- `runbooks/`: local setup and operational notes
 
 ## Product Documents
 
@@ -23,6 +26,17 @@ This directory is the docs-as-code home for product thinking, architecture decis
 - `architecture/02-service-boundaries.md`: ownership boundaries across Spring Boot, FastAPI, search, and storage
 - `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role
 - `architecture/04-integration-assumptions.md`: current assumptions about the separate FastAPI repository and deferred questions
+- `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow in phase 1
+
+## API And Data Documents
+
+- `api/API.md`: current product-facing Spring API summary for Repo B
+- `data/Database.md`: current PostgreSQL persistence summary for Repo B
+
+## Testing And Runbooks
+
+- `testing/integration-smoke-checklist.md`: manual smoke checklist for the implemented Spring flow
+- `runbooks/local-dev.md`: local development startup and dependency notes
 
 ## ADR Documents
 

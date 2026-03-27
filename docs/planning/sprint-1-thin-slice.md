@@ -2,9 +2,9 @@
 
 ## Sprint Goal
 
-Complete a narrow, working backend slice in which Spring Boot owns the product-facing flow for lecture-video upload, asset status, and transcript retrieval, while keeping Elasticsearch indexing and product-facing search as the main remaining implementation focus.
+Deliver a narrow but real backend slice in which Spring Boot owns the product-facing flow from upload through indexing and search for lecture-video transcript retrieval.
 
-The goal is still to prove the product boundary and data flow, not to build a polished end-user product.
+The goal is to prove the product boundary and end-to-end data flow, not to build a polished end-user product.
 
 ## Already Implemented
 
@@ -13,6 +13,8 @@ The goal is still to prove the product boundary and data flow, not to build a po
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
+- `POST /api/assets/{assetId}/index`
+- `GET /api/search`
 
 ### Product Core Behavior
 
@@ -28,6 +30,9 @@ The goal is still to prove the product boundary and data flow, not to build a po
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
+- Spring indexes one Elasticsearch document per transcript row through an explicit product endpoint.
+- Spring exposes a product-owned search endpoint backed by Elasticsearch.
+- Spring returns search results through Spring-owned DTOs instead of legacy upstream shapes.
 
 ### Transcript Handling
 
@@ -40,34 +45,32 @@ The goal is still to prove the product boundary and data flow, not to build a po
 - Spring does not assume timestamps or richer transcript metadata exist.
 - Empty transcript is handled explicitly as not usable and is not treated as transcript-ready or searchable.
 
+### Search And Indexing
+
+- Successful indexing moves an asset to `SEARCHABLE`.
+- Search only returns documents for assets already marked `SEARCHABLE`.
+- Search currently uses a simple Elasticsearch text-query baseline over transcript text and asset title.
+- Lightweight tests exist for indexing and search, and the focused Maven test run passes.
+
 ## Remaining Work
 
-### Elasticsearch Indexing
+### Verification And Hardening
 
-- Define the Elasticsearch document shape for transcript-row indexing.
-- Decide what asset and processing metadata must be included in indexed documents.
-- Implement transcript indexing from Spring after transcript retrieval succeeds.
-- Define how indexing success or failure changes local asset state.
+- Run the full thin slice manually against live Repo A, PostgreSQL, and Elasticsearch.
+- Verify that empty-transcript assets never become searchable in the real end-to-end path.
+- Verify indexing and search failure paths against a live Elasticsearch node, not only the lightweight tests.
 
-### Product-Facing Search
+### Product Gaps Still Deferred
 
-- Define the product search response contract in Spring.
-- Implement Spring-owned search against Elasticsearch.
-- Keep `/videos/search` out of the product contract.
-- Return transcript-based search results through Spring rather than exposing legacy upstream behavior.
-
-### Local Verification And Demo Completion
-
-- Verify the full thin slice with indexing included.
-- Verify that search works only on transcript content Spring considers usable.
-- Update the demo flow to include indexing and product-facing search once those pieces exist.
+- Real workspace persistence and workspace-scoped filtering
+- Local transcript-table persistence or caching
+- Search tuning beyond the current baseline text query
 
 ## Still-Open Decisions
 
-- What is the minimal Elasticsearch document structure for transcript rows in phase 1?
-- Should indexing happen immediately after transcript retrieval or through a separate explicit step?
-- Which asset state transition should represent “indexed and searchable” in the first version?
-- What is the simplest product-facing search response shape that stays stable while search evolves?
+- Should indexing remain explicit or move behind a later background workflow?
+- When should transcript rows also be persisted locally instead of fetched on demand?
+- How should the search response evolve when workspace filters or richer search UX are added?
 
 ## Acceptance Criteria
 
@@ -81,35 +84,29 @@ The goal is still to prove the product boundary and data flow, not to build a po
 - Done: Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Done: The transcript row model used by Spring only depends on the confirmed upstream fields.
 - Done: Spring does not use `/videos/search` as its product search contract.
-- Done: The end-to-end path works through upload, status tracking, and transcript retrieval in local development.
+- Done: Transcript rows are indexed into Elasticsearch through Spring.
+- Done: Spring exposes a product-facing search endpoint that returns transcript-row results from Elasticsearch.
+- Done: The end-to-end thin slice exists through upload, status tracking, transcript retrieval, indexing, and search.
 - Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
 
-### Pending
+### Remaining
 
-- Pending: Transcript rows are indexed into Elasticsearch in a form that supports simple product-facing retrieval.
-- Pending: Spring exposes a product-facing search endpoint that returns transcript-based results from Elasticsearch.
-- Pending: The thin slice is demoable through upload, status, transcript retrieval, indexing, and product-facing search as one complete flow.
+- Remaining: Complete a live manual smoke run that covers the full slice with Repo A and Elasticsearch running together.
+- Remaining: Decide the next hardening step after the thin slice, rather than broadening scope by default.
 
-## Engineering Tasks
-
-### Search And Indexing
-
-- Define the first Elasticsearch index shape for transcript rows.
-- Implement indexing from Spring using transcript data already retrieved through the product flow.
-- Add explicit asset-state handling around indexing completion and indexing failure.
-- Implement a narrow Spring search endpoint backed by Elasticsearch.
-
-### Product Contract Cleanup
-
-- Define a stable search response shape owned by Spring.
-- Decide which internal asset states are enough for phase 1 once indexing is added.
-- Keep the product API asset-centric and avoid leaking legacy FastAPI concepts into search.
+## Follow-Up Tasks
 
 ### Verification
 
 - Run the thin slice end to end with Repo A and Repo B separately.
-- Verify that empty-transcript assets are excluded from any indexing/search path.
-- Add a minimal manual verification checklist for indexing and search.
+- Verify that empty-transcript assets are excluded from indexing and search in the live path.
+- Keep the smoke checklist aligned with the actual Spring endpoints.
+
+### Small Technical Follow-Ups
+
+- Decide whether `GET /api/assets/{assetId}` should remain public or stay as a simple convenience endpoint.
+- Decide when to replace per-document indexing writes with a bulk path.
+- Decide when workspace persistence is mature enough to enforce product-side search scoping.
 
 ## Explicit Non-Goals
 
@@ -151,8 +148,9 @@ Repo A and Repo B still run separately. This keeps boundaries clear, but local v
 6. Call `GET /api/assets/{assetId}/transcript`.
 7. Show that Spring returns transcript rows only when they are non-empty.
 8. Show that empty transcript is handled as not usable.
-9. If indexing is completed in this sprint, show transcript indexing into Elasticsearch.
-10. If search is completed in this sprint, show product-facing search through Spring and explicitly note that it does not depend on FastAPI `/videos/search`.
+9. Call `POST /api/assets/{assetId}/index` and show that the asset becomes `SEARCHABLE`.
+10. Call `GET /api/search?q=...` and show product-facing transcript-row results from Spring.
+11. Call out that search does not depend on FastAPI `/videos/search`.
 
 ## Sprint Outcome Checklist
 
@@ -162,6 +160,6 @@ Repo A and Repo B still run separately. This keeps boundaries clear, but local v
 - [x] On-demand polling or status refresh works
 - [x] Transcript rows can be fetched from FastAPI
 - [x] Empty transcript handling is explicit
-- [ ] Transcript rows can be indexed into Elasticsearch
-- [ ] Product-facing search returns results from Spring
-- [ ] Thin slice is demoable locally with indexing and search included
+- [x] Transcript rows can be indexed into Elasticsearch
+- [x] Product-facing search returns results from Spring
+- [ ] Full live smoke/demo run has been completed against Repo A and Elasticsearch together

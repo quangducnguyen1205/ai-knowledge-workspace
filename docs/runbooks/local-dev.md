@@ -96,4 +96,4 @@ curl "$FASTAPI_BASE_URL/openapi.json"
 - Do not try to run Repo A and Repo B inside the same Compose project for the first milestone.
 - `FASTAPI_BASE_URL` is the integration boundary. Keep it explicit.
 - Redis is intentionally optional for now.
-- The current Spring Boot code only consumes the FastAPI-related environment variables. PostgreSQL and Elasticsearch are included here to prepare local infrastructure without introducing more application wiring yet.
+- The current Spring Boot code uses PostgreSQL for persisted asset state, FastAPI for processing, and Elasticsearch for indexing and search.
