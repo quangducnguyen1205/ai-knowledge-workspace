@@ -35,6 +35,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -105,6 +106,10 @@ class TranscriptIndexingServiceTest {
                 .andExpect(content().string(containsString("\"transcriptRowId\":\"row-2\"")))
                 .andRespond(withSuccess());
 
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess());
+
         AssetIndexResponse response = transcriptIndexingService.indexAssetTranscript(assetId);
 
         assertThat(response.assetId()).isEqualTo(assetId);
@@ -123,7 +128,8 @@ class TranscriptIndexingServiceTest {
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(List.of());
+        when(assetService.loadUsableTranscriptRows(asset, processingJob))
+                .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Transcript is empty for this asset"));
 
         assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
                 .isInstanceOf(ResponseStatusException.class)
