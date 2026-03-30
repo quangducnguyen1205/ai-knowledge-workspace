@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${WORKSPACE_CORE_POSTGRES_USER:-workspace_core}
       POSTGRES_PASSWORD: ${WORKSPACE_CORE_POSTGRES_PASSWORD:-workspace_core}
     ports:
-      - "${WORKSPACE_CORE_POSTGRES_PORT:-5433}:5432"
+      - "${WORKSPACE_CORE_POSTGRES_PORT:-5434}:5432"
     volumes:
       - workspace_core_postgres_data:/var/lib/postgresql/data
     healthcheck:

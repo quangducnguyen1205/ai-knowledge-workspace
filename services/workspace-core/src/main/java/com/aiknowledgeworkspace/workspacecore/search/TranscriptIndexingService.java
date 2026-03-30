@@ -67,6 +67,7 @@ public class TranscriptIndexingService {
             for (FastApiTranscriptRowResponse transcriptRow : transcriptRows) {
                 indexTranscriptRow(asset, transcriptRow);
             }
+            refreshTranscriptIndex();
         } catch (ElasticsearchIntegrationException exception) {
             assetPersistenceService.updateAssetStatus(asset, fallbackStatus);
             throw exception;
@@ -97,6 +98,16 @@ public class TranscriptIndexingService {
                         .retrieve()
                         .toBodilessEntity(),
                 "index transcript row " + documentId
+        );
+    }
+
+    private void refreshTranscriptIndex() {
+        execute(
+                () -> elasticsearchRestClient.post()
+                        .uri("/{indexName}/_refresh", elasticsearchProperties.getTranscriptIndexName())
+                        .retrieve()
+                        .toBodilessEntity(),
+                "refresh transcript index"
         );
     }
 

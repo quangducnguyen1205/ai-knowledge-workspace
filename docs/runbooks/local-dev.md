@@ -91,6 +91,36 @@ echo $FASTAPI_BASE_URL
 curl "$FASTAPI_BASE_URL/openapi.json"
 ```
 
+## Thin Slice Smoke Helper
+
+Once Repo A, PostgreSQL, Elasticsearch, and Spring Boot are all running, you can exercise the current happy path with:
+
+```bash
+./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+Optional arguments:
+
+```bash
+./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4 "binary search tree"
+```
+
+Optional environment overrides:
+
+- `WORKSPACE_CORE_BASE_URL`
+- `SMOKE_POLL_INTERVAL_SECONDS`
+- `SMOKE_POLL_TIMEOUT_SECONDS`
+
+The helper runs the current Spring-owned flow only:
+
+- upload
+- status polling
+- transcript fetch
+- indexing
+- search
+
+It prints the created `assetId`, processing progress, transcript row count, indexed document count, and search result count.
+
 ## Notes
 
 - Do not try to run Repo A and Repo B inside the same Compose project for the first milestone.
