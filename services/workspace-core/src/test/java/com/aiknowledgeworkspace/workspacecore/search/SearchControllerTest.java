@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -11,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,18 +29,20 @@ class SearchControllerTest {
 
     private MockRestServiceServer mockServer;
     private MockMvc mockMvc;
+    private WorkspaceService workspaceService;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
+        workspaceService = mock(WorkspaceService.class);
 
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        SearchService searchService = new SearchService(builder.build(), properties);
+        SearchService searchService = new SearchService(builder.build(), properties, workspaceService);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController).build();
@@ -45,6 +51,9 @@ class SearchControllerTest {
     @Test
     void searchReturnsTranscriptRowResultsFromSpring() throws Exception {
         UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspace(workspaceId))
+                .thenReturn(new Workspace(workspaceId, "Algorithms"));
         String searchResponse = """
                 {
                   "hits": {
@@ -53,6 +62,7 @@ class SearchControllerTest {
                         "_score": 2.75,
                         "_source": {
                           "assetId": "%s",
+                          "workspaceId": "%s",
                           "assetTitle": "Lecture 5",
                           "transcriptRowId": "row-55",
                           "segmentIndex": 4,
@@ -64,20 +74,23 @@ class SearchControllerTest {
                     ]
                   }
                 }
-                """.formatted(assetId);
+                """.formatted(assetId, workspaceId);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"query\":\"dynamic programming\"")))
+                .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
                 .andRespond(withSuccess(searchResponse, MediaType.APPLICATION_JSON));
 
         mockMvc.perform(get("/api/search")
                         .param("q", "dynamic programming")
+                        .param("workspaceId", workspaceId.toString())
                         .param("assetId", assetId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.query").value("dynamic programming"))
+                .andExpect(jsonPath("$.workspaceIdFilter").value(workspaceId.toString()))
                 .andExpect(jsonPath("$.assetIdFilter").value(assetId.toString()))
                 .andExpect(jsonPath("$.resultCount").value(1))
                 .andExpect(jsonPath("$.results[0].assetId").value(assetId.toString()))
@@ -98,5 +111,25 @@ class SearchControllerTest {
                         .param("q", "   "))
                 .andExpect(status().isBadRequest())
                 .andExpect(status().reason("Query parameter q is required"));
+    }
+
+    @Test
+    void searchUsesDefaultWorkspaceWhenWorkspaceIdIsOmitted() throws Exception {
+        UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        when(workspaceService.resolveWorkspace(null))
+                .thenReturn(new Workspace(defaultWorkspaceId, "Default Workspace"));
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + defaultWorkspaceId + "\"")))
+                .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "binary tree"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workspaceIdFilter").value(defaultWorkspaceId.toString()))
+                .andExpect(jsonPath("$.resultCount").value(0));
+
+        mockServer.verify();
     }
 }

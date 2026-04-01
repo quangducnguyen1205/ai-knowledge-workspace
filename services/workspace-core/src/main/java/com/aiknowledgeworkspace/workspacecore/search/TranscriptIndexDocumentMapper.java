@@ -16,6 +16,7 @@ public class TranscriptIndexDocumentMapper {
     ) {
         return new TranscriptIndexDocument(
                 asset.getId(),
+                asset.getWorkspaceId(),
                 asset.getTitle(),
                 transcriptRow.id(),
                 transcriptRow.segmentIndex(),

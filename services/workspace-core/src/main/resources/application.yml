@@ -2,7 +2,7 @@ spring:
   application:
     name: workspace-core
   datasource:
-    url: jdbc:postgresql://${WORKSPACE_CORE_POSTGRES_HOST:localhost}:${WORKSPACE_CORE_POSTGRES_PORT:5433}/${WORKSPACE_CORE_POSTGRES_DB:workspace_core}
+    url: jdbc:postgresql://${WORKSPACE_CORE_POSTGRES_HOST:localhost}:${WORKSPACE_CORE_POSTGRES_PORT:5434}/${WORKSPACE_CORE_POSTGRES_DB:workspace_core}
     username: ${WORKSPACE_CORE_POSTGRES_USER:workspace_core}
     password: ${WORKSPACE_CORE_POSTGRES_PASSWORD}
   jpa:
@@ -20,6 +20,10 @@ spring:
 
 server:
   port: ${SERVER_PORT:8081}
+
+workspace:
+  default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
+  default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
 
 integration:
   fastapi:

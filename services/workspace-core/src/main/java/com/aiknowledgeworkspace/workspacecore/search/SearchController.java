@@ -19,8 +19,9 @@ public class SearchController {
     @GetMapping
     public SearchResponse search(
             @RequestParam("q") String query,
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "assetId", required = false) UUID assetId
     ) {
-        return searchService.search(query, assetId);
+        return searchService.search(query, workspaceId, assetId);
     }
 }
