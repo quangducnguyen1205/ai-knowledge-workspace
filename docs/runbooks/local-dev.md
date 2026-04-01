@@ -15,7 +15,7 @@ Repo A already uses:
 This repository uses different host ports to avoid conflicts:
 
 - workspace-core: `8081`
-- workspace-core PostgreSQL: `5433`
+- workspace-core PostgreSQL: `5434`
 - workspace-core Elasticsearch: `9201`
 - optional workspace-core Redis: `6380`
 
@@ -23,6 +23,11 @@ This repository uses different host ports to avoid conflicts:
 
 - `infra/docker-compose.dev.yml`: local infrastructure for this repository
 - `.env.example`: example environment values for local development
+
+Current environment-backed upload limit defaults:
+
+- `WORKSPACE_CORE_MAX_FILE_SIZE=200MB`
+- `WORKSPACE_CORE_MAX_REQUEST_SIZE=200MB`
 
 ## Startup Sequence
 
@@ -120,6 +125,7 @@ The helper runs the current Spring-owned flow only:
 - search
 
 It prints the created `assetId`, processing progress, transcript row count, indexed document count, and search result count.
+It currently exercises the default-workspace happy path because `workspaceId` is optional and omitted by the helper.
 
 ## Notes
 
@@ -127,3 +133,4 @@ It prints the created `assetId`, processing progress, transcript row count, inde
 - `FASTAPI_BASE_URL` is the integration boundary. Keep it explicit.
 - Redis is intentionally optional for now.
 - The current Spring Boot code uses PostgreSQL for persisted asset state, FastAPI for processing, and Elasticsearch for indexing and search.
+- Multipart upload limits are environment-configurable through `WORKSPACE_CORE_MAX_FILE_SIZE` and `WORKSPACE_CORE_MAX_REQUEST_SIZE`.
