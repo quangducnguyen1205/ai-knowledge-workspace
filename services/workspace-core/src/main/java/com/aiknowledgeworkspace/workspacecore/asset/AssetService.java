@@ -8,6 +8,8 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApi
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -24,22 +26,32 @@ public class AssetService {
     private final ProcessingJobRepository processingJobRepository;
     private final FastApiProcessingClient fastApiProcessingClient;
     private final AssetPersistenceService assetPersistenceService;
+    private final WorkspaceService workspaceService;
 
     public AssetService(
             AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
             FastApiProcessingClient fastApiProcessingClient,
-            AssetPersistenceService assetPersistenceService
+            AssetPersistenceService assetPersistenceService,
+            WorkspaceService workspaceService
     ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.fastApiProcessingClient = fastApiProcessingClient;
         this.assetPersistenceService = assetPersistenceService;
+        this.workspaceService = workspaceService;
     }
 
     public Asset getAsset(UUID assetId) {
-        return assetRepository.findById(assetId)
+        Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+
+        if (asset.getWorkspace() != null) {
+            return asset;
+        }
+
+        Workspace defaultWorkspace = workspaceService.resolveWorkspace(null);
+        return assetPersistenceService.updateAssetWorkspace(asset, defaultWorkspace);
     }
 
     public AssetStatusResponse getAssetStatus(UUID assetId) {
@@ -115,13 +127,14 @@ public class AssetService {
         return transcriptRows;
     }
 
-    public AssetUploadResponse uploadAsset(MultipartFile file, String requestedTitle) {
+    public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A non-empty file is required");
         }
 
         String originalFilename = resolveOriginalFilename(file);
         String title = resolveTitle(requestedTitle, originalFilename);
+        Workspace workspace = workspaceService.resolveWorkspace(workspaceId);
 
         FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
                 file.getResource(),
@@ -136,7 +149,7 @@ public class AssetService {
                 ? AssetStatus.FAILED
                 : AssetStatus.PROCESSING;
 
-        // TODO: replace the implicit default workspace assumption with real workspace persistence.
+        // TODO: replace default-workspace fallback with user-owned workspace selection once auth exists.
         // TODO: decide how to reconcile orphaned upstream tasks if FastAPI accepts upload but DB persistence fails.
 
 
@@ -145,6 +158,7 @@ public class AssetService {
                 title,
                 initialAssetStatus,
                 initialProcessingStatus,
+                workspace,
                 upstreamResponse
         );
     }

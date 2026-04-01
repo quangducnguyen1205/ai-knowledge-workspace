@@ -3,7 +3,6 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,7 +17,6 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
@@ -26,6 +24,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscr
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,9 +42,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class TranscriptIndexingServiceTest {
-
-    @Mock
-    private AssetRepository assetRepository;
 
     @Mock
     private ProcessingJobRepository processingJobRepository;
@@ -70,7 +66,6 @@ class TranscriptIndexingServiceTest {
         properties.setTranscriptIndexName("asset-transcript-rows");
 
         transcriptIndexingService = new TranscriptIndexingService(
-                assetRepository,
                 processingJobRepository,
                 assetService,
                 assetPersistenceService,
@@ -83,14 +78,15 @@ class TranscriptIndexingServiceTest {
     @Test
     void indexingSucceedsForTranscriptUsableAsset() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Lecture 1", AssetStatus.TRANSCRIPT_READY);
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, "Lecture 1", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-1", "video-1");
         List<FastApiTranscriptRowResponse> transcriptRows = List.of(
                 transcriptRow("row-1", "video-1", 0, "Binary search tree overview"),
                 transcriptRow("row-2", "video-1", 1, "Traversal example")
         );
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
 
@@ -98,6 +94,7 @@ class TranscriptIndexingServiceTest {
                 .andExpect(method(HttpMethod.PUT))
                 .andExpect(content().string(containsString("\"assetTitle\":\"Lecture 1\"")))
                 .andExpect(content().string(containsString("\"transcriptRowId\":\"row-1\"")))
+                .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus\":\"SEARCHABLE\"")))
                 .andRespond(withSuccess());
 
@@ -123,10 +120,10 @@ class TranscriptIndexingServiceTest {
     @Test
     void indexingIsRejectedForEmptyTranscript() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Lecture 2", AssetStatus.TRANSCRIPT_READY);
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 2", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-2", "video-2");
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptRows(asset, processingJob))
                 .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Transcript is empty for this asset"));
@@ -145,13 +142,13 @@ class TranscriptIndexingServiceTest {
     @Test
     void indexingFailureDoesNotMarkAssetAsSearchable() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Lecture 3", AssetStatus.TRANSCRIPT_READY);
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 3", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-3", "video-3");
         List<FastApiTranscriptRowResponse> transcriptRows = List.of(
                 transcriptRow("row-3", "video-3", 0, "Heap property explanation")
         );
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
 
@@ -168,8 +165,8 @@ class TranscriptIndexingServiceTest {
         mockServer.verify();
     }
 
-    private Asset asset(UUID assetId, String title, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", title, status);
+    private Asset asset(UUID assetId, UUID workspaceId, String title, AssetStatus status) {
+        Asset asset = new Asset("lecture.mp4", title, status, new Workspace(workspaceId, "Study Workspace"));
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;
     }

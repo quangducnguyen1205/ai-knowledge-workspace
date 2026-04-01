@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -7,6 +9,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -31,6 +35,11 @@ public class Asset {
     @Column(nullable = false, length = 32)
     private AssetStatus status;
 
+    @JsonIgnore
+    @ManyToOne
+    @JoinColumn(name = "workspace_id")
+    private Workspace workspace;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -41,9 +50,14 @@ public class Asset {
     }
 
     public Asset(String originalFilename, String title, AssetStatus status) {
+        this(originalFilename, title, status, null);
+    }
+
+    public Asset(String originalFilename, String title, AssetStatus status, Workspace workspace) {
         this.originalFilename = originalFilename;
         this.title = title;
         this.status = status;
+        this.workspace = workspace;
     }
 
     @PrePersist
@@ -84,6 +98,18 @@ public class Asset {
 
     public void setStatus(AssetStatus status) {
         this.status = status;
+    }
+
+    public Workspace getWorkspace() {
+        return workspace;
+    }
+
+    public void setWorkspace(Workspace workspace) {
+        this.workspace = workspace;
+    }
+
+    public UUID getWorkspaceId() {
+        return workspace != null ? workspace.getId() : null;
     }
 
     public Instant getCreatedAt() {

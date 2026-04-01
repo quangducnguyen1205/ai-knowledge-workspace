@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,28 +27,32 @@ public class SearchService {
 
     private final RestClient elasticsearchRestClient;
     private final ElasticsearchProperties elasticsearchProperties;
+    private final WorkspaceService workspaceService;
 
     public SearchService(
             @Qualifier("elasticsearchRestClient") RestClient elasticsearchRestClient,
-            ElasticsearchProperties elasticsearchProperties
+            ElasticsearchProperties elasticsearchProperties,
+            WorkspaceService workspaceService
     ) {
         this.elasticsearchRestClient = elasticsearchRestClient;
         this.elasticsearchProperties = elasticsearchProperties;
+        this.workspaceService = workspaceService;
     }
 
-    public SearchResponse search(String query, UUID assetId) {
+    public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
         String normalizedQuery = normalizeQuery(query);
+        UUID resolvedWorkspaceId = workspaceService.resolveWorkspace(workspaceId).getId();
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(buildSearchBody(normalizedQuery, assetId))
+                        .body(buildSearchBody(normalizedQuery, resolvedWorkspaceId, assetId))
                         .retrieve()
                         .body(JsonNode.class),
                 "search transcript rows"
         );
 
-        return toSearchResponse(normalizedQuery, assetId, responseBody);
+        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, assetId, responseBody);
     }
 
     private String normalizeQuery(String query) {
@@ -57,9 +62,10 @@ public class SearchService {
         return query.trim();
     }
 
-    private Map<String, Object> buildSearchBody(String query, UUID assetId) {
+    private Map<String, Object> buildSearchBody(String query, UUID workspaceId, UUID assetId) {
         List<Map<String, Object>> filterClauses = new ArrayList<>();
         filterClauses.add(termFilter("assetStatus.keyword", AssetStatus.SEARCHABLE.name()));
+        filterClauses.add(termFilter("workspaceId.keyword", workspaceId.toString()));
 
         if (assetId != null) {
             filterClauses.add(termFilter("assetId.keyword", assetId.toString()));
@@ -84,7 +90,7 @@ public class SearchService {
         return Map.of("term", Map.of(field, value));
     }
 
-    private SearchResponse toSearchResponse(String query, UUID assetId, JsonNode responseBody) {
+    private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {
         if (responseBody == null) {
             throw new ElasticsearchIntegrationException("Elasticsearch search response body was empty");
         }
@@ -112,9 +118,8 @@ public class SearchService {
             ));
         }
 
-        // TODO: add workspace-scoped filters once workspace ownership is persisted.
         // TODO: consider a richer Elasticsearch query once keyword-only baseline search is proven useful.
-        return new SearchResponse(query, assetId, results.size(), results);
+        return new SearchResponse(query, workspaceId, assetId, results.size(), results);
     }
 
     private UUID parseAssetId(JsonNode sourceNode) {

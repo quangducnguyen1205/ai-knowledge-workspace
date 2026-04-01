@@ -4,10 +4,10 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadR
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Objects;
 
 @Service
 public class AssetPersistenceService {
@@ -26,9 +26,10 @@ public class AssetPersistenceService {
             String title,
             AssetStatus initialAssetStatus,
             ProcessingJobStatus initialProcessingStatus,
+            Workspace workspace,
             FastApiUploadResponse upstreamResponse
     ) {
-        Asset asset = assetRepository.save(new Asset(originalFilename, title, initialAssetStatus));
+        Asset asset = assetRepository.save(new Asset(originalFilename, title, initialAssetStatus, workspace));
 
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),
@@ -38,7 +39,7 @@ public class AssetPersistenceService {
                 upstreamResponse.status()
         );
         processingJob = processingJobRepository.save(processingJob);
-        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus());
+        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());
     }
 
     @Transactional
@@ -89,5 +90,14 @@ public class AssetPersistenceService {
             asset.setStatus(updatedAssetStatus);
             assetRepository.save(asset);
         }
+    }
+
+    @Transactional
+    public Asset updateAssetWorkspace(Asset asset, Workspace workspace) {
+        if (!Objects.equals(asset.getWorkspaceId(), workspace.getId())) {
+            asset.setWorkspace(workspace);
+            asset = assetRepository.save(asset);
+        }
+        return asset;
     }
 }

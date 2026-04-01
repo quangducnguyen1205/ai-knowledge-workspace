@@ -48,9 +48,10 @@ public class AssetController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<AssetUploadResponse> uploadAsset(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "title", required = false) String title
     ) {
-        AssetUploadResponse response = assetService.uploadAsset(file, title);
+        AssetUploadResponse response = assetService.uploadAsset(workspaceId, file, title);
         return ResponseEntity.accepted().body(response);
     }
 }

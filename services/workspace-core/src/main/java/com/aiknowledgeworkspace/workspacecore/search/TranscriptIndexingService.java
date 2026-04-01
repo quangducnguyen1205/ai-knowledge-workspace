@@ -3,7 +3,6 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
@@ -25,7 +24,6 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class TranscriptIndexingService {
 
-    private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
     private final AssetService assetService;
     private final AssetPersistenceService assetPersistenceService;
@@ -34,7 +32,6 @@ public class TranscriptIndexingService {
     private final TranscriptIndexDocumentMapper transcriptIndexDocumentMapper;
 
     public TranscriptIndexingService(
-            AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
             AssetService assetService,
             AssetPersistenceService assetPersistenceService,
@@ -42,7 +39,6 @@ public class TranscriptIndexingService {
             ElasticsearchProperties elasticsearchProperties,
             TranscriptIndexDocumentMapper transcriptIndexDocumentMapper
     ) {
-        this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.assetService = assetService;
         this.assetPersistenceService = assetPersistenceService;
@@ -52,8 +48,7 @@ public class TranscriptIndexingService {
     }
 
     public AssetIndexResponse indexAssetTranscript(UUID assetId) {
-        Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+        Asset asset = assetService.getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
 
@@ -75,7 +70,6 @@ public class TranscriptIndexingService {
 
         assetPersistenceService.updateAssetStatus(asset, AssetStatus.SEARCHABLE);
 
-        // TODO: add workspace-scoped filters to indexed documents once workspace ownership is persisted.
         // TODO: if indexing volume grows, replace per-document writes with a bulk indexing path.
         return new AssetIndexResponse(asset.getId(), AssetStatus.SEARCHABLE, transcriptRows.size());
     }

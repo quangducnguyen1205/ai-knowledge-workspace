@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record SearchResponse(
         String query,
+        UUID workspaceIdFilter,
         UUID assetIdFilter,
         int resultCount,
         List<SearchResultResponse> results
