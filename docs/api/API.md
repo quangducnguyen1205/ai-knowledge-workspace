@@ -19,6 +19,7 @@ Request:
 - Content type: `multipart/form-data`
 - Fields:
   - `file` required
+  - `workspaceId` optional
   - `title` optional
 
 Response:
@@ -28,11 +29,14 @@ Response:
   - `assetId`
   - `processingJobId`
   - `assetStatus`
+  - `workspaceId`
 
 Current behavior:
 
 - Spring forwards `file` and `title` to FastAPI upload.
+- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
 - Spring validates the upstream response before persisting local state.
+- Spring associates the created asset with one workspace in Repo B.
 - Raw FastAPI IDs are stored internally but not returned to the client.
 
 Common failure cases:
@@ -101,7 +105,9 @@ Current behavior:
 
 - Indexing is explicit and product-side.
 - One Elasticsearch document is written per transcript row.
+- Indexed transcript-row documents include `workspaceId`.
 - Only usable non-empty transcript rows can be indexed.
+- Successful indexing refreshes the transcript index before returning.
 - Successful indexing marks the asset `SEARCHABLE`.
 - Indexing failure does not collapse a usable asset back to `FAILED`.
 
@@ -119,6 +125,7 @@ Runs the current Spring-owned product search against Elasticsearch.
 Query parameters:
 
 - `q` required
+- `workspaceId` optional
 - `assetId` optional
 
 Response:
@@ -126,6 +133,7 @@ Response:
 - HTTP `200`
 - Body:
   - `query`
+  - `workspaceIdFilter`
   - `assetIdFilter`
   - `resultCount`
   - `results[]`
@@ -143,6 +151,8 @@ Each result currently contains:
 Current behavior:
 
 - Search is backed by Elasticsearch, not FastAPI.
+- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
+- Search only considers documents inside the resolved workspace scope.
 - Only documents for assets already marked `SEARCHABLE` are eligible.
 - `assetId` is an exact filter when provided.
 - The current search baseline is simple text search over transcript text and asset title.

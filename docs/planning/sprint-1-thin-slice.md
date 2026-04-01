@@ -21,18 +21,24 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring accepts lecture-video uploads through the product API.
 - Spring forwards upload requests to FastAPI `POST /videos/upload`.
 - Spring validates the live FastAPI upload response.
-- Spring persists `Asset` and `ProcessingJob`.
+- Spring persists `Workspace`, `Asset`, and `ProcessingJob` in Repo B.
 - Spring stores:
   - `fastapiTaskId`
   - `fastapiVideoId`
   - `processingJobStatus`
   - `rawUpstreamTaskState`
+- Spring associates each asset with one workspace.
+- Spring falls back to the configured default workspace when upload or search omit `workspaceId`.
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
 - Spring indexes one Elasticsearch document per transcript row through an explicit product endpoint.
+- Indexed transcript-row documents include `workspaceId`.
+- Successful indexing refreshes the transcript index before returning.
 - Spring exposes a product-owned search endpoint backed by Elasticsearch.
+- Spring scopes product search by `workspaceId`.
 - Spring returns search results through Spring-owned DTOs instead of legacy upstream shapes.
+- A smoke helper script exists at `infra/scripts/smoke-thin-slice.sh` for the current happy path.
 
 ### Transcript Handling
 
@@ -56,13 +62,14 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 
 ### Verification And Hardening
 
-- Run the full thin slice manually against live Repo A, PostgreSQL, and Elasticsearch.
+- Keep rerunning the full thin slice manually against live Repo A, PostgreSQL, and Elasticsearch after local-dev or API changes.
 - Verify that empty-transcript assets never become searchable in the real end-to-end path.
 - Verify indexing and search failure paths against a live Elasticsearch node, not only the lightweight tests.
 
 ### Product Gaps Still Deferred
 
-- Real workspace persistence and workspace-scoped filtering
+- Auth-based workspace ownership enforcement
+- Workspace CRUD beyond the current default-workspace bootstrap
 - Local transcript-table persistence or caching
 - Search tuning beyond the current baseline text query
 
@@ -70,7 +77,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 
 - Should indexing remain explicit or move behind a later background workflow?
 - When should transcript rows also be persisted locally instead of fetched on demand?
-- How should the search response evolve when workspace filters or richer search UX are added?
+- When should the default-workspace bootstrap be replaced with real workspace management and ownership rules?
 
 ## Acceptance Criteria
 
@@ -79,34 +86,38 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Done: Spring Boot exposes a product-facing upload endpoint for lecture video.
 - Done: The upload flow forwards media to FastAPI `POST /videos/upload`.
 - Done: Spring stores both upstream identifiers returned by FastAPI: `task_id` and `video_id`.
-- Done: Spring persists both `Asset` and `ProcessingJob`.
+- Done: Spring persists `Workspace`, `Asset`, and `ProcessingJob`.
+- Done: Spring associates uploaded assets with a workspace and supports default-workspace fallback.
 - Done: Spring can retrieve task status from FastAPI `GET /videos/tasks/{task_id}` through the asset-centric status path.
 - Done: Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Done: The transcript row model used by Spring only depends on the confirmed upstream fields.
 - Done: Spring does not use `/videos/search` as its product search contract.
 - Done: Transcript rows are indexed into Elasticsearch through Spring.
+- Done: Indexed transcript-row documents now include `workspaceId`.
+- Done: Successful indexing refreshes Elasticsearch before returning success.
 - Done: Spring exposes a product-facing search endpoint that returns transcript-row results from Elasticsearch.
+- Done: Spring scopes search by `workspaceId` with default-workspace fallback.
 - Done: The end-to-end thin slice exists through upload, status tracking, transcript retrieval, indexing, and search.
 - Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
 
 ### Remaining
 
-- Remaining: Complete a live manual smoke run that covers the full slice with Repo A and Elasticsearch running together.
 - Remaining: Decide the next hardening step after the thin slice, rather than broadening scope by default.
 
 ## Follow-Up Tasks
 
 ### Verification
 
-- Run the thin slice end to end with Repo A and Repo B separately.
+- Rerun the thin slice end to end with Repo A and Repo B separately after meaningful flow changes.
 - Verify that empty-transcript assets are excluded from indexing and search in the live path.
 - Keep the smoke checklist aligned with the actual Spring endpoints.
+- Keep the smoke helper aligned with the default-workspace happy path.
 
 ### Small Technical Follow-Ups
 
 - Decide whether `GET /api/assets/{assetId}` should remain public or stay as a simple convenience endpoint.
 - Decide when to replace per-document indexing writes with a bulk path.
-- Decide when workspace persistence is mature enough to enforce product-side search scoping.
+- Decide when to move beyond default-workspace fallback into real workspace management and ownership.
 
 ## Explicit Non-Goals
 
@@ -150,7 +161,8 @@ Repo A and Repo B still run separately. This keeps boundaries clear, but local v
 8. Show that empty transcript is handled as not usable.
 9. Call `POST /api/assets/{assetId}/index` and show that the asset becomes `SEARCHABLE`.
 10. Call `GET /api/search?q=...` and show product-facing transcript-row results from Spring.
-11. Call out that search does not depend on FastAPI `/videos/search`.
+11. Call out that the default workspace path works without exposing FastAPI directly.
+12. Call out that search does not depend on FastAPI `/videos/search`.
 
 ## Sprint Outcome Checklist
 
@@ -162,4 +174,4 @@ Repo A and Repo B still run separately. This keeps boundaries clear, but local v
 - [x] Empty transcript handling is explicit
 - [x] Transcript rows can be indexed into Elasticsearch
 - [x] Product-facing search returns results from Spring
-- [ ] Full live smoke/demo run has been completed against Repo A and Elasticsearch together
+- [x] Full live smoke/demo run has been completed against Repo A and Elasticsearch together

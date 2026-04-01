@@ -19,20 +19,29 @@ The currently implemented product-facing endpoints are:
 The implemented flow is:
 
 1. Spring receives a multipart upload from the client.
-2. Spring forwards `file` and `title` to FastAPI.
-3. Spring validates the live FastAPI upload response.
-4. Spring persists a local `Asset` and `ProcessingJob`.
-5. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
-6. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
-7. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
-8. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+2. Spring resolves the requested `workspaceId`, or falls back to the configured default workspace.
+3. Spring forwards `file` and `title` to FastAPI.
+4. Spring validates the live FastAPI upload response.
+5. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
+6. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
+7. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
+8. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
+9. Successful indexing refreshes the transcript index before returning.
+10. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
 Spring currently persists:
 
+- `Workspace`
 - `Asset`
 - `ProcessingJob`
+
+`Workspace` currently stores:
+
+- `id`
+- `name`
+- `createdAt`
 
 `ProcessingJob` currently stores:
 
@@ -45,6 +54,7 @@ The current transaction boundary is simple:
 
 - Network calls to FastAPI happen outside the DB write transaction.
 - DB writes are isolated in the persistence service.
+- The configured default workspace can be created lazily on first use.
 
 ## Current Status And Transcript Policy
 
@@ -73,15 +83,20 @@ Indexing and search are also product-facing.
 
 - Indexing is explicit through `POST /api/assets/{assetId}/index`.
 - Indexing only uses usable non-empty transcript rows.
+- Indexed transcript-row documents include `workspaceId`.
+- Successful indexing refreshes the transcript index before returning.
 - If Elasticsearch indexing fails after transcript data is usable, Spring does not collapse the asset back to `FAILED`.
 - Search runs through Spring, not FastAPI.
+- Search resolves `workspaceId` and falls back to the configured default workspace when it is omitted.
+- Search filters on workspace scope before returning results.
 - Search only returns transcript-row documents for assets currently marked `SEARCHABLE`.
 - The current search baseline is a simple Elasticsearch text query over transcript text and asset title.
 
 ## What Is Intentionally Not Implemented Yet
 
 - Local transcript-table persistence
-- Real workspace persistence and workspace-scoped enforcement
+- Auth-based workspace ownership enforcement
+- Workspace CRUD beyond the current default-workspace bootstrap
 - Background scheduling or workflow orchestration for polling/indexing
 - Search tuning beyond the current baseline text query
 

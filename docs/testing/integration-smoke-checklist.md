@@ -2,6 +2,8 @@
 
 This checklist reflects the current `workspace-core` implementation in Repo B. It focuses on the product-facing Spring Boot endpoints that are implemented and testable now.
 
+The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path.
+
 ## 1. Environment Readiness
 
 ### Implemented And Testable Now
@@ -9,6 +11,7 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 - [ ] Copy `.env.example` to `.env` for Repo B.
 - [ ] Start Repo B infrastructure with `docker compose --env-file .env -f infra/docker-compose.dev.yml up -d`.
 - [ ] Confirm Repo B PostgreSQL is up.
+- [ ] Confirm Repo B PostgreSQL is using the intended host port `5434`.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`
@@ -43,6 +46,7 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 - [ ] Call `POST /api/assets/upload` with multipart form data:
   - [ ] `file`
+  - [ ] optional `workspaceId`
   - [ ] optional `title`
 - [ ] Use a real lecture-video file as the happy-path sample.
 - [ ] Expect HTTP `202`.
@@ -50,8 +54,10 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
   - [ ] `assetId`
   - [ ] `processingJobId`
   - [ ] `assetStatus`
+  - [ ] `workspaceId`
 - [ ] Confirm the response does not expose raw `fastapiTaskId`.
 - [ ] Confirm the response does not expose raw `fastapiVideoId`.
+- [ ] If `workspaceId` was omitted, confirm the response uses the configured default workspace ID.
 - [ ] Confirm initial `assetStatus` is:
   - [ ] `PROCESSING` for accepted upstream work
   - [ ] or `FAILED` if the upstream acknowledgment is already failed
@@ -201,6 +207,7 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 - [ ] Expect HTTP `200`.
 - [ ] Expect JSON with:
   - [ ] `query`
+  - [ ] `workspaceIdFilter`
   - [ ] `assetIdFilter`
   - [ ] `resultCount`
   - [ ] `results`
@@ -213,12 +220,20 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
   - [ ] `createdAt`
   - [ ] `score`
 - [ ] Confirm results come from Spring's product response shape, not a FastAPI search response.
+- [ ] Confirm `workspaceIdFilter` matches the requested workspace or the configured default workspace when omitted.
+- [ ] Confirm search only returns results inside the resolved workspace scope.
 - [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
 
 ### Optional Asset Filter Check
 
 - [ ] Call `GET /api/search?q=your-query&assetId=<known-asset-id>`.
 - [ ] Confirm results are restricted to that asset.
+
+### Optional Workspace Filter Check
+
+- [ ] If you have a known non-default workspace ID in local data, call `GET /api/search?q=your-query&workspaceId=<known-workspace-id>`.
+- [ ] Confirm `workspaceIdFilter` matches that workspace ID.
+- [ ] Confirm results stay restricted to that workspace.
 
 ### Validation Path
 
@@ -238,14 +253,15 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 ### Not Implemented Yet
 
-- [ ] Real workspace-scoped search enforcement
+- [ ] Auth-based workspace ownership enforcement
+- [ ] Workspace CRUD beyond the current default-workspace bootstrap
 - [ ] Local transcript-table persistence
 - [ ] Hybrid or vector-assisted ranking
 - [ ] Search snippets, highlights, or richer retrieval UX
 
 ### Placeholder Checks For Later
 
-- [ ] When workspace persistence exists, verify search and indexing respect product-side ownership scope.
+- [ ] When auth exists, verify workspace ownership rules are enforced consistently on upload, asset reads, indexing, and search.
 - [ ] When hybrid retrieval exists, verify lexical-only fallback behavior remains understandable.
 - [ ] When transcript persistence exists, verify transcript fetch behavior stays consistent with the product API.
 - [ ] Keep verifying that Repo B does not depend on FastAPI `/videos/search`.

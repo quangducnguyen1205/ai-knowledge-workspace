@@ -75,8 +75,10 @@ api_call() {
     local path="$2"
     shift 2
 
-    local body_file="${TEMP_DIR}/response-$(date +%s%N).json"
+    local body_file
     local url="${WORKSPACE_CORE_BASE_URL}${path}"
+
+    body_file="$(mktemp "${TEMP_DIR}/response.XXXXXX")"
 
     if ! API_HTTP_CODE=$(curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$url" "$@"); then
         fail "Spring is unreachable at ${WORKSPACE_CORE_BASE_URL}. Make sure workspace-core is running."
@@ -131,7 +133,7 @@ UPLOAD_TITLE="${3:-$(basename "$MEDIA_FILE_PATH")}"
 require_command curl
 require_command jq
 
-TEMP_DIR="$(mktemp -d)"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/workspace-core-smoke.XXXXXX")"
 trap cleanup EXIT
 
 print_step "Uploading media through Spring"

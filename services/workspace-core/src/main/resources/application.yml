@@ -15,8 +15,8 @@ spring:
           time_zone: UTC
   servlet:
     multipart:
-      max-file-size: 200MB
-      max-request-size: 200MB
+      max-file-size: ${WORKSPACE_CORE_MAX_FILE_SIZE:200MB}
+      max-request-size: ${WORKSPACE_CORE_MAX_REQUEST_SIZE:200MB}
 
 server:
   port: ${SERVER_PORT:8081}
