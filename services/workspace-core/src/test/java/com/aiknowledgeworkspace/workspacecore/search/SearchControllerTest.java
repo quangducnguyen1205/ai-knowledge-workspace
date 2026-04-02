@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
@@ -136,6 +138,30 @@ class SearchControllerTest {
                         .param("q", "binary tree"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workspaceIdFilter").value(defaultWorkspaceId.toString()))
+                .andExpect(jsonPath("$.resultCount").value(0));
+
+        mockServer.verify();
+    }
+
+    @Test
+    void searchWithoutAssetIdStillFiltersByResolvedWorkspaceAndSearchableAssets() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new Workspace(workspaceId, "Systems"));
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + workspaceId + "\"")))
+                .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
+                .andExpect(content().string(not(containsString("\"term\":{\"assetId.keyword\""))))
+                .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "operating systems")
+                        .param("workspaceId", workspaceId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workspaceIdFilter").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.assetIdFilter").value(nullValue()))
                 .andExpect(jsonPath("$.resultCount").value(0));
 
         mockServer.verify();

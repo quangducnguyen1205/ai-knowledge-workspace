@@ -13,6 +13,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AssetServiceTest {
@@ -127,5 +129,39 @@ class AssetServiceTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(null);
+    }
+
+    @Test
+    void getAssetBackfillsDefaultWorkspaceForLegacyAsset() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        Asset legacyAsset = asset(assetId, "legacy.mp4", "Legacy Lecture", AssetStatus.TRANSCRIPT_READY);
+        Asset updatedAsset = asset(assetId, "legacy.mp4", "Legacy Lecture", AssetStatus.TRANSCRIPT_READY);
+        Workspace defaultWorkspace = new Workspace(workspaceId, "Default Workspace");
+        updatedAsset.setWorkspace(defaultWorkspace);
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(legacyAsset));
+        when(workspaceService.ensureDefaultWorkspace()).thenReturn(defaultWorkspace);
+        when(assetPersistenceService.updateAssetWorkspace(legacyAsset, defaultWorkspace)).thenReturn(updatedAsset);
+
+        Asset result = assetService.getAsset(assetId);
+
+        assertThat(result.getWorkspaceId()).isEqualTo(workspaceId);
+        verify(workspaceService).ensureDefaultWorkspace();
+        verify(assetPersistenceService).updateAssetWorkspace(legacyAsset, defaultWorkspace);
+    }
+
+    private Asset asset(UUID assetId, String originalFilename, String title, AssetStatus status) {
+        Asset asset = new Asset(originalFilename, title, status);
+        ReflectionTestUtils.setField(asset, "id", assetId);
+        return asset;
     }
 }
