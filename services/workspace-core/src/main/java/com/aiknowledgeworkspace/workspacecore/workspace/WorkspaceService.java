@@ -1,10 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class WorkspaceService {
@@ -21,13 +19,13 @@ public class WorkspaceService {
     }
 
     @Transactional
-    public Workspace resolveWorkspace(UUID workspaceId) {
+    public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
         if (workspaceId == null || workspaceProperties.getDefaultId().equals(workspaceId)) {
             return ensureDefaultWorkspace();
         }
 
         return workspaceRepository.findById(workspaceId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found"));
+                .orElseThrow(() -> new WorkspaceNotFoundException(workspaceId));
     }
 
     @Transactional

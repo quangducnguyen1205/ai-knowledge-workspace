@@ -27,6 +27,7 @@ public class TranscriptIndexDocumentMapper {
     }
 
     public String toDocumentId(Asset asset, FastApiTranscriptRowResponse transcriptRow) {
+        // Keep document IDs stable so a re-index overwrites the same transcript row document.
         String transcriptRowId = StringUtils.hasText(transcriptRow.id())
                 ? transcriptRow.id()
                 : "segment-" + transcriptRow.segmentIndex();

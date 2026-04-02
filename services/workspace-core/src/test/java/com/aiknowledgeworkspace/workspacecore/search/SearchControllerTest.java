@@ -13,7 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,14 +47,16 @@ class SearchControllerTest {
         SearchService searchService = new SearchService(builder.build(), properties, workspaceService);
         SearchController searchController = new SearchController(searchService);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(searchController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(searchController)
+                .setControllerAdvice(new ApiExceptionHandler())
+                .build();
     }
 
     @Test
     void searchReturnsTranscriptRowResultsFromSpring() throws Exception {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspace(workspaceId))
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
                 .thenReturn(new Workspace(workspaceId, "Algorithms"));
         String searchResponse = """
                 {
@@ -82,6 +86,10 @@ class SearchControllerTest {
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
+                .andExpect(content().string(containsString("\"_score\":{\"order\":\"desc\"}")))
+                .andExpect(content().string(containsString("\"segmentIndex\":{\"order\":\"asc\"}")))
+                .andExpect(content().string(containsString("\"assetId.keyword\":{\"order\":\"asc\"}")))
+                .andExpect(content().string(containsString("\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}")))
                 .andRespond(withSuccess(searchResponse, MediaType.APPLICATION_JSON));
 
         mockMvc.perform(get("/api/search")
@@ -116,7 +124,7 @@ class SearchControllerTest {
     @Test
     void searchUsesDefaultWorkspaceWhenWorkspaceIdIsOmitted() throws Exception {
         UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        when(workspaceService.resolveWorkspace(null))
+        when(workspaceService.resolveWorkspaceOrDefault(null))
                 .thenReturn(new Workspace(defaultWorkspaceId, "Default Workspace"));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
@@ -131,5 +139,29 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.resultCount").value(0));
 
         mockServer.verify();
+    }
+
+    @Test
+    void invalidWorkspaceIdReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/search")
+                        .param("q", "dynamic programming")
+                        .param("workspaceId", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_ID"))
+                .andExpect(jsonPath("$.message").value("workspaceId must be a valid UUID"));
+    }
+
+    @Test
+    void unknownWorkspaceReturnsNotFound() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenThrow(new WorkspaceNotFoundException(workspaceId));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "dynamic programming")
+                        .param("workspaceId", workspaceId.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
     }
 }

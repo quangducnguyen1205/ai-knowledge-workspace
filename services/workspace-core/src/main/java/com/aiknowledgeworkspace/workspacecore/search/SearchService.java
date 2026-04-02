@@ -41,7 +41,7 @@ public class SearchService {
 
     public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
         String normalizedQuery = normalizeQuery(query);
-        UUID resolvedWorkspaceId = workspaceService.resolveWorkspace(workspaceId).getId();
+        UUID resolvedWorkspaceId = workspaceService.resolveWorkspaceOrDefault(workspaceId).getId();
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
@@ -82,12 +82,34 @@ public class SearchService {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("size", DEFAULT_RESULT_SIZE);
         body.put("query", Map.of("bool", boolQuery));
-        body.put("sort", List.of("_score", Map.of("segmentIndex", Map.of("order", "asc"))));
+        body.put("sort", buildSortClauses());
         return body;
+    }
+
+    private List<Map<String, Object>> buildSortClauses() {
+        return List.of(
+                sortClause("_score", "desc"),
+                sortClause("segmentIndex", "asc"),
+                sortClause("assetId.keyword", "asc"),
+                sortClause("transcriptRowId.keyword", "asc", "_last")
+        );
     }
 
     private Map<String, Object> termFilter(String field, String value) {
         return Map.of("term", Map.of(field, value));
+    }
+
+    private Map<String, Object> sortClause(String field, String order) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("order", order);
+        return Map.of(field, options);
+    }
+
+    private Map<String, Object> sortClause(String field, String order, String missingValue) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("order", order);
+        options.put("missing", missingValue);
+        return Map.of(field, options);
     }
 
     private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {

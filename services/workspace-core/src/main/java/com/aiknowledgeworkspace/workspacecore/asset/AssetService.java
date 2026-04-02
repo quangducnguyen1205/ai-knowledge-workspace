@@ -50,7 +50,7 @@ public class AssetService {
             return asset;
         }
 
-        Workspace defaultWorkspace = workspaceService.resolveWorkspace(null);
+        Workspace defaultWorkspace = workspaceService.ensureDefaultWorkspace();
         return assetPersistenceService.updateAssetWorkspace(asset, defaultWorkspace);
     }
 
@@ -134,7 +134,7 @@ public class AssetService {
 
         String originalFilename = resolveOriginalFilename(file);
         String title = resolveTitle(requestedTitle, originalFilename);
-        Workspace workspace = workspaceService.resolveWorkspace(workspaceId);
+        Workspace workspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
 
         FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
                 file.getResource(),
