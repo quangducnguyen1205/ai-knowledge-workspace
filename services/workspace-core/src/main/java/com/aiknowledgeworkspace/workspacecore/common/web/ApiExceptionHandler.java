@@ -4,8 +4,10 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegra
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -38,5 +40,26 @@ public class ApiExceptionHandler {
     ) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
+    }
+
+    @ExceptionHandler(WorkspaceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleWorkspaceNotFound(WorkspaceNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("WORKSPACE_NOT_FOUND", exception.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException exception
+    ) {
+        String errorCode = "workspaceId".equals(exception.getName())
+                ? "INVALID_WORKSPACE_ID"
+                : "INVALID_REQUEST_PARAMETER";
+        String message = "workspaceId".equals(exception.getName())
+                ? "workspaceId must be a valid UUID"
+                : "Invalid value for request parameter " + exception.getName();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse(errorCode, message));
     }
 }
