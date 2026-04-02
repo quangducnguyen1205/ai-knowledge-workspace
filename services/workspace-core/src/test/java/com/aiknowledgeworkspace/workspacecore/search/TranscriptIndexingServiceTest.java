@@ -3,11 +3,13 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.times;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.ExpectedCount.twice;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -162,6 +164,46 @@ class TranscriptIndexingServiceTest {
 
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
         verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        mockServer.verify();
+    }
+
+    @Test
+    void repeatedIndexingReusesStableDocumentIdsForSameAsset() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset firstAsset = asset(assetId, workspaceId, "Lecture 4", AssetStatus.TRANSCRIPT_READY);
+        Asset searchableAsset = asset(assetId, workspaceId, "Lecture 4", AssetStatus.SEARCHABLE);
+        ProcessingJob processingJob = processingJob(assetId, "task-4", "video-4");
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-4", "video-4", 0, "Graph traversal overview"),
+                transcriptRow("row-5", "video-4", 1, "Breadth first search example")
+        );
+
+        when(assetService.getAsset(assetId)).thenReturn(firstAsset, searchableAsset);
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetService.loadUsableTranscriptRows(firstAsset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptRows(searchableAsset, processingJob)).thenReturn(transcriptRows);
+
+        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-4"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
+                .andRespond(withSuccess());
+
+        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-5"))
+                .andExpect(method(HttpMethod.PUT))
+                .andRespond(withSuccess());
+
+        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess());
+
+        AssetIndexResponse firstResponse = transcriptIndexingService.indexAssetTranscript(assetId);
+        AssetIndexResponse secondResponse = transcriptIndexingService.indexAssetTranscript(assetId);
+
+        assertThat(firstResponse.indexedDocumentCount()).isEqualTo(2);
+        assertThat(secondResponse.indexedDocumentCount()).isEqualTo(2);
+        verify(assetPersistenceService).updateAssetStatus(firstAsset, AssetStatus.SEARCHABLE);
+        verify(assetPersistenceService).updateAssetStatus(searchableAsset, AssetStatus.SEARCHABLE);
         mockServer.verify();
     }
 
