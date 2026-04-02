@@ -84,13 +84,16 @@ Indexing and search are also product-facing.
 - Indexing is explicit through `POST /api/assets/{assetId}/index`.
 - Indexing only uses usable non-empty transcript rows.
 - Indexed transcript-row documents include `workspaceId`.
+- Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Successful indexing refreshes the transcript index before returning.
 - If Elasticsearch indexing fails after transcript data is usable, Spring does not collapse the asset back to `FAILED`.
 - Search runs through Spring, not FastAPI.
 - Search resolves `workspaceId` and falls back to the configured default workspace when it is omitted.
+- A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
 - Search filters on workspace scope before returning results.
 - Search only returns transcript-row documents for assets currently marked `SEARCHABLE`.
 - The current search baseline is a simple Elasticsearch text query over transcript text and asset title.
+- Search ordering is deterministic on score ties.
 
 ## What Is Intentionally Not Implemented Yet
 

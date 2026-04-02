@@ -42,6 +42,8 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` if `file` is missing or empty
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
 - HTTP `502` or `504` if upstream FastAPI fails
 
 ### `GET /api/assets/{assetId}/status`
@@ -106,6 +108,7 @@ Current behavior:
 - Indexing is explicit and product-side.
 - One Elasticsearch document is written per transcript row.
 - Indexed transcript-row documents include `workspaceId`.
+- Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Only usable non-empty transcript rows can be indexed.
 - Successful indexing refreshes the transcript index before returning.
 - Successful indexing marks the asset `SEARCHABLE`.
@@ -156,16 +159,19 @@ Current behavior:
 - Only documents for assets already marked `SEARCHABLE` are eligible.
 - `assetId` is an exact filter when provided.
 - The current search baseline is simple text search over transcript text and asset title.
+- Search ordering is deterministic on score ties: `_score desc`, then `segmentIndex`, `assetId`, and `transcriptRowId`.
 
 Common failure cases:
 
 - HTTP `400` if `q` is missing or blank
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 
 ## Error Shape Notes
 
-Structured integration errors currently use:
+Structured error responses currently use:
 
 - `code`
 - `message`
@@ -176,8 +182,11 @@ Current structured error codes:
 - `FASTAPI_INTEGRATION_ERROR`
 - `ELASTICSEARCH_UNAVAILABLE`
 - `ELASTICSEARCH_INTEGRATION_ERROR`
+- `WORKSPACE_NOT_FOUND`
+- `INVALID_WORKSPACE_ID`
+- `INVALID_REQUEST_PARAMETER`
 
-Validation and state errors such as `400`, `404`, and `409` are currently returned through Spring's standard status handling.
+Other validation and state errors such as transcript-not-ready `409` still use Spring's standard status handling.
 
 ## Other Current Endpoint
 
