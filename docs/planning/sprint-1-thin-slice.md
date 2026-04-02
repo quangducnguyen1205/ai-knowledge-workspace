@@ -29,14 +29,17 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
   - `rawUpstreamTaskState`
 - Spring associates each asset with one workspace.
 - Spring falls back to the configured default workspace when upload or search omit `workspaceId`.
+- Spring returns a product-side `404` for an unknown `workspaceId` and `400` for a malformed `workspaceId`.
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
 - Spring indexes one Elasticsearch document per transcript row through an explicit product endpoint.
 - Indexed transcript-row documents include `workspaceId`.
+- Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Successful indexing refreshes the transcript index before returning.
 - Spring exposes a product-owned search endpoint backed by Elasticsearch.
 - Spring scopes product search by `workspaceId`.
+- Spring keeps search result ordering deterministic when Elasticsearch scores tie.
 - Spring returns search results through Spring-owned DTOs instead of legacy upstream shapes.
 - A smoke helper script exists at `infra/scripts/smoke-thin-slice.sh` for the current happy path.
 
@@ -56,7 +59,10 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Successful indexing moves an asset to `SEARCHABLE`.
 - Search only returns documents for assets already marked `SEARCHABLE`.
 - Search currently uses a simple Elasticsearch text-query baseline over transcript text and asset title.
-- Lightweight tests exist for indexing and search, and the focused Maven test run passes.
+- Repeated indexing is safe to rerun because the same asset/transcript-row combination maps to the same Elasticsearch document ID.
+- Search ordering is deterministic on score ties.
+- Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, and legacy-asset default-workspace backfill.
+- The focused Maven test run passes.
 
 ## Remaining Work
 
@@ -97,6 +103,10 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Done: Successful indexing refreshes Elasticsearch before returning success.
 - Done: Spring exposes a product-facing search endpoint that returns transcript-row results from Elasticsearch.
 - Done: Spring scopes search by `workspaceId` with default-workspace fallback.
+- Done: Spring returns clear product-side errors for malformed and unknown `workspaceId` values where workspace scoping is accepted.
+- Done: Repeated indexing reuses stable transcript-row document IDs instead of widening the indexing lifecycle.
+- Done: Search ordering is deterministic when Elasticsearch scores tie.
+- Done: Lightweight coverage exists for the current workspace-aware upload, indexing, and search slice.
 - Done: The end-to-end thin slice exists through upload, status tracking, transcript retrieval, indexing, and search.
 - Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
 
@@ -112,6 +122,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Verify that empty-transcript assets are excluded from indexing and search in the live path.
 - Keep the smoke checklist aligned with the actual Spring endpoints.
 - Keep the smoke helper aligned with the default-workspace happy path.
+- Manually verify the non-default-workspace path against a live stack when needed, because the helper still omits `workspaceId`.
 
 ### Small Technical Follow-Ups
 
@@ -135,7 +146,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 
 ### Empty Transcript Edge Case
 
-FastAPI success still does not guarantee usable transcript rows. This remains a product risk until indexing and search explicitly exclude empty-transcript assets.
+FastAPI success still does not guarantee usable transcript rows. The code handles this conservatively now, but the live end-to-end path still needs periodic manual verification.
 
 ### Search Scope Creep
 

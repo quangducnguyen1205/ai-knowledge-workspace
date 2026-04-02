@@ -68,6 +68,14 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Expect HTTP `400`.
 - [ ] Call `POST /api/assets/upload` with an empty file.
 - [ ] Expect HTTP `400`.
+- [ ] Call `POST /api/assets/upload` with `workspaceId=not-a-uuid`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_ID"`
+- [ ] Call `POST /api/assets/upload` with a valid-but-unknown `workspaceId`.
+- [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_FOUND"`
 
 ### Upstream Validation Path
 
@@ -184,9 +192,12 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Expect JSON with:
   - [ ] `assetId`
   - [ ] `assetStatus = "SEARCHABLE"`
-  - [ ] `indexedDocumentCount` greater than `0`
+- [ ] `indexedDocumentCount` greater than `0`
 - [ ] Call `GET /api/assets/{assetId}/status` after indexing.
 - [ ] Confirm the returned `assetStatus` is `SEARCHABLE`.
+- [ ] Call `POST /api/assets/{assetId}/index` again for the same asset.
+- [ ] Expect HTTP `200` again.
+- [ ] Confirm the asset stays `SEARCHABLE` and the rerun does not require cleanup before retrying.
 
 ### Failure Path
 
@@ -239,6 +250,14 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 
 - [ ] Call `GET /api/search?q=` with a blank or whitespace-only query value.
 - [ ] Expect HTTP `400`.
+- [ ] Call `GET /api/search?q=test&workspaceId=not-a-uuid`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_ID"`
+- [ ] Call `GET /api/search?q=test&workspaceId=<valid-but-unknown-uuid>`.
+- [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_FOUND"`
 
 ### Elasticsearch Failure Path
 
