@@ -11,7 +11,7 @@ A serious personal software engineering project for building a knowledge-centere
 
 ## Current Status
 
-- `workspace-core` now exposes the current product-facing backend slice for upload, status, transcript retrieval, explicit indexing, and search.
+- `workspace-core` now exposes the current product-facing backend slice for workspace create/list/read, workspace-aware asset listing, upload, status, transcript retrieval, explicit indexing, and search.
 - Repo A remains a separate FastAPI processing dependency.
 - Repo B now persists `Workspace`, `Asset`, and `ProcessingJob` in PostgreSQL.
 - Product search remains Spring-owned, Elasticsearch-backed, and scoped by `workspaceId` with default-workspace fallback.

@@ -115,9 +115,18 @@ Optional environment overrides:
 - `WORKSPACE_CORE_BASE_URL`
 - `SMOKE_POLL_INTERVAL_SECONDS`
 - `SMOKE_POLL_TIMEOUT_SECONDS`
+- `SMOKE_WORKSPACE_NAME`
+
+Optional non-default workspace example:
+
+```bash
+SMOKE_WORKSPACE_NAME="Algorithms" ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
 
 The helper runs the current Spring-owned flow only:
 
+- optional workspace create/read
+- workspace-aware asset listing
 - upload
 - status polling
 - transcript fetch
@@ -125,7 +134,8 @@ The helper runs the current Spring-owned flow only:
 - search
 
 It prints the created `assetId`, processing progress, transcript row count, indexed document count, and search result count.
-It currently exercises the default-workspace happy path because `workspaceId` is optional and omitted by the helper.
+If `SMOKE_WORKSPACE_NAME` is omitted, it exercises the default-workspace path.
+If `SMOKE_WORKSPACE_NAME` is set, it also verifies a non-default workspace path end to end.
 
 ## Notes
 

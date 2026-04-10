@@ -2,7 +2,23 @@
 
 This checklist reflects the current `workspace-core` implementation in Repo B. It focuses on the product-facing Spring Boot endpoints that are implemented and testable now.
 
-The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path.
+The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
+
+## Helper Shortcut
+
+Default-workspace path:
+
+```bash
+./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+Non-default workspace path:
+
+```bash
+SMOKE_WORKSPACE_NAME="Algorithms" ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 
 ## 1. Environment Readiness
 
@@ -40,7 +56,39 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
   - [ ] `code = "FASTAPI_CONNECTIVITY_ERROR"`
   - [ ] non-empty `message`
 
-## 3. Product Upload Flow Checks
+## 3. Product Workspace Management Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `POST /api/workspaces` with JSON body:
+  - [ ] `name`
+- [ ] Expect HTTP `201`.
+- [ ] Expect JSON with:
+  - [ ] `id`
+  - [ ] `name`
+  - [ ] `createdAt`
+- [ ] Call `GET /api/workspaces`.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the created workspace appears in the list.
+- [ ] Confirm the configured default workspace also appears once it has been created lazily or explicitly read.
+- [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
+
+### Failure Path
+
+- [ ] Call `POST /api/workspaces` with a blank or missing `name`.
+- [ ] Expect HTTP `400`.
+- [ ] Call `GET /api/workspaces/not-a-uuid`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_ID"`
+- [ ] Call `GET /api/workspaces/<valid-but-unknown-uuid>`.
+- [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_FOUND"`
+
+## 4. Product Upload Flow Checks
 
 ### Implemented And Testable Now
 
@@ -82,7 +130,41 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] If you can safely simulate invalid upstream upload behavior in a non-production FastAPI environment, verify that Repo B returns HTTP `502` when the upload response is missing required fields such as `task_id` or `video_id`.
 - [ ] If that simulation is not practical, mark this check as pending instead of assuming it passed.
 
-## 4. Product Status Refresh Checks
+## 5. Product Asset Listing Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `GET /api/assets` without `workspaceId`.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm each row only contains:
+  - [ ] `assetId`
+  - [ ] `title`
+  - [ ] `assetStatus`
+  - [ ] `workspaceId`
+  - [ ] `createdAt`
+- [ ] Confirm omitted `workspaceId` uses the configured default workspace scope.
+- [ ] If you uploaded into a known non-default workspace, call `GET /api/assets?workspaceId=<workspaceId>`.
+- [ ] Confirm the uploaded asset appears in that workspace-scoped list.
+- [ ] Confirm non-default workspace listing only returns assets in that workspace.
+
+### Legacy Default-Workspace Path
+
+- [ ] If you have older local assets with null `workspace_id`, call `GET /api/assets` without `workspaceId`.
+- [ ] Confirm those legacy assets still appear in the default-workspace list.
+- [ ] Confirm those rows are backfilled to the default workspace after the read path.
+
+### Failure Path
+
+- [ ] Call `GET /api/assets?workspaceId=not-a-uuid`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_ID"`
+- [ ] Call `GET /api/assets?workspaceId=<valid-but-unknown-uuid>`.
+- [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_FOUND"`
+
+## 6. Product Status Refresh Checks
 
 ### Implemented And Testable Now
 
@@ -116,7 +198,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] If you can safely simulate an upstream task-status response without `status`, verify that Repo B returns HTTP `502`.
 - [ ] If you cannot simulate that safely, mark this check as pending.
 
-## 5. Product Transcript Fetch Checks
+## 7. Product Transcript Fetch Checks
 
 ### Implemented And Testable Now
 
@@ -146,7 +228,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Call `GET /api/assets/{assetId}/transcript` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
 
-## 6. Empty-Transcript Handling Checks
+## 8. Empty-Transcript Handling Checks
 
 ### Implemented And Testable Now
 
@@ -163,7 +245,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Treat this as a required smoke path, not an edge path to skip.
 - [ ] Do not record this case as a pass just because upstream processing succeeded.
 
-## 7. Structured Integration Error Handling Checks
+## 9. Structured Integration Error Handling Checks
 
 ### Implemented And Testable Now
 
@@ -182,7 +264,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Repo A returns `4xx` or `5xx` for upload/status/transcript -> expect `502`
 - [ ] Repo A returns invalid response body for a required contract -> expect `502`
 
-## 8. Product Indexing Checks
+## 10. Product Indexing Checks
 
 ### Implemented And Testable Now
 
@@ -210,7 +292,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
 - [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
 
-## 9. Product Search Checks
+## 11. Product Search Checks
 
 ### Implemented And Testable Now
 
@@ -245,6 +327,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 - [ ] If you have a known non-default workspace ID in local data, call `GET /api/search?q=your-query&workspaceId=<known-workspace-id>`.
 - [ ] Confirm `workspaceIdFilter` matches that workspace ID.
 - [ ] Confirm results stay restricted to that workspace.
+- [ ] If you use `SMOKE_WORKSPACE_NAME`, confirm the helper's printed `searchWorkspaceId` matches the created workspace ID.
 
 ### Validation Path
 
@@ -268,12 +351,12 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
   - [ ] `code = "ELASTICSEARCH_UNAVAILABLE"` or `ELASTICSEARCH_INTEGRATION_ERROR`
   - [ ] non-empty `message`
 
-## 10. Not-Yet-In-Scope Checks
+## 12. Not-Yet-In-Scope Checks
 
 ### Not Implemented Yet
 
 - [ ] Auth-based workspace ownership enforcement
-- [ ] Workspace CRUD beyond the current default-workspace bootstrap
+- [ ] Workspace management beyond the current create/list/read surface and default-workspace bootstrap
 - [ ] Local transcript-table persistence
 - [ ] Hybrid or vector-assisted ranking
 - [ ] Search snippets, highlights, or richer retrieval UX

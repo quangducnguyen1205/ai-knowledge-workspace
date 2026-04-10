@@ -10,6 +10,11 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 
 ### Product-Facing Endpoints
 
+- `POST /api/workspaces`
+- `GET /api/workspaces`
+- `GET /api/workspaces/{workspaceId}`
+- `GET /api/assets`
+- `GET /api/assets/{assetId}`
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
@@ -22,14 +27,17 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring forwards upload requests to FastAPI `POST /videos/upload`.
 - Spring validates the live FastAPI upload response.
 - Spring persists `Workspace`, `Asset`, and `ProcessingJob` in Repo B.
+- Spring exposes a minimal workspace API through create, list, and read endpoints.
 - Spring stores:
   - `fastapiTaskId`
   - `fastapiVideoId`
   - `processingJobStatus`
   - `rawUpstreamTaskState`
 - Spring associates each asset with one workspace.
+- Spring exposes workspace-aware asset listing through `GET /api/assets`.
 - Spring falls back to the configured default workspace when upload or search omit `workspaceId`.
 - Spring returns a product-side `404` for an unknown `workspaceId` and `400` for a malformed `workspaceId`.
+- Default-workspace asset listing includes legacy assets with null workspace and backfills them.
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
@@ -41,7 +49,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring scopes product search by `workspaceId`.
 - Spring keeps search result ordering deterministic when Elasticsearch scores tie.
 - Spring returns search results through Spring-owned DTOs instead of legacy upstream shapes.
-- A smoke helper script exists at `infra/scripts/smoke-thin-slice.sh` for the current happy path.
+- A smoke helper script exists at `infra/scripts/smoke-thin-slice.sh` for the current happy path, with optional non-default workspace verification through `SMOKE_WORKSPACE_NAME`.
 
 ### Transcript Handling
 
@@ -61,7 +69,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Search currently uses a simple Elasticsearch text-query baseline over transcript text and asset title.
 - Repeated indexing is safe to rerun because the same asset/transcript-row combination maps to the same Elasticsearch document ID.
 - Search ordering is deterministic on score ties.
-- Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, and legacy-asset default-workspace backfill.
+- Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, legacy-asset default-workspace backfill, and workspace-aware asset listing.
 - The focused Maven test run passes.
 
 ## Remaining Work
@@ -75,7 +83,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 ### Product Gaps Still Deferred
 
 - Auth-based workspace ownership enforcement
-- Workspace CRUD beyond the current default-workspace bootstrap
+- Workspace management beyond the current create/list/read surface plus default-workspace bootstrap
 - Local transcript-table persistence or caching
 - Search tuning beyond the current baseline text query
 
@@ -90,10 +98,12 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 ### Completed
 
 - Done: Spring Boot exposes a product-facing upload endpoint for lecture video.
+- Done: Spring exposes minimal workspace create, list, and read endpoints.
 - Done: The upload flow forwards media to FastAPI `POST /videos/upload`.
 - Done: Spring stores both upstream identifiers returned by FastAPI: `task_id` and `video_id`.
 - Done: Spring persists `Workspace`, `Asset`, and `ProcessingJob`.
 - Done: Spring associates uploaded assets with a workspace and supports default-workspace fallback.
+- Done: Spring exposes workspace-aware asset listing with default-workspace fallback.
 - Done: Spring can retrieve task status from FastAPI `GET /videos/tasks/{task_id}` through the asset-centric status path.
 - Done: Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Done: The transcript row model used by Spring only depends on the confirmed upstream fields.
@@ -107,6 +117,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Done: Repeated indexing reuses stable transcript-row document IDs instead of widening the indexing lifecycle.
 - Done: Search ordering is deterministic when Elasticsearch scores tie.
 - Done: Lightweight coverage exists for the current workspace-aware upload, indexing, and search slice.
+- Done: The smoke helper can also exercise a non-default workspace path through `SMOKE_WORKSPACE_NAME`.
 - Done: The end-to-end thin slice exists through upload, status tracking, transcript retrieval, indexing, and search.
 - Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
 
@@ -121,12 +132,13 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Rerun the thin slice end to end with Repo A and Repo B separately after meaningful flow changes.
 - Verify that empty-transcript assets are excluded from indexing and search in the live path.
 - Keep the smoke checklist aligned with the actual Spring endpoints.
-- Keep the smoke helper aligned with the default-workspace happy path.
-- Manually verify the non-default-workspace path against a live stack when needed, because the helper still omits `workspaceId`.
+- Keep the smoke helper aligned with both the default-workspace path and the optional non-default workspace path.
+- Rerun the helper with `SMOKE_WORKSPACE_NAME` when workspace-scoping changes land.
 
 ### Small Technical Follow-Ups
 
 - Decide whether `GET /api/assets/{assetId}` should remain public or stay as a simple convenience endpoint.
+- Decide whether `GET /api/assets` needs pagination or additional filtering once asset counts grow.
 - Decide when to replace per-document indexing writes with a bulk path.
 - Decide when to move beyond default-workspace fallback into real workspace management and ownership.
 

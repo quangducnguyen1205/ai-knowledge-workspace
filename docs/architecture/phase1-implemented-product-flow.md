@@ -10,6 +10,11 @@ Repo A remains a separate FastAPI processing service. Repo B is the Spring Boot 
 
 The currently implemented product-facing endpoints are:
 
+- `POST /api/workspaces`
+- `GET /api/workspaces`
+- `GET /api/workspaces/{workspaceId}`
+- `GET /api/assets`
+- `GET /api/assets/{assetId}`
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
@@ -18,16 +23,19 @@ The currently implemented product-facing endpoints are:
 
 The implemented flow is:
 
-1. Spring receives a multipart upload from the client.
-2. Spring resolves the requested `workspaceId`, or falls back to the configured default workspace.
-3. Spring forwards `file` and `title` to FastAPI.
-4. Spring validates the live FastAPI upload response.
-5. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
-6. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
-7. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
-8. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
-9. Successful indexing refreshes the transcript index before returning.
-10. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+1. Spring exposes minimal workspace create, list, and read endpoints.
+2. Spring creates the configured default workspace lazily when the default scope is first needed.
+3. Spring receives a multipart upload from the client.
+4. Spring resolves the requested `workspaceId`, or falls back to the configured default workspace.
+5. Spring forwards `file` and `title` to FastAPI.
+6. Spring validates the live FastAPI upload response.
+7. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
+8. Spring exposes workspace-aware asset listing plus simple per-asset reads.
+9. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
+10. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
+11. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
+12. Successful indexing refreshes the transcript index before returning.
+13. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -79,6 +87,17 @@ Transcript reads are also product-facing.
 - A non-empty transcript can move the asset to `TRANSCRIPT_READY`.
 - Successful indexing moves the asset to `SEARCHABLE`.
 
+Workspace management and asset listing are also product-facing.
+
+- Spring exposes a minimal workspace API through `POST /api/workspaces`, `GET /api/workspaces`, and `GET /api/workspaces/{workspaceId}`.
+- Workspace reads and listing stay intentionally narrow: `id`, `name`, and `createdAt`.
+- Asset listing runs through `GET /api/assets`.
+- Asset listing resolves `workspaceId` and falls back to the configured default workspace when it is omitted.
+- A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
+- Default-workspace asset listing includes older local assets whose workspace association is still null.
+- Default-workspace asset reads and listing backfill those legacy assets to the configured default workspace.
+- Non-default workspace listing only returns assets already associated with that workspace.
+
 Indexing and search are also product-facing.
 
 - Indexing is explicit through `POST /api/assets/{assetId}/index`.
@@ -99,7 +118,7 @@ Indexing and search are also product-facing.
 
 - Local transcript-table persistence
 - Auth-based workspace ownership enforcement
-- Workspace CRUD beyond the current default-workspace bootstrap
+- Workspace management beyond the current create/list/read surface plus default-workspace bootstrap
 - Background scheduling or workflow orchestration for polling/indexing
 - Search tuning beyond the current baseline text query
 

@@ -30,6 +30,7 @@ Current role:
 - Represents the current phase-1 logical container for assets.
 - Supports product-side workspace scoping without introducing auth or collaboration yet.
 - Provides the default workspace bootstrap used when `workspaceId` is omitted.
+- Can be created explicitly through the current minimal workspace API, or lazily when the default workspace is first needed.
 
 ## `Asset`
 
@@ -95,12 +96,13 @@ Current role:
 
 ## Current Write Behavior
 
+- Workspace create persists a minimal `Workspace` row with `name`, and default-workspace reads can lazily create the configured default workspace row if it is still missing.
 - Upload resolves a workspace first, then persists `Asset` and `ProcessingJob` together after FastAPI acknowledges the upload.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript fetch can move an asset to `TRANSCRIPT_READY`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
-- Asset reads backfill a missing workspace association to the configured default workspace so older local rows stay usable.
+- Asset reads and default-workspace asset listing backfill a missing workspace association to the configured default workspace so older local rows stay usable.
 
 ## Intentionally Not Persisted Yet
 
