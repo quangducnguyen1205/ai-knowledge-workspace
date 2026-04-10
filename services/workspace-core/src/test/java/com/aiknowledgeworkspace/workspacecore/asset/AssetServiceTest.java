@@ -1,13 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
@@ -252,6 +255,142 @@ class AssetServiceTest {
         verify(assetRepository).findByWorkspace_Id(workspaceId, assetListSort());
     }
 
+    @Test
+    void transcriptContextReturnsRequestedWindowAroundMatchedRow() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 3", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Algorithms"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-3",
+                "video-3",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-3", "video-3", 3, "third"),
+                transcriptRow("row-1", "video-3", 1, "first"),
+                transcriptRow("row-4", "video-3", 4, "fourth"),
+                transcriptRow("row-2", "video-3", 2, "second"),
+                transcriptRow("row-5", "video-3", 5, "fifth")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(fastApiProcessingClient.getTranscript("video-3")).thenReturn(transcriptRows);
+
+        AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "row-3", 1);
+
+        assertThat(response.assetId()).isEqualTo(assetId);
+        assertThat(response.transcriptRowId()).isEqualTo("row-3");
+        assertThat(response.hitSegmentIndex()).isEqualTo(3);
+        assertThat(response.window()).isEqualTo(1);
+        assertThat(response.rows())
+                .extracting(AssetTranscriptRowResponse::id)
+                .containsExactly("row-2", "row-3", "row-4");
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+    }
+
+    @Test
+    void transcriptContextUsesFallbackSegmentIdentifierWhenTranscriptRowIdIsMissing() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 4", AssetStatus.TRANSCRIPT_READY, new Workspace(workspaceId, "Systems"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-4",
+                "video-4",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow(null, "video-4", 0, "intro"),
+                transcriptRow("row-1", "video-4", 1, "detail"),
+                transcriptRow("row-2", "video-4", 2, "more")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(fastApiProcessingClient.getTranscript("video-4")).thenReturn(transcriptRows);
+
+        AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "segment-0", null);
+
+        assertThat(response.transcriptRowId()).isEqualTo("segment-0");
+        assertThat(response.hitSegmentIndex()).isEqualTo(0);
+        assertThat(response.window()).isEqualTo(2);
+        assertThat(response.rows()).hasSize(3);
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+    }
+
+    @Test
+    void transcriptContextRejectsInvalidWindow() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(UUID.randomUUID(), "row-1", 0))
+                .isInstanceOf(InvalidTranscriptContextWindowException.class)
+                .hasMessageContaining("window must be greater than 0");
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(UUID.randomUUID(), "row-1", 6))
+                .isInstanceOf(InvalidTranscriptContextWindowException.class)
+                .hasMessageContaining("window must be less than or equal to 5");
+    }
+
+    @Test
+    void transcriptContextRejectsUnknownTranscriptRowForAsset() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 5", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Databases"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-5",
+                "video-5",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-1", "video-5", 1, "first"),
+                transcriptRow("row-2", "video-5", 2, "second")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(fastApiProcessingClient.getTranscript("video-5")).thenReturn(transcriptRows);
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-404", 2))
+                .isInstanceOf(TranscriptRowNotFoundException.class)
+                .hasMessageContaining("Transcript row not found for asset " + assetId + ": row-404");
+    }
+
     private Asset asset(UUID assetId, String originalFilename, String title, AssetStatus status) {
         return asset(assetId, originalFilename, title, status, null, null);
     }
@@ -276,6 +415,16 @@ class AssetServiceTest {
         return Sort.by(
                 Sort.Order.desc("createdAt"),
                 Sort.Order.asc("id")
+        );
+    }
+
+    private FastApiTranscriptRowResponse transcriptRow(String id, String videoId, int segmentIndex, String text) {
+        return new FastApiTranscriptRowResponse(
+                id,
+                videoId,
+                segmentIndex,
+                text,
+                "2026-04-12T00:00:00Z"
         );
     }
 }

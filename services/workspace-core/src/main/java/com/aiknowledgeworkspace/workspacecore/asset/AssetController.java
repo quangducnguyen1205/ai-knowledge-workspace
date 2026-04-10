@@ -47,6 +47,15 @@ public class AssetController {
         return assetService.getAssetTranscript(assetId);
     }
 
+    @GetMapping("/{assetId}/transcript/context")
+    public AssetTranscriptContextResponse getAssetTranscriptContext(
+            @PathVariable UUID assetId,
+            @RequestParam("transcriptRowId") String transcriptRowId,
+            @RequestParam(value = "window", required = false) Integer window
+    ) {
+        return assetService.getAssetTranscriptContext(assetId, transcriptRowId, window);
+    }
+
     @PostMapping("/{assetId}/index")
     public AssetIndexResponse indexAssetTranscript(@PathVariable UUID assetId) {
         return transcriptIndexingService.indexAssetTranscript(assetId);
