@@ -2,12 +2,10 @@ package com.aiknowledgeworkspace.workspacecore.workspace;
 
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class WorkspaceService {
@@ -68,13 +66,12 @@ public class WorkspaceService {
 
     private String normalizeWorkspaceName(String name) {
         if (!StringUtils.hasText(name)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace name is required");
+            throw new InvalidWorkspaceNameException("Workspace name is required");
         }
 
         String normalizedName = name.trim();
         if (normalizedName.length() > MAX_WORKSPACE_NAME_LENGTH) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
+            throw new InvalidWorkspaceNameException(
                     "Workspace name must be at most " + MAX_WORKSPACE_NAME_LENGTH + " characters"
             );
         }

@@ -23,8 +23,7 @@ public class WorkspaceController {
 
     @PostMapping
     public ResponseEntity<WorkspaceResponse> createWorkspace(@RequestBody CreateWorkspaceRequest request) {
-        String workspaceName = request == null ? null : request.name();
-        Workspace workspace = workspaceService.createWorkspace(workspaceName);
+        Workspace workspace = workspaceService.createWorkspace(request.name());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(WorkspaceResponse.from(workspace));
     }

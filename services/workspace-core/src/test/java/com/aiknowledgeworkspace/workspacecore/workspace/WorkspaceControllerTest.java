@@ -20,7 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.server.ResponseStatusException;
 
 class WorkspaceControllerTest {
 
@@ -63,7 +62,7 @@ class WorkspaceControllerTest {
     @Test
     void createWorkspaceRejectsBlankName() throws Exception {
         when(workspaceService.createWorkspace("   "))
-                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Workspace name is required"));
+                .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
 
         mockMvc.perform(post("/api/workspaces")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -73,7 +72,26 @@ class WorkspaceControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(status().reason("Workspace name is required"));
+                .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_NAME"))
+                .andExpect(jsonPath("$.message").value("Workspace name is required"));
+    }
+
+    @Test
+    void createWorkspaceRejectsTooLongName() throws Exception {
+        String tooLongName = "a".repeat(256);
+        when(workspaceService.createWorkspace(tooLongName))
+                .thenThrow(new InvalidWorkspaceNameException("Workspace name must be at most 255 characters"));
+
+        mockMvc.perform(post("/api/workspaces")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "%s"
+                                }
+                                """.formatted(tooLongName)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_NAME"))
+                .andExpect(jsonPath("$.message").value("Workspace name must be at most 255 characters"));
     }
 
     @Test
