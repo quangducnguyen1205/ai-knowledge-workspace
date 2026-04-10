@@ -10,6 +10,102 @@ This document is the current product-facing API summary for Repo B (`workspace-c
 
 ## Current Product Endpoints
 
+### `POST /api/workspaces`
+
+Creates one workspace in Repo B.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `name` required
+
+Response:
+
+- HTTP `201`
+- Body:
+  - `id`
+  - `name`
+  - `createdAt`
+
+Current behavior:
+
+- This is a minimal product-owned workspace create endpoint.
+- Spring trims the requested name before persisting.
+- Workspace create stays intentionally small and does not add ownership, sharing, or collaboration rules.
+
+Common failure cases:
+
+- HTTP `400` if `name` is missing, blank, or longer than the current maximum length
+
+### `GET /api/workspaces`
+
+Lists workspaces in Repo B.
+
+Response:
+
+- HTTP `200`
+- Body: array of rows with:
+  - `id`
+  - `name`
+  - `createdAt`
+
+Current behavior:
+
+- Spring ensures the configured default workspace exists before returning the list.
+- Results are intentionally minimal and do not include asset counts or membership data.
+
+### `GET /api/workspaces/{workspaceId}`
+
+Reads one workspace in Repo B.
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `id`
+  - `name`
+  - `createdAt`
+
+Current behavior:
+
+- Reading the configured default workspace ID returns the bootstrap workspace, creating it first if needed.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist
+
+### `GET /api/assets`
+
+Lists assets in the resolved workspace scope.
+
+Query parameters:
+
+- `workspaceId` optional
+
+Response:
+
+- HTTP `200`
+- Body: array of rows with:
+  - `assetId`
+  - `title`
+  - `assetStatus`
+  - `workspaceId`
+  - `createdAt`
+
+Current behavior:
+
+- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
+- Non-default workspace listing only returns assets already associated with that workspace.
+- Default-workspace listing also includes older local assets whose `workspace_id` is still null.
+- When default-workspace listing encounters a legacy asset with no workspace, Spring backfills that asset to the default workspace.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
+
 ### `POST /api/assets/upload`
 
 Starts the product-side upload flow for one media file.
@@ -45,6 +141,25 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
 - HTTP `502` or `504` if upstream FastAPI fails
+
+### `GET /api/assets/{assetId}`
+
+Reads one persisted asset record.
+
+Response:
+
+- HTTP `200`
+- Body: the current persisted asset record
+
+Current behavior:
+
+- This remains a simple product-owned asset read endpoint.
+- It is useful for debugging and local inspection.
+- If the asset still has no workspace association, Spring backfills it to the default workspace before returning it.
+
+Common failure cases:
+
+- HTTP `404` if the asset does not exist
 
 ### `GET /api/assets/{assetId}/status`
 
@@ -187,8 +302,3 @@ Current structured error codes:
 - `INVALID_REQUEST_PARAMETER`
 
 Other validation and state errors such as transcript-not-ready `409` still use Spring's standard status handling.
-
-## Other Current Endpoint
-
-- `GET /api/assets/{assetId}` currently exists as a simple asset read endpoint returning the persisted asset record.
-- It is useful for debugging and local inspection, but it is not one of the main phase 1 flow endpoints documented above.
