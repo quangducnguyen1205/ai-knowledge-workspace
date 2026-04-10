@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.web;
 
+import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
+import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
@@ -55,16 +57,36 @@ public class ApiExceptionHandler {
                 .body(new ApiErrorResponse("INVALID_WORKSPACE_NAME", exception.getMessage()));
     }
 
+    @ExceptionHandler(InvalidTranscriptContextWindowException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTranscriptContextWindow(
+            InvalidTranscriptContextWindowException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse("INVALID_TRANSCRIPT_CONTEXT_WINDOW", exception.getMessage()));
+    }
+
+    @ExceptionHandler(TranscriptRowNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleTranscriptRowNotFound(TranscriptRowNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("TRANSCRIPT_ROW_NOT_FOUND", exception.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiErrorResponse> handleMethodArgumentTypeMismatch(
             MethodArgumentTypeMismatchException exception
     ) {
-        String errorCode = "workspaceId".equals(exception.getName())
-                ? "INVALID_WORKSPACE_ID"
-                : "INVALID_REQUEST_PARAMETER";
-        String message = "workspaceId".equals(exception.getName())
-                ? "workspaceId must be a valid UUID"
-                : "Invalid value for request parameter " + exception.getName();
+        String errorCode;
+        String message;
+        if ("workspaceId".equals(exception.getName())) {
+            errorCode = "INVALID_WORKSPACE_ID";
+            message = "workspaceId must be a valid UUID";
+        } else if ("window".equals(exception.getName())) {
+            errorCode = "INVALID_TRANSCRIPT_CONTEXT_WINDOW";
+            message = "window must be a valid integer";
+        } else {
+            errorCode = "INVALID_REQUEST_PARAMETER";
+            message = "Invalid value for request parameter " + exception.getName();
+        }
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse(errorCode, message));

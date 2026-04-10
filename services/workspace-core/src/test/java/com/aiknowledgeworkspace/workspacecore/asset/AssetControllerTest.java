@@ -107,4 +107,83 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
     }
+
+    @Test
+    void transcriptContextReturnsTranscriptWindow() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetService.getAssetTranscriptContext(assetId, "row-2", 2))
+                .thenReturn(new AssetTranscriptContextResponse(
+                        assetId,
+                        "row-2",
+                        2,
+                        2,
+                        List.of(
+                                new AssetTranscriptRowResponse(
+                                        "row-1",
+                                        "video-1",
+                                        1,
+                                        "Context before",
+                                        "2026-04-11T00:00:00Z"
+                                ),
+                                new AssetTranscriptRowResponse(
+                                        "row-2",
+                                        "video-1",
+                                        2,
+                                        "Matched row",
+                                        "2026-04-11T00:00:01Z"
+                                )
+                        )
+                ));
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
+                        .param("transcriptRowId", "row-2")
+                        .param("window", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assetId").value(assetId.toString()))
+                .andExpect(jsonPath("$.transcriptRowId").value("row-2"))
+                .andExpect(jsonPath("$.hitSegmentIndex").value(2))
+                .andExpect(jsonPath("$.window").value(2))
+                .andExpect(jsonPath("$.rows[0].id").value("row-1"))
+                .andExpect(jsonPath("$.rows[1].id").value("row-2"));
+    }
+
+    @Test
+    void transcriptContextReturnsStructuredBadRequestForInvalidWindow() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetService.getAssetTranscriptContext(assetId, "row-2", 0))
+                .thenThrow(new InvalidTranscriptContextWindowException("window must be greater than 0"));
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
+                        .param("transcriptRowId", "row-2")
+                        .param("window", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSCRIPT_CONTEXT_WINDOW"))
+                .andExpect(jsonPath("$.message").value("window must be greater than 0"));
+    }
+
+    @Test
+    void transcriptContextReturnsStructuredNotFoundForMissingTranscriptRow() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetService.getAssetTranscriptContext(assetId, "row-404", 2))
+                .thenThrow(new TranscriptRowNotFoundException(assetId, "row-404"));
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
+                        .param("transcriptRowId", "row-404")
+                        .param("window", "2"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRANSCRIPT_ROW_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Transcript row not found for asset " + assetId + ": row-404"));
+    }
+
+    @Test
+    void transcriptContextReturnsStructuredBadRequestForMalformedWindowType() throws Exception {
+        UUID assetId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
+                        .param("transcriptRowId", "row-2")
+                        .param("window", "not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSCRIPT_CONTEXT_WINDOW"))
+                .andExpect(jsonPath("$.message").value("window must be a valid integer"));
+    }
 }

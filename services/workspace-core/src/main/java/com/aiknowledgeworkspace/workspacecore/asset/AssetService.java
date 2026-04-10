@@ -29,6 +29,8 @@ public class AssetService {
             Sort.Order.desc("createdAt"),
             Sort.Order.asc("id")
     );
+    private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
+    private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
 
     private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
@@ -115,6 +117,36 @@ public class AssetService {
         return loadUsableTranscriptRows(asset, processingJob).stream()
                 .map(this::toAssetTranscriptRowResponse)
                 .toList();
+    }
+
+    public AssetTranscriptContextResponse getAssetTranscriptContext(
+            UUID assetId,
+            String transcriptRowId,
+            Integer window
+    ) {
+        int resolvedWindow = resolveTranscriptContextWindow(window);
+        List<AssetTranscriptRowResponse> sortedRows = new ArrayList<>(getAssetTranscript(assetId));
+        sortedRows.sort(Comparator.comparing(
+                AssetTranscriptRowResponse::segmentIndex,
+                Comparator.nullsLast(Integer::compareTo)
+        ));
+        int hitRowIndex = findTranscriptRowIndex(sortedRows, transcriptRowId);
+        if (hitRowIndex < 0) {
+            throw new TranscriptRowNotFoundException(assetId, transcriptRowId);
+        }
+
+        AssetTranscriptRowResponse hitRow = sortedRows.get(hitRowIndex);
+        int startIndex = Math.max(0, hitRowIndex - resolvedWindow);
+        int endIndexExclusive = Math.min(sortedRows.size(), hitRowIndex + resolvedWindow + 1);
+        List<AssetTranscriptRowResponse> contextRows = sortedRows.subList(startIndex, endIndexExclusive);
+
+        return new AssetTranscriptContextResponse(
+                assetId,
+                transcriptRowId,
+                hitRow.segmentIndex(),
+                resolvedWindow,
+                contextRows
+        );
     }
 
     public List<FastApiTranscriptRowResponse> loadUsableTranscriptRows(Asset asset, ProcessingJob processingJob) {
@@ -270,6 +302,38 @@ public class AssetService {
     private boolean isTerminal(ProcessingJobStatus processingJobStatus) {
         return processingJobStatus == ProcessingJobStatus.SUCCEEDED
                 || processingJobStatus == ProcessingJobStatus.FAILED;
+    }
+
+    private int resolveTranscriptContextWindow(Integer window) {
+        if (window == null) {
+            return DEFAULT_TRANSCRIPT_CONTEXT_WINDOW;
+        }
+        if (window <= 0) {
+            throw new InvalidTranscriptContextWindowException("window must be greater than 0");
+        }
+        if (window > MAX_TRANSCRIPT_CONTEXT_WINDOW) {
+            throw new InvalidTranscriptContextWindowException(
+                    "window must be less than or equal to " + MAX_TRANSCRIPT_CONTEXT_WINDOW
+            );
+        }
+        return window;
+    }
+
+    private int findTranscriptRowIndex(List<AssetTranscriptRowResponse> rows, String transcriptRowId) {
+        for (int index = 0; index < rows.size(); index++) {
+            if (matchesTranscriptRowId(rows.get(index), transcriptRowId)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean matchesTranscriptRowId(AssetTranscriptRowResponse row, String transcriptRowId) {
+        if (StringUtils.hasText(row.id()) && row.id().equals(transcriptRowId)) {
+            return true;
+        }
+        return row.segmentIndex() != null
+                && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
     }
 
     private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
