@@ -10,9 +10,12 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -21,6 +24,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AssetService {
+
+    private static final Sort ASSET_LIST_SORT = Sort.by(
+            Sort.Order.desc("createdAt"),
+            Sort.Order.asc("id")
+    );
 
     private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
@@ -52,6 +60,16 @@ public class AssetService {
 
         Workspace defaultWorkspace = workspaceService.ensureDefaultWorkspace();
         return assetPersistenceService.updateAssetWorkspace(asset, defaultWorkspace);
+    }
+
+    public List<AssetSummaryResponse> listAssets(UUID workspaceId) {
+        Workspace resolvedWorkspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
+        List<Asset> assets = loadAssetsForWorkspace(resolvedWorkspace);
+
+        return assets.stream()
+                .map(asset -> backfillWorkspaceIfNeeded(asset, resolvedWorkspace))
+                .map(this::toAssetSummaryResponse)
+                .toList();
     }
 
     public AssetStatusResponse getAssetStatus(UUID assetId) {
@@ -252,6 +270,36 @@ public class AssetService {
     private boolean isTerminal(ProcessingJobStatus processingJobStatus) {
         return processingJobStatus == ProcessingJobStatus.SUCCEEDED
                 || processingJobStatus == ProcessingJobStatus.FAILED;
+    }
+
+    private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
+        List<Asset> assets = new ArrayList<>(assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT));
+        if (!workspace.getId().equals(workspaceService.getDefaultWorkspaceId())) {
+            return assets;
+        }
+
+        assets.addAll(assetRepository.findByWorkspaceIsNull(ASSET_LIST_SORT));
+        assets.sort(Comparator
+                .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
+                .thenComparing(Asset::getId));
+        return assets;
+    }
+
+    private Asset backfillWorkspaceIfNeeded(Asset asset, Workspace workspace) {
+        if (asset.getWorkspace() != null) {
+            return asset;
+        }
+        return assetPersistenceService.updateAssetWorkspace(asset, workspace);
+    }
+
+    private AssetSummaryResponse toAssetSummaryResponse(Asset asset) {
+        return new AssetSummaryResponse(
+                asset.getId(),
+                asset.getTitle(),
+                asset.getStatus(),
+                asset.getWorkspaceId(),
+                asset.getCreatedAt()
+        );
     }
 
     private AssetTranscriptRowResponse toAssetTranscriptRowResponse(FastApiTranscriptRowResponse transcriptRow) {

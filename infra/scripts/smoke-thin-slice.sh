@@ -5,10 +5,12 @@ set -euo pipefail
 WORKSPACE_CORE_BASE_URL="${WORKSPACE_CORE_BASE_URL:-http://localhost:8081}"
 SMOKE_POLL_INTERVAL_SECONDS="${SMOKE_POLL_INTERVAL_SECONDS:-3}"
 SMOKE_POLL_TIMEOUT_SECONDS="${SMOKE_POLL_TIMEOUT_SECONDS:-180}"
+SMOKE_WORKSPACE_NAME="${SMOKE_WORKSPACE_NAME:-}"
 
 API_HTTP_CODE=""
 API_BODY_FILE=""
 TEMP_DIR=""
+SMOKE_WORKSPACE_ID=""
 
 usage() {
     cat <<'EOF'
@@ -19,10 +21,13 @@ Environment variables:
   WORKSPACE_CORE_BASE_URL       Default: http://localhost:8081
   SMOKE_POLL_INTERVAL_SECONDS   Default: 3
   SMOKE_POLL_TIMEOUT_SECONDS    Default: 180
+  SMOKE_WORKSPACE_NAME          Optional: create and use a non-default workspace for this run
 
 Notes:
   - Repo A, PostgreSQL, Elasticsearch, and workspace-core must already be running.
   - If search-query is omitted, the script derives a simple query from the first transcript row.
+  - If SMOKE_WORKSPACE_NAME is set, the script creates a workspace, reads it back, uploads into it,
+    lists assets in it, and searches within it.
 EOF
 }
 
@@ -136,10 +141,45 @@ require_command jq
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/workspace-core-smoke.XXXXXX")"
 trap cleanup EXIT
 
+if [[ -n "${SMOKE_WORKSPACE_NAME// }" ]]; then
+    print_step "Creating a non-default workspace"
+    WORKSPACE_CREATE_BODY="$(jq -nc --arg name "$SMOKE_WORKSPACE_NAME" '{name: $name}')"
+    api_call POST "/api/workspaces" \
+        -H "Content-Type: application/json" \
+        --data "$WORKSPACE_CREATE_BODY"
+
+    if [[ "$API_HTTP_CODE" != "201" ]]; then
+        fail_api "Workspace creation failed"
+    fi
+
+    SMOKE_WORKSPACE_ID="$(read_json '.id')"
+    CREATED_WORKSPACE_NAME="$(read_json '.name')"
+
+    echo "workspaceId: ${SMOKE_WORKSPACE_ID}"
+    echo "workspaceName: ${CREATED_WORKSPACE_NAME}"
+
+    print_step "Reading the created workspace"
+    api_call GET "/api/workspaces/${SMOKE_WORKSPACE_ID}"
+
+    if [[ "$API_HTTP_CODE" != "200" ]]; then
+        fail_api "Workspace read failed"
+    fi
+
+    READ_BACK_WORKSPACE_ID="$(read_json '.id')"
+    [[ "$READ_BACK_WORKSPACE_ID" == "$SMOKE_WORKSPACE_ID" ]] || fail "Workspace read returned a different workspace ID"
+fi
+
 print_step "Uploading media through Spring"
-api_call POST "/api/assets/upload" \
-    -F "file=@${MEDIA_FILE_PATH}" \
+UPLOAD_ARGS=(
+    -F "file=@${MEDIA_FILE_PATH}"
     -F "title=${UPLOAD_TITLE}"
+)
+
+if [[ -n "${SMOKE_WORKSPACE_ID}" ]]; then
+    UPLOAD_ARGS+=(-F "workspaceId=${SMOKE_WORKSPACE_ID}")
+fi
+
+api_call POST "/api/assets/upload" "${UPLOAD_ARGS[@]}"
 
 if [[ "$API_HTTP_CODE" != "202" ]]; then
     fail_api "Upload failed"
@@ -148,10 +188,34 @@ fi
 ASSET_ID="$(read_json '.assetId')"
 PROCESSING_JOB_ID="$(read_json '.processingJobId')"
 ASSET_STATUS="$(read_json '.assetStatus')"
+UPLOAD_WORKSPACE_ID="$(read_json '.workspaceId')"
 
 echo "assetId: ${ASSET_ID}"
 echo "processingJobId: ${PROCESSING_JOB_ID}"
 echo "assetStatus: ${ASSET_STATUS}"
+echo "uploadWorkspaceId: ${UPLOAD_WORKSPACE_ID}"
+
+if [[ -n "${SMOKE_WORKSPACE_ID}" && "$UPLOAD_WORKSPACE_ID" != "$SMOKE_WORKSPACE_ID" ]]; then
+    fail "Upload response workspaceId did not match the created workspace"
+fi
+
+print_step "Listing assets in the resolved workspace"
+ASSET_LIST_PATH="/api/assets"
+if [[ -n "${SMOKE_WORKSPACE_ID}" ]]; then
+    ASSET_LIST_PATH="${ASSET_LIST_PATH}?workspaceId=${SMOKE_WORKSPACE_ID}"
+fi
+api_call GET "$ASSET_LIST_PATH"
+
+if [[ "$API_HTTP_CODE" != "200" ]]; then
+    fail_api "Asset list failed"
+fi
+
+LISTED_ASSET_COUNT="$(jq --arg asset_id "$ASSET_ID" '[.[] | select(.assetId == $asset_id)] | length' "$API_BODY_FILE")"
+echo "matchingListedAssets: ${LISTED_ASSET_COUNT}"
+
+if (( LISTED_ASSET_COUNT == 0 )); then
+    fail "Uploaded asset was not returned by the workspace-scoped asset list"
+fi
 
 print_step "Polling asset status until terminal or timeout"
 START_TIME=$SECONDS
@@ -229,18 +293,28 @@ fi
 
 print_step "Running product search"
 ENCODED_SEARCH_QUERY="$(urlencode "$SMOKE_SEARCH_QUERY")"
-api_call GET "/api/search?q=${ENCODED_SEARCH_QUERY}&assetId=${ASSET_ID}"
+SEARCH_PATH="/api/search?q=${ENCODED_SEARCH_QUERY}&assetId=${ASSET_ID}"
+if [[ -n "${SMOKE_WORKSPACE_ID}" ]]; then
+    SEARCH_PATH="${SEARCH_PATH}&workspaceId=${SMOKE_WORKSPACE_ID}"
+fi
+api_call GET "$SEARCH_PATH"
 
 if [[ "$API_HTTP_CODE" != "200" ]]; then
     fail_api "Search failed"
 fi
 
 SEARCH_RESULT_COUNT="$(read_json '.resultCount')"
+SEARCH_WORKSPACE_ID="$(read_json '.workspaceIdFilter')"
 echo "searchQuery: ${SMOKE_SEARCH_QUERY}"
 echo "searchResultCount: ${SEARCH_RESULT_COUNT}"
+echo "searchWorkspaceId: ${SEARCH_WORKSPACE_ID}"
 
 if (( SEARCH_RESULT_COUNT == 0 )); then
     fail "Search returned zero results for the indexed asset"
+fi
+
+if [[ -n "${SMOKE_WORKSPACE_ID}" && "$SEARCH_WORKSPACE_ID" != "$SMOKE_WORKSPACE_ID" ]]; then
+    fail "Search workspaceIdFilter did not match the created workspace"
 fi
 
 echo
