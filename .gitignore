@@ -27,5 +27,7 @@ out/
 # Node
 node_modules/
 
+# Private local notes
+.private-learning-notes/
 
 /tmp/
