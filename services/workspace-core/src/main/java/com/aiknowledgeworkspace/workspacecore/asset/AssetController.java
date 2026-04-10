@@ -25,6 +25,13 @@ public class AssetController {
         this.transcriptIndexingService = transcriptIndexingService;
     }
 
+    @GetMapping
+    public List<AssetSummaryResponse> listAssets(
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId
+    ) {
+        return assetService.listAssets(workspaceId);
+    }
+
     @GetMapping("/{assetId}")
     public Asset getAsset(@PathVariable UUID assetId) {
         return assetService.getAsset(assetId);
