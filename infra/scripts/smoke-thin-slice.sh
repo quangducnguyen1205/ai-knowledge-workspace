@@ -6,6 +6,8 @@ WORKSPACE_CORE_BASE_URL="${WORKSPACE_CORE_BASE_URL:-http://localhost:8081}"
 SMOKE_POLL_INTERVAL_SECONDS="${SMOKE_POLL_INTERVAL_SECONDS:-3}"
 SMOKE_POLL_TIMEOUT_SECONDS="${SMOKE_POLL_TIMEOUT_SECONDS:-180}"
 SMOKE_WORKSPACE_NAME="${SMOKE_WORKSPACE_NAME:-}"
+SMOKE_VERIFY_CONTEXT="${SMOKE_VERIFY_CONTEXT:-}"
+SMOKE_CONTEXT_WINDOW="${SMOKE_CONTEXT_WINDOW:-2}"
 
 API_HTTP_CODE=""
 API_BODY_FILE=""
@@ -22,12 +24,16 @@ Environment variables:
   SMOKE_POLL_INTERVAL_SECONDS   Default: 3
   SMOKE_POLL_TIMEOUT_SECONDS    Default: 180
   SMOKE_WORKSPACE_NAME          Optional: create and use a non-default workspace for this run
+  SMOKE_VERIFY_CONTEXT          Optional: when set to 1/true/yes/on, fetch transcript context for the top search hit
+  SMOKE_CONTEXT_WINDOW          Optional: transcript context window to use when SMOKE_VERIFY_CONTEXT is enabled (default: 2)
 
 Notes:
   - Repo A, PostgreSQL, Elasticsearch, and workspace-core must already be running.
   - If search-query is omitted, the script derives a simple query from the first transcript row.
   - If SMOKE_WORKSPACE_NAME is set, the script creates a workspace, reads it back, uploads into it,
     lists assets in it, and searches within it.
+  - If SMOKE_VERIFY_CONTEXT is enabled, the script also opens the top search hit through
+    /api/assets/{assetId}/transcript/context.
 EOF
 }
 
@@ -101,6 +107,19 @@ urlencode() {
     jq -nr --arg value "$1" '$value|@uri'
 }
 
+is_truthy() {
+    local normalized
+    normalized="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+        1|true|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 derive_search_query() {
     local transcript_text
     transcript_text=$(jq -r '.[0].text // empty' "$API_BODY_FILE")
@@ -134,6 +153,12 @@ UPLOAD_TITLE="${3:-$(basename "$MEDIA_FILE_PATH")}"
 [[ "$SMOKE_POLL_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "SMOKE_POLL_TIMEOUT_SECONDS must be an integer"
 (( SMOKE_POLL_INTERVAL_SECONDS > 0 )) || fail "SMOKE_POLL_INTERVAL_SECONDS must be greater than 0"
 (( SMOKE_POLL_TIMEOUT_SECONDS > 0 )) || fail "SMOKE_POLL_TIMEOUT_SECONDS must be greater than 0"
+
+if is_truthy "$SMOKE_VERIFY_CONTEXT"; then
+    [[ "$SMOKE_CONTEXT_WINDOW" =~ ^[0-9]+$ ]] || fail "SMOKE_CONTEXT_WINDOW must be an integer"
+    (( SMOKE_CONTEXT_WINDOW > 0 )) || fail "SMOKE_CONTEXT_WINDOW must be greater than 0"
+    (( SMOKE_CONTEXT_WINDOW <= 5 )) || fail "SMOKE_CONTEXT_WINDOW must be less than or equal to 5"
+fi
 
 require_command curl
 require_command jq
@@ -315,6 +340,36 @@ fi
 
 if [[ -n "${SMOKE_WORKSPACE_ID}" && "$SEARCH_WORKSPACE_ID" != "$SMOKE_WORKSPACE_ID" ]]; then
     fail "Search workspaceIdFilter did not match the created workspace"
+fi
+
+if is_truthy "$SMOKE_VERIFY_CONTEXT"; then
+    print_step "Fetching transcript context for the top search hit"
+    SEARCH_HIT_ASSET_ID="$(read_json '.results[0].assetId')"
+    SEARCH_HIT_SEGMENT_INDEX="$(read_json '.results[0].segmentIndex')"
+    SEARCH_HIT_TRANSCRIPT_ROW_ID="$(read_json '.results[0].transcriptRowId // empty')"
+
+    if [[ -z "${SEARCH_HIT_TRANSCRIPT_ROW_ID// }" ]]; then
+        if [[ -z "${SEARCH_HIT_SEGMENT_INDEX// }" || "$SEARCH_HIT_SEGMENT_INDEX" == "null" ]]; then
+            fail "Top search hit did not include transcriptRowId or segmentIndex for context lookup"
+        fi
+        SEARCH_HIT_TRANSCRIPT_ROW_ID="segment-${SEARCH_HIT_SEGMENT_INDEX}"
+    fi
+
+    ENCODED_TRANSCRIPT_ROW_ID="$(urlencode "$SEARCH_HIT_TRANSCRIPT_ROW_ID")"
+    api_call GET "/api/assets/${SEARCH_HIT_ASSET_ID}/transcript/context?transcriptRowId=${ENCODED_TRANSCRIPT_ROW_ID}&window=${SMOKE_CONTEXT_WINDOW}"
+
+    if [[ "$API_HTTP_CODE" != "200" ]]; then
+        fail_api "Transcript context fetch failed"
+    fi
+
+    CONTEXT_ROW_COUNT="$(jq '.rows | length' "$API_BODY_FILE")"
+    echo "contextAssetId: $(read_json '.assetId')"
+    echo "contextTranscriptRowId: $(read_json '.transcriptRowId')"
+    echo "contextHitSegmentIndex: $(read_json '.hitSegmentIndex')"
+    echo "contextWindow: $(read_json '.window')"
+    echo "contextRowCount: ${CONTEXT_ROW_COUNT}"
+    echo "contextRows:"
+    jq -r '.rows[] | "  [\(.segmentIndex)] \((.text // "") | gsub("[\\r\\n]+"; " ") | if length > 100 then .[0:100] + "..." else . end)"' "$API_BODY_FILE"
 fi
 
 echo
