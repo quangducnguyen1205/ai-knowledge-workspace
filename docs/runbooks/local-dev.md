@@ -116,11 +116,19 @@ Optional environment overrides:
 - `SMOKE_POLL_INTERVAL_SECONDS`
 - `SMOKE_POLL_TIMEOUT_SECONDS`
 - `SMOKE_WORKSPACE_NAME`
+- `SMOKE_VERIFY_CONTEXT`
+- `SMOKE_CONTEXT_WINDOW`
 
 Optional non-default workspace example:
 
 ```bash
 SMOKE_WORKSPACE_NAME="Algorithms" ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+Optional search-to-context follow-up example:
+
+```bash
+SMOKE_VERIFY_CONTEXT=1 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
 ```
 
 The helper runs the current Spring-owned flow only:
@@ -132,10 +140,25 @@ The helper runs the current Spring-owned flow only:
 - transcript fetch
 - indexing
 - search
+- optional transcript context retrieval for the top search hit
 
 It prints the created `assetId`, processing progress, transcript row count, indexed document count, and search result count.
+When context verification is enabled, it also prints the chosen hit row and the returned transcript window.
 If `SMOKE_WORKSPACE_NAME` is omitted, it exercises the default-workspace path.
 If `SMOKE_WORKSPACE_NAME` is set, it also verifies a non-default workspace path end to end.
+
+## Local Verification Shortcuts
+
+From the repo root:
+
+```bash
+make help
+make test-workspace-core
+make smoke
+make smoke-workspace WORKSPACE_NAME="Algorithms"
+```
+
+The `Makefile` uses the current local demo media path by default and enables the optional search-to-context smoke check unless `SMOKE_VERIFY_CONTEXT` is overridden.
 
 ## Notes
 

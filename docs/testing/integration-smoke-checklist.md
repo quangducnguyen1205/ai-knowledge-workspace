@@ -18,7 +18,22 @@ Non-default workspace path:
 SMOKE_WORKSPACE_NAME="Algorithms" ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
 ```
 
+Optional search-to-context follow-up:
+
+```bash
+SMOKE_VERIFY_CONTEXT=1 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+Local shortcut targets:
+
+```bash
+make test-workspace-core
+make smoke
+make smoke-workspace WORKSPACE_NAME="Algorithms"
+```
+
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
+With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
 
 ## 1. Environment Readiness
 
@@ -328,6 +343,28 @@ With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uplo
 - [ ] Confirm `workspaceIdFilter` matches that workspace ID.
 - [ ] Confirm results stay restricted to that workspace.
 - [ ] If you use `SMOKE_WORKSPACE_NAME`, confirm the helper's printed `searchWorkspaceId` matches the created workspace ID.
+
+### Search-To-Context Follow-Up
+
+- [ ] After a successful search, pick one result's `transcriptRowId`.
+- [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>`.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the response contains:
+  - [ ] `assetId`
+  - [ ] `transcriptRowId`
+  - [ ] `hitSegmentIndex`
+  - [ ] `window`
+  - [ ] `rows`
+- [ ] Confirm each context row only contains:
+  - [ ] `id`
+  - [ ] `videoId`
+  - [ ] `segmentIndex`
+  - [ ] `text`
+  - [ ] `createdAt`
+- [ ] Call the same endpoint with `window=0`.
+- [ ] Expect HTTP `400`.
+- [ ] Call the same endpoint with a valid-but-missing `transcriptRowId`.
+- [ ] Expect HTTP `404`.
 
 ### Validation Path
 

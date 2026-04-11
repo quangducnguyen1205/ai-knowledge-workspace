@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
@@ -28,6 +29,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Sort;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class AssetServiceTest {
@@ -355,6 +357,72 @@ class AssetServiceTest {
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(UUID.randomUUID(), "row-1", 6))
                 .isInstanceOf(InvalidTranscriptContextWindowException.class)
                 .hasMessageContaining("window must be less than or equal to 5");
+    }
+
+    @Test
+    void transcriptContextRejectsWhenTranscriptProcessingIsNotYetSuccessful() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 5", AssetStatus.PROCESSING, new Workspace(workspaceId, "Databases"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-5",
+                "video-5",
+                ProcessingJobStatus.RUNNING,
+                "running"
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode().value()).isEqualTo(409);
+                    assertThat(exception.getReason())
+                            .isEqualTo("Transcript is not ready until processing reaches terminal success");
+                });
+        verifyNoInteractions(fastApiProcessingClient, assetPersistenceService);
+    }
+
+    @Test
+    void transcriptContextRejectsWhenTranscriptIsEmptyAndMarksAssetFailed() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 6", AssetStatus.PROCESSING, new Workspace(workspaceId, "Distributed Systems"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-6",
+                "video-6",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(fastApiProcessingClient.getTranscript("video-6")).thenReturn(List.of());
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode().value()).isEqualTo(409);
+                    assertThat(exception.getReason()).isEqualTo("Transcript is empty for this asset");
+                });
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.FAILED);
     }
 
     @Test
