@@ -28,12 +28,13 @@ Local shortcut targets:
 
 ```bash
 make test-workspace-core
-make smoke
-make smoke-workspace WORKSPACE_NAME="Algorithms"
+make smoke MEDIA_FILE=/absolute/path/to/lecture-video.mp4
+make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NAME="Algorithms"
 ```
 
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
+The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does not assume a contributor-specific local file path.
 
 ## 1. Environment Readiness
 
@@ -347,6 +348,7 @@ With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GE
 ### Search-To-Context Follow-Up
 
 - [ ] After a successful search, pick one result's `transcriptRowId`.
+- [ ] If the chosen result has no `transcriptRowId`, use `segment-{segmentIndex}` only for that row.
 - [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>`.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the response contains:

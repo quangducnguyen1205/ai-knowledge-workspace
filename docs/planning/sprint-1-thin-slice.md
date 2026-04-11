@@ -18,6 +18,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
+- `GET /api/assets/{assetId}/transcript/context`
 - `POST /api/assets/{assetId}/index`
 - `GET /api/search`
 
@@ -41,6 +42,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
+- Spring exposes a narrow transcript-context follow-up endpoint for search hits.
 - Spring indexes one Elasticsearch document per transcript row through an explicit product endpoint.
 - Indexed transcript-row documents include `workspaceId`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
@@ -69,7 +71,9 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Search currently uses a simple Elasticsearch text-query baseline over transcript text and asset title.
 - Repeated indexing is safe to rerun because the same asset/transcript-row combination maps to the same Elasticsearch document ID.
 - Search ordering is deterministic on score ties.
+- Transcript context matches real upstream row IDs when they exist and only falls back to `segment-{segmentIndex}` for rows whose upstream ID is missing.
 - Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, legacy-asset default-workspace backfill, and workspace-aware asset listing.
+- Lightweight tests also cover transcript-context retrieval success, invalid window handling, row-not-found handling, and transcript-not-usable paths.
 - The focused Maven test run passes.
 
 ## Remaining Work
@@ -79,6 +83,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Keep rerunning the full thin slice manually against live Repo A, PostgreSQL, and Elasticsearch after local-dev or API changes.
 - Verify that empty-transcript assets never become searchable in the real end-to-end path.
 - Verify indexing and search failure paths against a live Elasticsearch node, not only the lightweight tests.
+- Keep verifying the search-to-context follow-up path against a live stack, not only the lightweight tests and helper output.
 
 ### Product Gaps Still Deferred
 
@@ -106,6 +111,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Done: Spring exposes workspace-aware asset listing with default-workspace fallback.
 - Done: Spring can retrieve task status from FastAPI `GET /videos/tasks/{task_id}` through the asset-centric status path.
 - Done: Spring can fetch transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
+- Done: Spring exposes transcript-context retrieval for search-hit follow-up through `GET /api/assets/{assetId}/transcript/context`.
 - Done: The transcript row model used by Spring only depends on the confirmed upstream fields.
 - Done: Spring does not use `/videos/search` as its product search contract.
 - Done: Transcript rows are indexed into Elasticsearch through Spring.
@@ -117,7 +123,9 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Done: Repeated indexing reuses stable transcript-row document IDs instead of widening the indexing lifecycle.
 - Done: Search ordering is deterministic when Elasticsearch scores tie.
 - Done: Lightweight coverage exists for the current workspace-aware upload, indexing, and search slice.
+- Done: Lightweight coverage exists for transcript-context retrieval plus invalid-window and row-not-found behavior.
 - Done: The smoke helper can also exercise a non-default workspace path through `SMOKE_WORKSPACE_NAME`.
+- Done: The smoke helper can optionally verify the search-to-context step through `SMOKE_VERIFY_CONTEXT`.
 - Done: The end-to-end thin slice exists through upload, status tracking, transcript retrieval, indexing, and search.
 - Done: If FastAPI reports a ready or successful state but transcript rows are empty, Spring handles that outcome explicitly instead of treating the asset as usable.
 

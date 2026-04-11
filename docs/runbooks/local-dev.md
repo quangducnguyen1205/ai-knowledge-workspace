@@ -154,11 +154,12 @@ From the repo root:
 ```bash
 make help
 make test-workspace-core
-make smoke
-make smoke-workspace WORKSPACE_NAME="Algorithms"
+make smoke MEDIA_FILE=/absolute/path/to/lecture-video.mp4
+make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NAME="Algorithms"
 ```
 
-The `Makefile` uses the current local demo media path by default and enables the optional search-to-context smoke check unless `SMOKE_VERIFY_CONTEXT` is overridden.
+`MEDIA_FILE` is intentionally required for `make smoke` and `make smoke-workspace` so the repo does not hardcode one contributor's local file path.
+The smoke targets still enable the optional search-to-context check by default unless `SMOKE_VERIFY_CONTEXT` is overridden.
 
 ## Notes
 

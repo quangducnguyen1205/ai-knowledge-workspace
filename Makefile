@@ -1,10 +1,10 @@
 .PHONY: help test test-core test-workspace-core compile smoke smoke-workspace \
-        infra-up infra-down infra-logs run
+        infra-up infra-down infra-logs run require-media-file
 
 WORKSPACE_CORE_MODULE ?= services/workspace-core
 WORKSPACE_CORE_POM ?= $(WORKSPACE_CORE_MODULE)/pom.xml
 SMOKE_SCRIPT ?= ./infra/scripts/smoke-thin-slice.sh
-MEDIA_FILE ?= /Users/nqd2005/Projects/DemoFirstBackend/IELTS Listening Practice Test 2025 With Answers 28.07.2025 - Test \#32 [YDBv6DR3BI8].mp4
+MEDIA_FILE ?=
 SEARCH_QUERY ?=
 UPLOAD_TITLE ?=
 WORKSPACE_NAME ?= Demo Workspace
@@ -22,9 +22,11 @@ help:
 		'  make infra-logs          Show Repo B infrastructure logs' \
 		'  make run                 Run workspace-core with env loaded from .env' \
 		'  make test                Run workspace-core tests' \
+		'  make test-core           Run workspace-core tests' \
+		'  make test-workspace-core Run workspace-core tests' \
 		'  make compile             Compile workspace-core' \
-		'  make smoke               Run the smoke helper against the default workspace' \
-		'  make smoke-workspace     Run the smoke helper with a created non-default workspace' \
+		'  make smoke               Run the smoke helper against the default workspace (requires MEDIA_FILE)' \
+		'  make smoke-workspace     Run the smoke helper with a created non-default workspace (requires MEDIA_FILE)' \
 		'' \
 		'Useful overrides:' \
 		'  ENV_FILE=.env' \
@@ -50,15 +52,25 @@ run:
 test:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" test
 
+test-core: test
+
+test-workspace-core: test
+
 compile:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" compile
 
-smoke:
+require-media-file:
+	@test -n "$(strip $(MEDIA_FILE))" || ( \
+		echo 'MEDIA_FILE is required. Example: make smoke MEDIA_FILE=/absolute/path/to/media.mp4' >&2; \
+		exit 1; \
+	)
+
+smoke: require-media-file
 	SMOKE_VERIFY_CONTEXT="$(SMOKE_VERIFY_CONTEXT)" \
 	SMOKE_CONTEXT_WINDOW="$(SMOKE_CONTEXT_WINDOW)" \
 	"$(SMOKE_SCRIPT)" "$(MEDIA_FILE)" "$(SEARCH_QUERY)" "$(UPLOAD_TITLE)"
 
-smoke-workspace:
+smoke-workspace: require-media-file
 	SMOKE_WORKSPACE_NAME="$(WORKSPACE_NAME)" \
 	SMOKE_VERIFY_CONTEXT="$(SMOKE_VERIFY_CONTEXT)" \
 	SMOKE_CONTEXT_WINDOW="$(SMOKE_CONTEXT_WINDOW)" \

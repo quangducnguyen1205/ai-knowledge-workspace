@@ -138,7 +138,9 @@ public class AssetService {
         AssetTranscriptRowResponse hitRow = sortedRows.get(hitRowIndex);
         int startIndex = Math.max(0, hitRowIndex - resolvedWindow);
         int endIndexExclusive = Math.min(sortedRows.size(), hitRowIndex + resolvedWindow + 1);
-        List<AssetTranscriptRowResponse> contextRows = sortedRows.subList(startIndex, endIndexExclusive);
+        List<AssetTranscriptRowResponse> contextRows = new ArrayList<>(
+                sortedRows.subList(startIndex, endIndexExclusive)
+        );
 
         return new AssetTranscriptContextResponse(
                 assetId,
@@ -329,8 +331,8 @@ public class AssetService {
     }
 
     private boolean matchesTranscriptRowId(AssetTranscriptRowResponse row, String transcriptRowId) {
-        if (StringUtils.hasText(row.id()) && row.id().equals(transcriptRowId)) {
-            return true;
+        if (StringUtils.hasText(row.id())) {
+            return row.id().equals(transcriptRowId);
         }
         return row.segmentIndex() != null
                 && ("segment-" + row.segmentIndex()).equals(transcriptRowId);

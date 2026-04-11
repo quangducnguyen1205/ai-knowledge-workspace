@@ -18,6 +18,7 @@ The currently implemented product-facing endpoints are:
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
 - `GET /api/assets/{assetId}/transcript`
+- `GET /api/assets/{assetId}/transcript/context`
 - `POST /api/assets/{assetId}/index`
 - `GET /api/search`
 
@@ -33,9 +34,10 @@ The implemented flow is:
 8. Spring exposes workspace-aware asset listing plus simple per-asset reads.
 9. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
 10. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
-11. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
-12. Successful indexing refreshes the transcript index before returning.
-13. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+11. Spring exposes a narrow transcript-context follow-up endpoint that returns a row window around one transcript hit.
+12. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
+13. Successful indexing refreshes the transcript index before returning.
+14. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -86,6 +88,10 @@ Transcript reads are also product-facing.
 - If transcript rows are empty, Spring explicitly does not treat the asset as usable.
 - A non-empty transcript can move the asset to `TRANSCRIPT_READY`.
 - Successful indexing moves the asset to `SEARCHABLE`.
+- Spring also exposes a separate transcript-context endpoint for search-hit follow-up.
+- Transcript context is selected by transcript row ordering on `segmentIndex`.
+- If a transcript row has a real upstream `id`, context lookup matches only that `id`.
+- The fallback identifier `segment-{segmentIndex}` only applies when the upstream transcript row `id` is missing.
 
 Workspace management and asset listing are also product-facing.
 

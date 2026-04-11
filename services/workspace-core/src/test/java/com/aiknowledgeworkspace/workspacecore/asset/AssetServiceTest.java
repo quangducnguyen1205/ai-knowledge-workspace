@@ -341,6 +341,41 @@ class AssetServiceTest {
     }
 
     @Test
+    void transcriptContextDoesNotMatchSyntheticSegmentIdentifierWhenRealRowIdExists() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 4B", AssetStatus.TRANSCRIPT_READY, new Workspace(workspaceId, "Systems"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-4b",
+                "video-4b",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-0", "video-4b", 0, "intro"),
+                transcriptRow("row-1", "video-4b", 1, "detail")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(fastApiProcessingClient.getTranscript("video-4b")).thenReturn(transcriptRows);
+
+        assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "segment-0", null))
+                .isInstanceOf(TranscriptRowNotFoundException.class)
+                .hasMessageContaining("Transcript row not found for asset " + assetId + ": segment-0");
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+    }
+
+    @Test
     void transcriptContextRejectsInvalidWindow() {
         AssetService assetService = new AssetService(
                 assetRepository,
