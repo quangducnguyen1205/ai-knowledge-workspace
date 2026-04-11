@@ -11,9 +11,9 @@ A serious personal software engineering project for building a knowledge-centere
 
 ## Current Status
 
-- `workspace-core` now exposes the current product-facing backend slice for workspace create/list/read, workspace-aware asset listing, upload, status, transcript retrieval, explicit indexing, and search.
+- `workspace-core` now exposes the current product-facing backend slice for workspace create/list/read, workspace-aware asset listing, upload, status, transcript retrieval, transcript-context follow-up, explicit indexing, and search.
 - Repo A remains a separate FastAPI processing dependency.
 - Repo B now persists `Workspace`, `Asset`, and `ProcessingJob` in PostgreSQL.
 - Product search remains Spring-owned, Elasticsearch-backed, and scoped by `workspaceId` with default-workspace fallback.
 - Docs are maintained in `docs/`, with current API and persistence summaries in `docs/api/API.md` and `docs/data/Database.md`.
-- Local dev setup, host-port defaults, and the smoke helper are documented in `docs/runbooks/local-dev.md`.
+- Local dev setup, Makefile shortcuts, host-port defaults, and the smoke helper are documented in `docs/runbooks/local-dev.md`.

@@ -36,7 +36,8 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `400` if `name` is missing, blank, or longer than the current maximum length
+- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is blank or longer than the current maximum length
+- HTTP `400` if the request body is missing or malformed
 
 ### `GET /api/workspaces`
 
@@ -206,6 +207,48 @@ Common failure cases:
 - HTTP `404` if the asset or processing job does not exist
 - HTTP `409` if processing is not ready or transcript rows are empty
 
+### `GET /api/assets/{assetId}/transcript/context?transcriptRowId=...&window=...`
+
+Returns a small Spring-owned transcript window around one transcript row.
+
+Query parameters:
+
+- `transcriptRowId` required
+- `window` optional, default `2`, max `5`
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `assetId`
+  - `transcriptRowId`
+  - `hitSegmentIndex`
+  - `window`
+  - `rows[]`
+
+Each context row currently contains:
+
+- `id`
+- `videoId`
+- `segmentIndex`
+- `text`
+- `createdAt`
+
+Current behavior:
+
+- Spring resolves transcript context through the same product-side transcript path used by `GET /api/assets/{assetId}/transcript`.
+- Context rows are selected by transcript ordering on `segmentIndex`.
+- If a transcript row has a real upstream `id`, context lookup matches only that `id`.
+- The fallback identifier `segment-{segmentIndex}` is accepted only when the upstream transcript row `id` is missing or blank.
+- The endpoint is intentionally narrow and does not add timestamps, speaker labels, snippet metadata, or transcript caching.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_TRANSCRIPT_CONTEXT_WINDOW"` if `window` is malformed, zero, negative, or above the current maximum
+- HTTP `404` with `code = "TRANSCRIPT_ROW_NOT_FOUND"` if the requested row does not belong to that asset transcript
+- HTTP `404` if the asset does not exist
+- HTTP `409` if the transcript is not ready or is empty
+
 ### `POST /api/assets/{assetId}/index`
 
 Indexes usable transcript rows into Elasticsearch.
@@ -297,8 +340,11 @@ Current structured error codes:
 - `FASTAPI_INTEGRATION_ERROR`
 - `ELASTICSEARCH_UNAVAILABLE`
 - `ELASTICSEARCH_INTEGRATION_ERROR`
+- `INVALID_WORKSPACE_NAME`
 - `WORKSPACE_NOT_FOUND`
 - `INVALID_WORKSPACE_ID`
+- `INVALID_TRANSCRIPT_CONTEXT_WINDOW`
+- `TRANSCRIPT_ROW_NOT_FOUND`
 - `INVALID_REQUEST_PARAMETER`
 
 Other validation and state errors such as transcript-not-ready `409` still use Spring's standard status handling.
