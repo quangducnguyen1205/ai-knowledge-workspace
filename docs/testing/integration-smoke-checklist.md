@@ -214,6 +214,29 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] If you can safely simulate an upstream task-status response without `status`, verify that Repo B returns HTTP `502`.
 - [ ] If you cannot simulate that safely, mark this check as pending.
 
+## 6A. Product Asset Deletion Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `DELETE /api/assets/{assetId}` for an asset in any current state:
+  - [ ] `PROCESSING`
+  - [ ] `TRANSCRIPT_READY`
+  - [ ] `SEARCHABLE`
+  - [ ] `FAILED`
+- [ ] Expect HTTP `204`.
+- [ ] Call `GET /api/assets/{assetId}` afterward.
+- [ ] Expect HTTP `404`.
+- [ ] If the deleted asset was `SEARCHABLE`, call `GET /api/search?q=...&assetId=<deleted-asset-id>` after deletion.
+- [ ] Confirm search no longer returns hits for that deleted asset.
+
+### Failure Path
+
+- [ ] Call `DELETE /api/assets/<random-uuid>` for an asset that does not exist.
+- [ ] Expect HTTP `404`.
+- [ ] If possible, stop Elasticsearch and call `DELETE /api/assets/{assetId}` for a `SEARCHABLE` asset.
+- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] Confirm the local asset still exists after the failed delete attempt.
+
 ## 7. Product Transcript Fetch Checks
 
 ### Implemented And Testable Now

@@ -1,7 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -26,13 +28,15 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class AssetControllerTest {
 
     private AssetService assetService;
+    private AssetDeletionService assetDeletionService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         assetService = mock(AssetService.class);
+        assetDeletionService = mock(AssetDeletionService.class);
         TranscriptIndexingService transcriptIndexingService = mock(TranscriptIndexingService.class);
-        AssetController assetController = new AssetController(assetService, transcriptIndexingService);
+        AssetController assetController = new AssetController(assetService, assetDeletionService, transcriptIndexingService);
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -106,6 +110,27 @@ class AssetControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void deleteAssetReturnsNoContent() throws Exception {
+        UUID assetId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/assets/{assetId}", assetId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deleteAssetReturnsNotFoundWhenAssetDoesNotExist() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND,
+                "Asset not found"
+        )).when(assetDeletionService).deleteAsset(assetId);
+
+        mockMvc.perform(delete("/api/assets/{assetId}", assetId))
+                .andExpect(status().isNotFound())
+                .andExpect(status().reason("Asset not found"));
     }
 
     @Test

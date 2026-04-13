@@ -100,4 +100,11 @@ public class AssetPersistenceService {
         }
         return asset;
     }
+
+    @Transactional
+    public void deleteAssetRecords(Asset asset) {
+        processingJobRepository.findByAssetId(asset.getId())
+                .ifPresent(processingJobRepository::delete);
+        assetRepository.delete(asset);
+    }
 }

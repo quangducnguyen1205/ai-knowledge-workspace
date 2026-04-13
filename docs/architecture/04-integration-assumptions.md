@@ -11,6 +11,7 @@ For phase 1, the architecture assumes that the FastAPI project will be integrate
 This assumption implies:
 
 - Spring Boot remains the product-facing backend.
+- Spring Boot already owns the current product-side indexing trigger into Elasticsearch.
 - FastAPI is called across a service boundary for processing-related responsibilities.
 - The architecture should document contracts and ownership boundaries without assuming repository consolidation.
 
@@ -29,7 +30,7 @@ This document does not decide:
 The following questions are intentionally deferred to a later phase:
 
 - How will Spring Boot trigger FastAPI processing: synchronous request, background handoff, callback, polling, or another pattern?
-- Which service will own the final indexing handoff into Elasticsearch?
 - How will processing artifacts be versioned and validated across service boundaries?
+- If transcript handling changes later, which artifacts should remain upstream-owned vs become product-owned data?
 - What operational visibility is needed across both services?
 - At what point, if any, should repository consolidation be reconsidered?

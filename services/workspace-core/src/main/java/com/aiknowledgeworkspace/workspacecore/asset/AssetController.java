@@ -2,8 +2,10 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,10 +20,16 @@ import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 public class AssetController {
 
     private final AssetService assetService;
+    private final AssetDeletionService assetDeletionService;
     private final TranscriptIndexingService transcriptIndexingService;
 
-    public AssetController(AssetService assetService, TranscriptIndexingService transcriptIndexingService) {
+    public AssetController(
+            AssetService assetService,
+            AssetDeletionService assetDeletionService,
+            TranscriptIndexingService transcriptIndexingService
+    ) {
         this.assetService = assetService;
+        this.assetDeletionService = assetDeletionService;
         this.transcriptIndexingService = transcriptIndexingService;
     }
 
@@ -35,6 +43,12 @@ public class AssetController {
     @GetMapping("/{assetId}")
     public Asset getAsset(@PathVariable UUID assetId) {
         return assetService.getAsset(assetId);
+    }
+
+    @DeleteMapping("/{assetId}")
+    public ResponseEntity<Void> deleteAsset(@PathVariable UUID assetId) {
+        assetDeletionService.deleteAsset(assetId);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
     @GetMapping("/{assetId}/status")
