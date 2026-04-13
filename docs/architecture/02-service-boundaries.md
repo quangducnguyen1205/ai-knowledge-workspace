@@ -6,15 +6,20 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 ## Spring Boot Product Core
 
-### Owns
+### Currently Owns In This Repo Phase
 
-- Authentication and user identity
 - Workspace model and workspace-scoped access rules
 - Asset registration and product-visible asset metadata
-- Authorization
 - Product orchestration across services
 - Client-facing APIs
 - Client-facing search API and result shaping
+- Product-facing transcript reads and transcript-context responses
+- Explicit transcript indexing into Elasticsearch
+
+### Not Implemented Yet In This Repo Phase
+
+- Authentication and user identity
+- Authorization and workspace ownership enforcement
 
 ### Should Not Own In Phase 1
 
@@ -47,9 +52,9 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 ### Owns
 
-- Search-optimized storage for transcript chunks and related search documents
+- Search-optimized storage for transcript-row search documents and related search metadata
 - Filtered retrieval across workspace and asset metadata
-- Search behavior aligned with future hybrid search direction
+- Product search retrieval over indexed transcript text
 
 ### Should Not Own In Phase 1
 
@@ -62,7 +67,7 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 ### Owns
 
-- Domain metadata for users, workspaces, assets, and related product entities
+- Domain metadata for workspaces, assets, processing jobs, and related product entities
 
 ### Should Not Own In Phase 1
 
@@ -87,4 +92,5 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 - Spring Boot is the only product entry point for clients.
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
-- Elasticsearch supports product retrieval, but access control and business rules remain in Spring Boot.
+- Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
+- Authentication and authorization are intentionally out of scope in the current implemented slice.

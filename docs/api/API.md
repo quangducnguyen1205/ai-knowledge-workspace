@@ -162,6 +162,29 @@ Common failure cases:
 
 - HTTP `404` if the asset does not exist
 
+### `DELETE /api/assets/{assetId}`
+
+Deletes one product-owned asset.
+
+Response:
+
+- HTTP `204`
+
+Current behavior:
+
+- Deletion is asset-centric and always removes the local `Asset` record.
+- Deletion also removes the linked `ProcessingJob` record in the same local DB transaction when it exists.
+- Spring allows deletion for assets in `PROCESSING`, `TRANSCRIPT_READY`, `SEARCHABLE`, or `FAILED`.
+- If the asset is currently `SEARCHABLE`, Spring first deletes that asset's transcript-row documents from Elasticsearch before deleting local DB records.
+- Workspace records are never deleted by this endpoint.
+- This slice does not call upstream FastAPI delete or cancel APIs.
+
+Common failure cases:
+
+- HTTP `404` if the asset does not exist
+- HTTP `503` if Elasticsearch is unavailable while deleting a `SEARCHABLE` asset
+- HTTP `502` if Elasticsearch returns an integration error while deleting a `SEARCHABLE` asset
+
 ### `GET /api/assets/{assetId}/status`
 
 Reads current product-side status for one asset.
