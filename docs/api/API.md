@@ -79,32 +79,49 @@ Common failure cases:
 
 ### `GET /api/assets`
 
-Lists assets in the resolved workspace scope.
+Lists assets in the resolved workspace scope with simple pagination.
 
 Query parameters:
 
 - `workspaceId` optional
+- `page` optional, default `0`
+- `size` optional, default `20`, max `100`
+- `assetStatus` optional
 
 Response:
 
 - HTTP `200`
-- Body: array of rows with:
-  - `assetId`
-  - `title`
-  - `assetStatus`
-  - `workspaceId`
-  - `createdAt`
+- Body:
+  - `items`: array of rows with:
+    - `assetId`
+    - `title`
+    - `assetStatus`
+    - `workspaceId`
+    - `createdAt`
+  - `page`
+  - `size`
+  - `totalElements`
+  - `totalPages`
+  - `hasNext`
 
 Current behavior:
 
 - Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
+- Pagination and optional `assetStatus` filtering are applied inside the resolved workspace scope.
 - Non-default workspace listing only returns assets already associated with that workspace.
 - Default-workspace listing also includes older local assets whose `workspace_id` is still null.
-- When default-workspace listing encounters a legacy asset with no workspace, Spring backfills that asset to the default workspace.
+- When default-workspace listing encounters a returned legacy asset with no workspace, Spring backfills that asset to the default workspace.
+- Ordering is deterministic:
+  - `createdAt desc`
+  - tie-break by `assetId desc`
+- Empty result sets return HTTP `200` with `items = []`.
 
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `400` with `code = "INVALID_ASSET_PAGE"` if `page` is malformed or negative
+- HTTP `400` with `code = "INVALID_ASSET_SIZE"` if `size` is malformed, non-positive, or greater than `100`
+- HTTP `400` with `code = "INVALID_ASSET_STATUS"` if `assetStatus` is not one of the current product asset statuses
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
 
 ### `POST /api/assets/upload`

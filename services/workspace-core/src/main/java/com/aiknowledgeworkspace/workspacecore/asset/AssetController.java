@@ -34,10 +34,13 @@ public class AssetController {
     }
 
     @GetMapping
-    public List<AssetSummaryResponse> listAssets(
-            @RequestParam(value = "workspaceId", required = false) UUID workspaceId
+    public AssetListResponse listAssets(
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size,
+            @RequestParam(value = "assetStatus", required = false) AssetStatus assetStatus
     ) {
-        return assetService.listAssets(workspaceId);
+        return assetService.listAssets(workspaceId, page, size, assetStatus);
     }
 
     @GetMapping("/{assetId}")

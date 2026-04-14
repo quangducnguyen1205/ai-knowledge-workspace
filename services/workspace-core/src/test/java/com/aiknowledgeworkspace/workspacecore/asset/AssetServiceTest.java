@@ -213,13 +213,18 @@ class AssetServiceTest {
         when(assetPersistenceService.updateAssetWorkspace(legacyAsset, defaultWorkspace))
                 .thenReturn(backfilledLegacyAsset);
 
-        List<AssetSummaryResponse> responses = assetService.listAssets(null);
+        AssetListResponse response = assetService.listAssets(null, null, null, null);
 
-        assertThat(responses).hasSize(2);
-        assertThat(responses.get(0).assetId()).isEqualTo(workspaceAsset.getId());
-        assertThat(responses.get(0).workspaceId()).isEqualTo(defaultWorkspaceId);
-        assertThat(responses.get(1).assetId()).isEqualTo(legacyAsset.getId());
-        assertThat(responses.get(1).workspaceId()).isEqualTo(defaultWorkspaceId);
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.size()).isEqualTo(20);
+        assertThat(response.totalElements()).isEqualTo(2);
+        assertThat(response.totalPages()).isEqualTo(1);
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).assetId()).isEqualTo(workspaceAsset.getId());
+        assertThat(response.items().get(0).workspaceId()).isEqualTo(defaultWorkspaceId);
+        assertThat(response.items().get(1).assetId()).isEqualTo(legacyAsset.getId());
+        assertThat(response.items().get(1).workspaceId()).isEqualTo(defaultWorkspaceId);
         verify(assetPersistenceService).updateAssetWorkspace(legacyAsset, defaultWorkspace);
     }
 
@@ -249,12 +254,206 @@ class AssetServiceTest {
         when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
                 .thenReturn(List.of(asset));
 
-        List<AssetSummaryResponse> responses = assetService.listAssets(workspaceId);
+        AssetListResponse response = assetService.listAssets(workspaceId, null, null, null);
 
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).assetId()).isEqualTo(asset.getId());
-        assertThat(responses.get(0).workspaceId()).isEqualTo(workspaceId);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).assetId()).isEqualTo(asset.getId());
+        assertThat(response.items().get(0).workspaceId()).isEqualTo(workspaceId);
         verify(assetRepository).findByWorkspace_Id(workspaceId, assetListSort());
+    }
+
+    @Test
+    void listAssetsSupportsExplicitPageAndSize() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Algorithms");
+        Asset newestAsset = asset(
+                UUID.randomUUID(),
+                "lecture-3.mp4",
+                "Lecture 3",
+                AssetStatus.SEARCHABLE,
+                workspace,
+                Instant.parse("2026-04-10T05:00:00Z")
+        );
+        Asset middleAsset = asset(
+                UUID.randomUUID(),
+                "lecture-2.mp4",
+                "Lecture 2",
+                AssetStatus.TRANSCRIPT_READY,
+                workspace,
+                Instant.parse("2026-04-10T04:00:00Z")
+        );
+        Asset oldestAsset = asset(
+                UUID.randomUUID(),
+                "lecture-1.mp4",
+                "Lecture 1",
+                AssetStatus.PROCESSING,
+                workspace,
+                Instant.parse("2026-04-10T03:00:00Z")
+        );
+
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.getDefaultWorkspaceId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+                .thenReturn(List.of(oldestAsset, middleAsset, newestAsset));
+
+        AssetListResponse response = assetService.listAssets(workspaceId, 1, 1, null);
+
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(1);
+        assertThat(response.totalElements()).isEqualTo(3);
+        assertThat(response.totalPages()).isEqualTo(3);
+        assertThat(response.hasNext()).isTrue();
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).assetId()).isEqualTo(middleAsset.getId());
+    }
+
+    @Test
+    void listAssetsFiltersByAssetStatusWithinWorkspaceScope() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Systems");
+        Asset searchableAsset = asset(
+                UUID.randomUUID(),
+                "lecture-2.mp4",
+                "Lecture 2",
+                AssetStatus.SEARCHABLE,
+                workspace,
+                Instant.parse("2026-04-10T05:00:00Z")
+        );
+        Asset processingAsset = asset(
+                UUID.randomUUID(),
+                "lecture-1.mp4",
+                "Lecture 1",
+                AssetStatus.PROCESSING,
+                workspace,
+                Instant.parse("2026-04-10T04:00:00Z")
+        );
+
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.getDefaultWorkspaceId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+                .thenReturn(List.of(processingAsset, searchableAsset));
+
+        AssetListResponse response = assetService.listAssets(workspaceId, null, null, AssetStatus.SEARCHABLE);
+
+        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.items()).extracting(AssetSummaryResponse::assetId)
+                .containsExactly(searchableAsset.getId());
+    }
+
+    @Test
+    void listAssetsRejectsNegativePage() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        assertThatThrownBy(() -> assetService.listAssets(null, -1, null, null))
+                .isInstanceOf(AssetListRequestException.class)
+                .hasMessage("page must be greater than or equal to 0");
+    }
+
+    @Test
+    void listAssetsRejectsNonPositiveSize() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        assertThatThrownBy(() -> assetService.listAssets(null, null, 0, null))
+                .isInstanceOf(AssetListRequestException.class)
+                .hasMessage("size must be greater than 0");
+    }
+
+    @Test
+    void listAssetsRejectsSizeAboveMaximum() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        assertThatThrownBy(() -> assetService.listAssets(null, null, 101, null))
+                .isInstanceOf(AssetListRequestException.class)
+                .hasMessage("size must be less than or equal to 100");
+    }
+
+    @Test
+    void listAssetsUsesDeterministicOrderingWhenCreatedAtMatches() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        Workspace defaultWorkspace = new Workspace(defaultWorkspaceId, "Default Workspace");
+        Instant sharedCreatedAt = Instant.parse("2026-04-10T02:00:00Z");
+        UUID smallerId = UUID.fromString("00000000-0000-0000-0000-000000000010");
+        UUID largerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
+        Asset workspaceAsset = asset(
+                smallerId,
+                "lecture.mp4",
+                "Lecture",
+                AssetStatus.SEARCHABLE,
+                defaultWorkspace,
+                sharedCreatedAt
+        );
+        Asset legacyAsset = asset(
+                largerId,
+                "legacy.mp4",
+                "Legacy",
+                AssetStatus.SEARCHABLE,
+                null,
+                sharedCreatedAt
+        );
+        Asset backfilledLegacyAsset = asset(
+                largerId,
+                "legacy.mp4",
+                "Legacy",
+                AssetStatus.SEARCHABLE,
+                defaultWorkspace,
+                sharedCreatedAt
+        );
+
+        when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
+        when(workspaceService.getDefaultWorkspaceId()).thenReturn(defaultWorkspaceId);
+        when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
+                .thenReturn(List.of(workspaceAsset));
+        when(assetRepository.findByWorkspaceIsNull(assetListSort()))
+                .thenReturn(List.of(legacyAsset));
+        when(assetPersistenceService.updateAssetWorkspace(legacyAsset, defaultWorkspace))
+                .thenReturn(backfilledLegacyAsset);
+
+        AssetListResponse response = assetService.listAssets(null, 0, 20, null);
+
+        assertThat(response.items()).extracting(AssetSummaryResponse::assetId)
+                .containsExactly(largerId, smallerId);
     }
 
     @Test
@@ -517,7 +716,7 @@ class AssetServiceTest {
     private Sort assetListSort() {
         return Sort.by(
                 Sort.Order.desc("createdAt"),
-                Sort.Order.asc("id")
+                Sort.Order.desc("id")
         );
     }
 

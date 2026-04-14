@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.common.web;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetListRequestException;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
@@ -71,6 +73,12 @@ public class ApiExceptionHandler {
                 .body(new ApiErrorResponse("TRANSCRIPT_ROW_NOT_FOUND", exception.getMessage()));
     }
 
+    @ExceptionHandler(AssetListRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleAssetListRequest(AssetListRequestException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiErrorResponse> handleMethodArgumentTypeMismatch(
             MethodArgumentTypeMismatchException exception
@@ -83,6 +91,16 @@ public class ApiExceptionHandler {
         } else if ("window".equals(exception.getName())) {
             errorCode = "INVALID_TRANSCRIPT_CONTEXT_WINDOW";
             message = "window must be a valid integer";
+        } else if ("page".equals(exception.getName())) {
+            errorCode = "INVALID_ASSET_PAGE";
+            message = "page must be a valid integer";
+        } else if ("size".equals(exception.getName())) {
+            errorCode = "INVALID_ASSET_SIZE";
+            message = "size must be a valid integer";
+        } else if ("assetStatus".equals(exception.getName())
+                && AssetStatus.class.equals(exception.getRequiredType())) {
+            errorCode = "INVALID_ASSET_STATUS";
+            message = "assetStatus must be one of: PROCESSING, TRANSCRIPT_READY, SEARCHABLE, FAILED";
         } else {
             errorCode = "INVALID_REQUEST_PARAMETER";
             message = "Invalid value for request parameter " + exception.getName();

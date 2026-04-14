@@ -152,13 +152,24 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `GET /api/assets` without `workspaceId`.
 - [ ] Expect HTTP `200`.
-- [ ] Confirm each row only contains:
+- [ ] Confirm the response is a paginated envelope with:
+  - [ ] `items`
+  - [ ] `page`
+  - [ ] `size`
+  - [ ] `totalElements`
+  - [ ] `totalPages`
+  - [ ] `hasNext`
+- [ ] Confirm each row inside `items` only contains:
   - [ ] `assetId`
   - [ ] `title`
   - [ ] `assetStatus`
   - [ ] `workspaceId`
   - [ ] `createdAt`
 - [ ] Confirm omitted `workspaceId` uses the configured default workspace scope.
+- [ ] Call `GET /api/assets?page=0&size=1`.
+- [ ] Confirm paging metadata changes consistently with the returned subset.
+- [ ] Call `GET /api/assets?assetStatus=SEARCHABLE`.
+- [ ] Confirm only `SEARCHABLE` assets are returned inside the resolved workspace scope.
 - [ ] If you uploaded into a known non-default workspace, call `GET /api/assets?workspaceId=<workspaceId>`.
 - [ ] Confirm the uploaded asset appears in that workspace-scoped list.
 - [ ] Confirm non-default workspace listing only returns assets in that workspace.
@@ -175,6 +186,22 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `400`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "INVALID_WORKSPACE_ID"`
+- [ ] Call `GET /api/assets?page=-1`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_PAGE"`
+- [ ] Call `GET /api/assets?size=0`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_SIZE"`
+- [ ] Call `GET /api/assets?size=101`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_SIZE"`
+- [ ] Call `GET /api/assets?assetStatus=NOT_A_REAL_STATUS`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_STATUS"`
 - [ ] Call `GET /api/assets?workspaceId=<valid-but-unknown-uuid>`.
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
