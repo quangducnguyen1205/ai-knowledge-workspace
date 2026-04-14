@@ -13,6 +13,8 @@ import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import java.time.Instant;
@@ -69,25 +71,63 @@ class AssetControllerTest {
     }
 
     @Test
-    void listAssetsReturnsWorkspaceScopedAssetSummaries() throws Exception {
+    void listAssetsReturnsPaginatedWorkspaceScopedAssetSummaries() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(assetService.listAssets(workspaceId)).thenReturn(List.of(new AssetSummaryResponse(
-                assetId,
-                "Lecture 1",
-                AssetStatus.SEARCHABLE,
-                workspaceId,
-                Instant.parse("2026-04-10T03:00:00Z")
-        )));
+        when(assetService.listAssets(workspaceId, null, null, null)).thenReturn(new AssetListResponse(
+                List.of(new AssetSummaryResponse(
+                        assetId,
+                        "Lecture 1",
+                        AssetStatus.SEARCHABLE,
+                        workspaceId,
+                        Instant.parse("2026-04-10T03:00:00Z")
+                )),
+                0,
+                20,
+                1,
+                1,
+                false
+        ));
 
         mockMvc.perform(get("/api/assets")
                         .param("workspaceId", workspaceId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].assetId").value(assetId.toString()))
-                .andExpect(jsonPath("$[0].title").value("Lecture 1"))
-                .andExpect(jsonPath("$[0].assetStatus").value("SEARCHABLE"))
-                .andExpect(jsonPath("$[0].workspaceId").value(workspaceId.toString()))
-                .andExpect(jsonPath("$[0].createdAt").value("2026-04-10T03:00:00Z"));
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.hasNext").value(false))
+                .andExpect(jsonPath("$.items[0].assetId").value(assetId.toString()))
+                .andExpect(jsonPath("$.items[0].title").value("Lecture 1"))
+                .andExpect(jsonPath("$.items[0].assetStatus").value("SEARCHABLE"))
+                .andExpect(jsonPath("$.items[0].workspaceId").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.items[0].createdAt").value("2026-04-10T03:00:00Z"));
+    }
+
+    @Test
+    void listAssetsSupportsExplicitPageSizeAndAssetStatusFilter() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(assetService.listAssets(workspaceId, 1, 10, AssetStatus.SEARCHABLE)).thenReturn(new AssetListResponse(
+                List.of(),
+                1,
+                10,
+                25,
+                3,
+                true
+        ));
+
+        mockMvc.perform(get("/api/assets")
+                        .param("workspaceId", workspaceId.toString())
+                        .param("page", "1")
+                        .param("size", "10")
+                        .param("assetStatus", "SEARCHABLE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.totalElements").value(25))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.items").isArray());
     }
 
     @Test
@@ -102,7 +142,7 @@ class AssetControllerTest {
     @Test
     void listAssetsReturnsStructuredNotFoundForUnknownWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(assetService.listAssets(workspaceId))
+        when(assetService.listAssets(workspaceId, null, null, null))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(get("/api/assets")
@@ -110,6 +150,47 @@ class AssetControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void listAssetsReturnsStructuredBadRequestForInvalidPage() throws Exception {
+        when(assetService.listAssets(null, -1, null, null))
+                .thenThrow(new AssetListRequestException(
+                        "INVALID_ASSET_PAGE",
+                        "page must be greater than or equal to 0"
+                ));
+
+        mockMvc.perform(get("/api/assets")
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_PAGE"))
+                .andExpect(jsonPath("$.message").value("page must be greater than or equal to 0"));
+    }
+
+    @Test
+    void listAssetsReturnsStructuredBadRequestForInvalidSize() throws Exception {
+        when(assetService.listAssets(null, null, 0, null))
+                .thenThrow(new AssetListRequestException(
+                        "INVALID_ASSET_SIZE",
+                        "size must be greater than 0"
+                ));
+
+        mockMvc.perform(get("/api/assets")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_SIZE"))
+                .andExpect(jsonPath("$.message").value("size must be greater than 0"));
+    }
+
+    @Test
+    void listAssetsReturnsStructuredBadRequestForInvalidAssetStatus() throws Exception {
+        mockMvc.perform(get("/api/assets")
+                        .param("assetStatus", "NOT_A_REAL_STATUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_STATUS"))
+                .andExpect(jsonPath("$.message").value(
+                        "assetStatus must be one of: PROCESSING, TRANSCRIPT_READY, SEARCHABLE, FAILED"
+                ));
     }
 
     @Test
@@ -131,6 +212,37 @@ class AssetControllerTest {
         mockMvc.perform(delete("/api/assets/{assetId}", assetId))
                 .andExpect(status().isNotFound())
                 .andExpect(status().reason("Asset not found"));
+    }
+
+    @Test
+    void deleteAssetReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        doThrow(new ElasticsearchConnectivityException(
+                "Elasticsearch is unavailable while trying to delete transcript documents for asset " + assetId,
+                new RuntimeException("connection refused")
+        )).when(assetDeletionService).deleteAsset(assetId);
+
+        mockMvc.perform(delete("/api/assets/{assetId}", assetId))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value(
+                        "Elasticsearch is unavailable while trying to delete transcript documents for asset " + assetId
+                ));
+    }
+
+    @Test
+    void deleteAssetReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        doThrow(new ElasticsearchIntegrationException(
+                "Elasticsearch returned HTTP 500 while trying to delete transcript documents for asset " + assetId
+        )).when(assetDeletionService).deleteAsset(assetId);
+
+        mockMvc.perform(delete("/api/assets/{assetId}", assetId))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(
+                        "Elasticsearch returned HTTP 500 while trying to delete transcript documents for asset " + assetId
+                ));
     }
 
     @Test

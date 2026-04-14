@@ -100,10 +100,15 @@ Workspace management and asset listing are also product-facing.
 - Workspace reads and listing stay intentionally narrow: `id`, `name`, and `createdAt`.
 - Asset listing runs through `GET /api/assets`.
 - Asset listing resolves `workspaceId` and falls back to the configured default workspace when it is omitted.
+- Asset listing supports small v1 pagination through `page` and `size`, plus one optional `assetStatus` filter.
+- Pagination and filtering are applied within the resolved workspace scope.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
 - Default-workspace asset listing includes older local assets whose workspace association is still null.
-- Default-workspace asset reads and listing backfill those legacy assets to the configured default workspace.
+- Default-workspace asset reads and listing backfill returned legacy assets to the configured default workspace.
 - Non-default workspace listing only returns assets already associated with that workspace.
+- Asset listing uses deterministic default ordering:
+  - `createdAt desc`
+  - tie-break by `assetId desc`
 - Asset deletion runs through `DELETE /api/assets/{assetId}`.
 - Local deletion removes the linked `ProcessingJob` plus `Asset`, but never deletes a `Workspace`.
 - If the asset is `SEARCHABLE`, Spring deletes that asset's Elasticsearch documents before removing local DB records.

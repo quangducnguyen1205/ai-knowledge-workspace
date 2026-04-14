@@ -25,10 +25,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AssetService {
 
+    private static final int DEFAULT_ASSET_LIST_PAGE = 0;
+    private static final int DEFAULT_ASSET_LIST_SIZE = 20;
+    private static final int MAX_ASSET_LIST_SIZE = 100;
     private static final Sort ASSET_LIST_SORT = Sort.by(
             Sort.Order.desc("createdAt"),
-            Sort.Order.asc("id")
+            Sort.Order.desc("id")
     );
+    private static final Comparator<Asset> ASSET_LIST_COMPARATOR = Comparator
+            .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
+            .thenComparing(Asset::getId, Comparator.reverseOrder());
     private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
     private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
 
@@ -64,14 +70,40 @@ public class AssetService {
         return assetPersistenceService.updateAssetWorkspace(asset, defaultWorkspace);
     }
 
-    public List<AssetSummaryResponse> listAssets(UUID workspaceId) {
+    public AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
+        int resolvedPage = resolveAssetListPage(page);
+        int resolvedSize = resolveAssetListSize(size);
+
         Workspace resolvedWorkspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
         List<Asset> assets = loadAssetsForWorkspace(resolvedWorkspace);
 
-        return assets.stream()
+        List<Asset> filteredAssets = assets.stream()
+                .filter(asset -> assetStatus == null || asset.getStatus() == assetStatus)
+                .toList();
+
+        int totalElements = filteredAssets.size();
+        int totalPages = totalElements == 0
+                ? 0
+                : (int) Math.ceil((double) totalElements / resolvedSize);
+
+        int startIndex = (int) Math.min((long) resolvedPage * resolvedSize, totalElements);
+        int endIndex = Math.min(startIndex + resolvedSize, totalElements);
+
+        List<AssetSummaryResponse> items = filteredAssets.subList(startIndex, endIndex).stream()
                 .map(asset -> backfillWorkspaceIfNeeded(asset, resolvedWorkspace))
                 .map(this::toAssetSummaryResponse)
                 .toList();
+
+        boolean hasNext = resolvedPage + 1 < totalPages;
+
+        return new AssetListResponse(
+                items,
+                resolvedPage,
+                resolvedSize,
+                totalElements,
+                totalPages,
+                hasNext
+        );
     }
 
     public AssetStatusResponse getAssetStatus(UUID assetId) {
@@ -338,16 +370,38 @@ public class AssetService {
                 && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
     }
 
+    private int resolveAssetListPage(Integer page) {
+        if (page == null) {
+            return DEFAULT_ASSET_LIST_PAGE;
+        }
+        if (page < 0) {
+            throw new AssetListRequestException("INVALID_ASSET_PAGE", "page must be greater than or equal to 0");
+        }
+        return page;
+    }
+
+    private int resolveAssetListSize(Integer size) {
+        if (size == null) {
+            return DEFAULT_ASSET_LIST_SIZE;
+        }
+        if (size <= 0) {
+            throw new AssetListRequestException("INVALID_ASSET_SIZE", "size must be greater than 0");
+        }
+        if (size > MAX_ASSET_LIST_SIZE) {
+            throw new AssetListRequestException(
+                    "INVALID_ASSET_SIZE",
+                    "size must be less than or equal to " + MAX_ASSET_LIST_SIZE
+            );
+        }
+        return size;
+    }
+
     private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
         List<Asset> assets = new ArrayList<>(assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT));
-        if (!workspace.getId().equals(workspaceService.getDefaultWorkspaceId())) {
-            return assets;
+        if (workspace.getId().equals(workspaceService.getDefaultWorkspaceId())) {
+            assets.addAll(assetRepository.findByWorkspaceIsNull(ASSET_LIST_SORT));
         }
-
-        assets.addAll(assetRepository.findByWorkspaceIsNull(ASSET_LIST_SORT));
-        assets.sort(Comparator
-                .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
-                .thenComparing(Asset::getId));
+        assets.sort(ASSET_LIST_COMPARATOR);
         return assets;
     }
 
