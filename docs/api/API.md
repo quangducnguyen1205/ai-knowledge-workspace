@@ -179,6 +179,38 @@ Common failure cases:
 
 - HTTP `404` if the asset does not exist
 
+### `PATCH /api/assets/{assetId}`
+
+Updates the product-owned asset title.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `title` required
+
+Response:
+
+- HTTP `200`
+- Body: the updated persisted asset record
+
+Current behavior:
+
+- This v1 slice supports title-only update.
+- Spring trims `title` before validation and persistence.
+- If the normalized title is unchanged, Spring treats the request as a no-op success.
+- For assets in `PROCESSING`, `TRANSCRIPT_READY`, or `FAILED`, Spring only updates the local DB title.
+- For assets in `SEARCHABLE`, Spring first syncs `assetTitle` in Elasticsearch, then updates the local DB title.
+- If searchable-asset Elasticsearch sync fails, Spring does not update the DB title.
+- This slice does not move workspaces, replace files, or call FastAPI.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_ASSET_TITLE"` if `title` is missing, blank after trim, or longer than the current max length
+- HTTP `404` if the asset does not exist
+- HTTP `503` if Elasticsearch is unavailable while syncing title metadata for a `SEARCHABLE` asset
+- HTTP `502` if Elasticsearch returns an integration error while syncing title metadata for a `SEARCHABLE` asset
+
 ### `DELETE /api/assets/{assetId}`
 
 Deletes one product-owned asset.

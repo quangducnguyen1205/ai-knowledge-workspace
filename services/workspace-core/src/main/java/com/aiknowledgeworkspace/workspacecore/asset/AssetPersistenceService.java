@@ -102,6 +102,15 @@ public class AssetPersistenceService {
     }
 
     @Transactional
+    public Asset updateAssetTitle(Asset asset, String updatedTitle) {
+        if (!Objects.equals(asset.getTitle(), updatedTitle)) {
+            asset.setTitle(updatedTitle);
+            asset = assetRepository.save(asset);
+        }
+        return asset;
+    }
+
+    @Transactional
     public void deleteAssetRecords(Asset asset) {
         processingJobRepository.findByAssetId(asset.getId())
                 .ifPresent(processingJobRepository::delete);
