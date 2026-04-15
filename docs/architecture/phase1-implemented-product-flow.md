@@ -36,7 +36,7 @@ The implemented flow is:
 9. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
 10. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
 11. Spring exposes a narrow transcript-context follow-up endpoint that returns a row window around one transcript hit.
-12. Spring exposes an explicit product-side indexing trigger that writes one Elasticsearch document per transcript row.
+12. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request.
 13. Successful indexing refreshes the transcript index before returning.
 14. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
@@ -119,6 +119,7 @@ Indexing and search are also product-facing.
 - Indexing is explicit through `POST /api/assets/{assetId}/index`.
 - Indexing only uses usable non-empty transcript rows.
 - Indexed transcript-row documents include `workspaceId`.
+- One asset indexing request now sends transcript-row documents through one Elasticsearch bulk write path.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Successful indexing refreshes the transcript index before returning.
 - If Elasticsearch indexing fails after transcript data is usable, Spring does not collapse the asset back to `FAILED`.

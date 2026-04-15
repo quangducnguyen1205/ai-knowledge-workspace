@@ -304,7 +304,7 @@ Response:
 Current behavior:
 
 - Indexing is explicit and product-side.
-- One Elasticsearch document is written per transcript row.
+- Spring builds one logical Elasticsearch document per transcript row and writes them through one bulk indexing request per asset.
 - Indexed transcript-row documents include `workspaceId`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Only usable non-empty transcript rows can be indexed.

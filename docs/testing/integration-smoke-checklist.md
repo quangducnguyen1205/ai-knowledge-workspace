@@ -357,6 +357,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] non-empty `message`
 - [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
 - [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
+- [ ] If you can safely simulate a partial Elasticsearch bulk item failure, confirm the whole indexing request still fails and the asset remains non-`SEARCHABLE`.
 
 ## 11. Product Search Checks
 

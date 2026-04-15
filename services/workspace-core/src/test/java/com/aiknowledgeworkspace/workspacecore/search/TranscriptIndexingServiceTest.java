@@ -3,7 +3,6 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
-import static org.mockito.Mockito.times;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,12 +26,14 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.http.MediaType;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
@@ -73,7 +74,8 @@ class TranscriptIndexingServiceTest {
                 assetPersistenceService,
                 builder.build(),
                 properties,
-                new TranscriptIndexDocumentMapper()
+                new TranscriptIndexDocumentMapper(),
+                new ObjectMapper()
         );
     }
 
@@ -92,18 +94,24 @@ class TranscriptIndexingServiceTest {
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
 
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-1"))
-                .andExpect(method(HttpMethod.PUT))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-1\"}}")))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-2\"}}")))
                 .andExpect(content().string(containsString("\"assetTitle\":\"Lecture 1\"")))
                 .andExpect(content().string(containsString("\"transcriptRowId\":\"row-1\"")))
+                .andExpect(content().string(containsString("\"transcriptRowId\":\"row-2\"")))
                 .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus\":\"SEARCHABLE\"")))
-                .andRespond(withSuccess());
-
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-2"))
-                .andExpect(method(HttpMethod.PUT))
-                .andExpect(content().string(containsString("\"transcriptRowId\":\"row-2\"")))
-                .andRespond(withSuccess());
+                .andRespond(withSuccess("""
+                        {
+                          "errors": false,
+                          "items": [
+                            {"index": {"_id": "%s-row-1", "status": 201}},
+                            {"index": {"_id": "%s-row-2", "status": 201}}
+                          ]
+                        }
+                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
                 .andExpect(method(HttpMethod.POST))
@@ -142,20 +150,59 @@ class TranscriptIndexingServiceTest {
     }
 
     @Test
-    void indexingFailureDoesNotMarkAssetAsSearchable() {
+    void partialBulkFailureDoesNotMarkAssetAsSearchable() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 3", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-3", "video-3");
         List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-3", "video-3", 0, "Heap property explanation")
+                transcriptRow("row-3", "video-3", 0, "Heap property explanation"),
+                transcriptRow("row-4", "video-3", 1, "Heap sort walkthrough")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
 
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-3"))
-                .andExpect(method(HttpMethod.PUT))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-3\"}}")))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-4\"}}")))
+                .andRespond(withSuccess("""
+                        {
+                          "errors": true,
+                          "items": [
+                            {"index": {"_id": "%s-row-3", "status": 201}},
+                            {"index": {"_id": "%s-row-4", "status": 429, "error": {"reason": "queue full"}}}
+                          ]
+                        }
+                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining("Elasticsearch bulk indexing failed for document " + assetId + "-row-4")
+                .hasMessageContaining("queue full");
+
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
+        mockServer.verify();
+    }
+
+    @Test
+    void indexingFailureDoesNotMarkAssetAsSearchableWhenBulkRequestFails() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 4", AssetStatus.TRANSCRIPT_READY);
+        ProcessingJob processingJob = processingJob(assetId, "task-4", "video-4");
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-5", "video-4", 0, "Red black tree overview")
+        );
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
@@ -164,6 +211,7 @@ class TranscriptIndexingServiceTest {
 
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
         verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
         mockServer.verify();
     }
 
@@ -171,12 +219,12 @@ class TranscriptIndexingServiceTest {
     void repeatedIndexingReusesStableDocumentIdsForSameAsset() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        Asset firstAsset = asset(assetId, workspaceId, "Lecture 4", AssetStatus.TRANSCRIPT_READY);
-        Asset searchableAsset = asset(assetId, workspaceId, "Lecture 4", AssetStatus.SEARCHABLE);
-        ProcessingJob processingJob = processingJob(assetId, "task-4", "video-4");
+        Asset firstAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.TRANSCRIPT_READY);
+        Asset searchableAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.SEARCHABLE);
+        ProcessingJob processingJob = processingJob(assetId, "task-5", "video-5");
         List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-4", "video-4", 0, "Graph traversal overview"),
-                transcriptRow("row-5", "video-4", 1, "Breadth first search example")
+                transcriptRow("row-6", "video-5", 0, "Graph traversal overview"),
+                transcriptRow("row-7", "video-5", 1, "Breadth first search example")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(firstAsset, searchableAsset);
@@ -184,14 +232,20 @@ class TranscriptIndexingServiceTest {
         when(assetService.loadUsableTranscriptRows(firstAsset, processingJob)).thenReturn(transcriptRows);
         when(assetService.loadUsableTranscriptRows(searchableAsset, processingJob)).thenReturn(transcriptRows);
 
-        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-4"))
-                .andExpect(method(HttpMethod.PUT))
+        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-6\"}}")))
+                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-7\"}}")))
                 .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
-                .andRespond(withSuccess());
-
-        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_doc/" + assetId + "-row-5"))
-                .andExpect(method(HttpMethod.PUT))
-                .andRespond(withSuccess());
+                .andRespond(withSuccess("""
+                        {
+                          "errors": false,
+                          "items": [
+                            {"index": {"_id": "%s-row-6", "status": 200}},
+                            {"index": {"_id": "%s-row-7", "status": 200}}
+                          ]
+                        }
+                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
 
         mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
                 .andExpect(method(HttpMethod.POST))
@@ -204,6 +258,39 @@ class TranscriptIndexingServiceTest {
         assertThat(secondResponse.indexedDocumentCount()).isEqualTo(2);
         verify(assetPersistenceService).updateAssetStatus(firstAsset, AssetStatus.SEARCHABLE);
         verify(assetPersistenceService).updateAssetStatus(searchableAsset, AssetStatus.SEARCHABLE);
+        mockServer.verify();
+    }
+
+    @Test
+    void partialBulkFailureKeepsAlreadySearchableAssetSearchable() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 6", AssetStatus.SEARCHABLE);
+        ProcessingJob processingJob = processingJob(assetId, "task-6", "video-6");
+        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
+                transcriptRow("row-8", "video-6", 0, "Union find recap")
+        );
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "errors": true,
+                          "items": [
+                            {"index": {"_id": "%s-row-8", "status": 409, "error": {"reason": "version conflict"}}}
+                          ]
+                        }
+                        """.formatted(assetId), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining("version conflict");
+
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
         mockServer.verify();
     }
 
