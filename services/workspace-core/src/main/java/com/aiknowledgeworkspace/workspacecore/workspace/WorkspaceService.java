@@ -53,14 +53,20 @@ public class WorkspaceService {
         return workspace != null && workspace.isDefaultWorkspace();
     }
 
-    public boolean shouldIncludeLegacyNullWorkspaceAssets(Workspace workspace) {
-        if (!isDefaultWorkspace(workspace)) {
-            return false;
-        }
+    public boolean isOwnedByCurrentUser(Workspace workspace) {
+        return workspace != null
+                && StringUtils.hasText(workspace.getOwnerId())
+                && currentUserService.getCurrentUserId().equals(workspace.getOwnerId());
+    }
 
-        String currentUserId = currentUserService.getCurrentUserId();
-        return currentUserService.isDefaultUser(currentUserId)
-                && currentUserId.equals(workspace.getOwnerId());
+    public boolean canAccessLegacyNullWorkspaceAssets() {
+        return currentUserService.isDefaultUser(currentUserService.getCurrentUserId());
+    }
+
+    public boolean shouldIncludeLegacyNullWorkspaceAssets(Workspace workspace) {
+        return isDefaultWorkspace(workspace)
+                && canAccessLegacyNullWorkspaceAssets()
+                && isOwnedByCurrentUser(workspace);
     }
 
     @Transactional

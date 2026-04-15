@@ -172,6 +172,9 @@ Common failure cases:
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `502` or `504` if upstream FastAPI fails
 
+All asset-by-id endpoints below are ownership-aware through the asset's workspace.
+Repo B uses the same ownership-safe HTTP `404` when an asset does not exist or is not owned by the current user.
+
 ### `GET /api/assets/{assetId}`
 
 Reads one persisted asset record.
@@ -185,11 +188,11 @@ Current behavior:
 
 - This remains a simple product-owned asset read endpoint.
 - It is useful for debugging and local inspection.
-- If the asset still has no workspace association, Spring backfills it to the current user's default workspace before returning it.
+- For the configured local/dev default user, if the asset still has no workspace association, Spring backfills it to that user's default workspace before returning it.
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist
+- HTTP `404` if the asset does not exist or is not owned by the current user
 
 ### `PATCH /api/assets/{assetId}`
 
@@ -219,7 +222,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_ASSET_TITLE"` if `title` is missing, blank after trim, or longer than the current max length
-- HTTP `404` if the asset does not exist
+- HTTP `404` if the asset does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable while syncing title metadata for a `SEARCHABLE` asset
 - HTTP `502` if Elasticsearch returns an integration error while syncing title metadata for a `SEARCHABLE` asset
 
@@ -242,7 +245,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist
+- HTTP `404` if the asset does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable while deleting a `SEARCHABLE` asset
 - HTTP `502` if Elasticsearch returns an integration error while deleting a `SEARCHABLE` asset
 
@@ -264,6 +267,10 @@ Current behavior:
 - Status is asset-centric.
 - If the local processing job is already terminal, Spring returns stored state.
 - If the local processing job is non-terminal, Spring polls FastAPI on demand and updates local state.
+
+Common failure cases:
+
+- HTTP `404` if the asset does not exist or is not owned by the current user
 
 ### `GET /api/assets/{assetId}/transcript`
 
@@ -288,7 +295,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset or processing job does not exist
+- HTTP `404` if the asset does not exist, is not owned by the current user, or the processing job does not exist
 - HTTP `409` if processing is not ready or transcript rows are empty
 
 ### `GET /api/assets/{assetId}/transcript/context?transcriptRowId=...&window=...`
@@ -330,7 +337,7 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_TRANSCRIPT_CONTEXT_WINDOW"` if `window` is malformed, zero, negative, or above the current maximum
 - HTTP `404` with `code = "TRANSCRIPT_ROW_NOT_FOUND"` if the requested row does not belong to that asset transcript
-- HTTP `404` if the asset does not exist
+- HTTP `404` if the asset does not exist or is not owned by the current user
 - HTTP `409` if the transcript is not ready or is empty
 
 ### `POST /api/assets/{assetId}/index`
@@ -358,7 +365,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset or processing job does not exist
+- HTTP `404` if the asset does not exist, is not owned by the current user, or the processing job does not exist
 - HTTP `409` if transcript data is not ready or is empty
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error

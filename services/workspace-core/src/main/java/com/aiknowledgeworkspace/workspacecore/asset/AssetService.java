@@ -60,10 +60,17 @@ public class AssetService {
 
     public Asset getAsset(UUID assetId) {
         Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+                .orElseThrow(this::assetNotFound);
 
         if (asset.getWorkspace() != null) {
+            if (!workspaceService.isOwnedByCurrentUser(asset.getWorkspace())) {
+                throw assetNotFound();
+            }
             return asset;
+        }
+
+        if (!workspaceService.canAccessLegacyNullWorkspaceAssets()) {
+            throw assetNotFound();
         }
 
         Workspace defaultWorkspace = workspaceService.ensureDefaultWorkspace();
@@ -258,6 +265,10 @@ public class AssetService {
         if (!StringUtils.hasText(upstreamResponse.videoId())) {
             throw new InvalidFastApiResponseException("FastAPI upload response did not include video_id");
         }
+    }
+
+    private ResponseStatusException assetNotFound() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found");
     }
 
     private void validateUpstreamTaskStatusResponse(FastApiTaskStatusResponse upstreamResponse) {

@@ -14,6 +14,14 @@ This note records the first Phase 2 foundation already implemented in Repo B: ow
   - workspace create/list/read
   - workspace-scoped asset listing
   - workspace-scoped search
+- ownership-safe `404` rollout on asset-by-id reads and mutations through workspace ownership:
+  - asset read
+  - asset status
+  - transcript read
+  - transcript context
+  - explicit indexing
+  - title-only update
+  - delete
 
 ## What Stayed Intentionally Out Of Scope
 

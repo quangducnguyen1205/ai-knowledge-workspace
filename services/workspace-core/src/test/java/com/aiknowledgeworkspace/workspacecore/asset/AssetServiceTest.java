@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,6 +32,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
+
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class AssetServiceTest {
@@ -49,6 +52,11 @@ class AssetServiceTest {
 
     @Mock
     private WorkspaceService workspaceService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(workspaceService.isOwnedByCurrentUser(any(Workspace.class))).thenReturn(true);
+    }
 
     @Test
     void uploadAssociatesAssetWithResolvedWorkspace() {
@@ -158,6 +166,7 @@ class AssetServiceTest {
         updatedAsset.setWorkspace(defaultWorkspace);
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(legacyAsset));
+        when(workspaceService.canAccessLegacyNullWorkspaceAssets()).thenReturn(true);
         when(workspaceService.ensureDefaultWorkspace()).thenReturn(defaultWorkspace);
         when(assetPersistenceService.updateAssetWorkspace(legacyAsset, defaultWorkspace)).thenReturn(updatedAsset);
 
@@ -166,6 +175,80 @@ class AssetServiceTest {
         assertThat(result.getWorkspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).ensureDefaultWorkspace();
         verify(assetPersistenceService).updateAssetWorkspace(legacyAsset, defaultWorkspace);
+    }
+
+    @Test
+    void getAssetReturnsOwnedAssetWithoutBackfill() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
+        Asset ownedAsset = asset(assetId, "owned.mp4", "Owned Lecture", AssetStatus.SEARCHABLE, workspace, null);
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(ownedAsset));
+
+        Asset result = assetService.getAsset(assetId);
+
+        assertThat(result).isSameAs(ownedAsset);
+        verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
+    }
+
+    @Test
+    void getAssetRejectsNonOwnedAssetWithOwnershipSafeNotFound() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-2", false);
+        Asset nonOwnedAsset = asset(assetId, "owned.mp4", "Owned Lecture", AssetStatus.SEARCHABLE, workspace, null);
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(nonOwnedAsset));
+        when(workspaceService.isOwnedByCurrentUser(workspace)).thenReturn(false);
+
+        assertThatThrownBy(() -> assetService.getAsset(assetId))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
+                    assertThat(exception.getReason()).isEqualTo("Asset not found");
+                });
+
+        verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
+    }
+
+    @Test
+    void getAssetRejectsLegacyNullWorkspaceAssetForNonDefaultUser() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        Asset legacyAsset = asset(assetId, "legacy.mp4", "Legacy Lecture", AssetStatus.TRANSCRIPT_READY);
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(legacyAsset));
+        when(workspaceService.canAccessLegacyNullWorkspaceAssets()).thenReturn(false);
+
+        assertThatThrownBy(() -> assetService.getAsset(assetId))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
+                    assertThat(exception.getReason()).isEqualTo("Asset not found");
+                });
+
+        verify(workspaceService, never()).ensureDefaultWorkspace();
+        verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
     }
 
     @Test
