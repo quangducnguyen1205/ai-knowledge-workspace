@@ -44,6 +44,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
 - Spring exposes a narrow transcript-context follow-up endpoint for search hits.
 - Spring indexes one Elasticsearch document per transcript row through an explicit product endpoint.
+- Spring now sends transcript-row indexing writes through one Elasticsearch bulk request per asset.
 - Indexed transcript-row documents include `workspaceId`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Successful indexing refreshes the transcript index before returning.
@@ -147,7 +148,6 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 
 - Decide whether `GET /api/assets/{assetId}` should remain public or stay as a simple convenience endpoint.
 - Decide whether `GET /api/assets` needs pagination or additional filtering once asset counts grow.
-- Decide when to replace per-document indexing writes with a bulk path.
 - Decide when to move beyond default-workspace fallback into real workspace management and ownership.
 
 ## Explicit Non-Goals
