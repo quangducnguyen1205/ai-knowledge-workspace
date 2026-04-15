@@ -38,4 +38,4 @@ These are candidate tracks for selection, not approved implementation work.
 
 Phase 2 should start only after one candidate track is chosen and framed as a small decision or implementation slice with explicit non-goals.
 
-Do not treat generic cleanup, deferred-by-design items, or broad “hardening” as the default Phase 2 start.
+Do not treat generic cleanup, deferred-by-design items, or broad "hardening" as the default Phase 2 start.

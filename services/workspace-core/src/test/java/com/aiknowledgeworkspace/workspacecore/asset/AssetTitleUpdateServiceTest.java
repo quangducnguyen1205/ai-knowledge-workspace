@@ -94,6 +94,7 @@ class AssetTitleUpdateServiceTest {
                         {
                           "total": 2,
                           "updated": 2,
+                          "noops": 0,
                           "version_conflicts": 0,
                           "failures": []
                         }
@@ -127,6 +128,17 @@ class AssetTitleUpdateServiceTest {
                 new UpdateAssetTitleRequest("   ")
         )).isInstanceOf(InvalidAssetTitleException.class)
                 .hasMessage("title must not be blank");
+
+        verifyNoInteractions(assetService, assetPersistenceService);
+    }
+
+    @Test
+    void missingTitleRequestReturnsBadRequest() {
+        assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(
+                UUID.randomUUID(),
+                null
+        )).isInstanceOf(InvalidAssetTitleException.class)
+                .hasMessage("title is required");
 
         verifyNoInteractions(assetService, assetPersistenceService);
     }
@@ -189,6 +201,7 @@ class AssetTitleUpdateServiceTest {
                         {
                           "total": 0,
                           "updated": 0,
+                          "noops": 0,
                           "version_conflicts": 0,
                           "failures": []
                         }
@@ -197,6 +210,60 @@ class AssetTitleUpdateServiceTest {
         assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessage("Elasticsearch title sync did not match any transcript documents for asset " + assetId);
+
+        verify(assetPersistenceService, never()).updateAssetTitle(asset, "New Title");
+        mockServer.verify();
+    }
+
+    @Test
+    void searchableAssetTitleUpdateSucceedsWhenBulkResponseReportsOnlyNoops() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
+        Asset updatedAsset = asset(assetId, "New Title", AssetStatus.SEARCHABLE);
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetPersistenceService.updateAssetTitle(asset, "New Title")).thenReturn(updatedAsset);
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "total": 2,
+                          "updated": 0,
+                          "noops": 2,
+                          "version_conflicts": 0,
+                          "failures": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        Asset response = assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title"));
+
+        assertThat(response.getTitle()).isEqualTo("New Title");
+        verify(assetPersistenceService).updateAssetTitle(asset, "New Title");
+        mockServer.verify();
+    }
+
+    @Test
+    void searchableAssetTitleUpdateFailsWhenBulkResponseDoesNotAccountForAllDocuments() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "total": 3,
+                          "updated": 1,
+                          "noops": 1,
+                          "version_conflicts": 0,
+                          "failures": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessage("Elasticsearch title sync accounted for only 2 of 3 transcript documents for asset " + assetId);
 
         verify(assetPersistenceService, never()).updateAssetTitle(asset, "New Title");
         mockServer.verify();

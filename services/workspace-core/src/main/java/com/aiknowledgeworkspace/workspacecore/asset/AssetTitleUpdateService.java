@@ -4,7 +4,6 @@ import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchPropert
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.fasterxml.jackson.databind.JsonNode;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -116,6 +115,7 @@ public class AssetTitleUpdateService {
 
         long total = readLong(responseBody, "total", "title sync response");
         long updated = readLong(responseBody, "updated", "title sync response");
+        long noops = readLong(responseBody, "noops", "title sync response");
         long versionConflicts = readLong(responseBody, "version_conflicts", "title sync response");
 
         if (total <= 0) {
@@ -128,9 +128,9 @@ public class AssetTitleUpdateService {
                     "Elasticsearch title sync hit " + versionConflicts + " version conflicts for asset " + assetId
             );
         }
-        if (updated != total) {
+        if (updated + noops != total) {
             throw new ElasticsearchIntegrationException(
-                    "Elasticsearch title sync updated only " + updated + " of " + total
+                    "Elasticsearch title sync accounted for only " + (updated + noops) + " of " + total
                             + " transcript documents for asset " + assetId
             );
         }
