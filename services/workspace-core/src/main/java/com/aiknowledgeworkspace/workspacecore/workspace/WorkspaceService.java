@@ -53,6 +53,16 @@ public class WorkspaceService {
         return workspace != null && workspace.isDefaultWorkspace();
     }
 
+    public boolean shouldIncludeLegacyNullWorkspaceAssets(Workspace workspace) {
+        if (!isDefaultWorkspace(workspace)) {
+            return false;
+        }
+
+        String currentUserId = currentUserService.getCurrentUserId();
+        return currentUserService.isDefaultUser(currentUserId)
+                && currentUserId.equals(workspace.getOwnerId());
+    }
+
     @Transactional
     public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
         String currentUserId = currentUserService.getCurrentUserId();

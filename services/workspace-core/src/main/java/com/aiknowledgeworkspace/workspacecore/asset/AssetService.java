@@ -398,7 +398,7 @@ public class AssetService {
 
     private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
         List<Asset> assets = new ArrayList<>(assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT));
-        if (workspaceService.isDefaultWorkspace(workspace)) {
+        if (workspaceService.shouldIncludeLegacyNullWorkspaceAssets(workspace)) {
             assets.addAll(assetRepository.findByWorkspaceIsNull(ASSET_LIST_SORT));
         }
         assets.sort(ASSET_LIST_COMPARATOR);

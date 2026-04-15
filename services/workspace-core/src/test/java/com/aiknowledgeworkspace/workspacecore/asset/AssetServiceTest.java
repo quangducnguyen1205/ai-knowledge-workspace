@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -206,7 +207,7 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(workspaceService.isDefaultWorkspace(defaultWorkspace)).thenReturn(true);
+        when(workspaceService.shouldIncludeLegacyNullWorkspaceAssets(defaultWorkspace)).thenReturn(true);
         when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(workspaceAsset));
         when(assetRepository.findByWorkspaceIsNull(assetListSort()))
@@ -441,7 +442,7 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(workspaceService.isDefaultWorkspace(defaultWorkspace)).thenReturn(true);
+        when(workspaceService.shouldIncludeLegacyNullWorkspaceAssets(defaultWorkspace)).thenReturn(true);
         when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(workspaceAsset));
         when(assetRepository.findByWorkspaceIsNull(assetListSort()))
@@ -453,6 +454,43 @@ class AssetServiceTest {
 
         assertThat(response.items()).extracting(AssetSummaryResponse::assetId)
                 .containsExactly(largerId, smallerId);
+    }
+
+    @Test
+    void listAssetsDoesNotIncludeLegacyNullWorkspaceAssetsForNonDefaultUserDefaultWorkspace() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        Workspace userDefaultWorkspace = new Workspace(workspaceId, "Default Workspace");
+        userDefaultWorkspace.setDefaultWorkspace(true);
+        userDefaultWorkspace.setOwnerId("user-2");
+        Asset ownedAsset = asset(
+                UUID.randomUUID(),
+                "lecture.mp4",
+                "Lecture 2",
+                AssetStatus.SEARCHABLE,
+                userDefaultWorkspace,
+                Instant.parse("2026-04-10T02:00:00Z")
+        );
+
+        when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(userDefaultWorkspace);
+        when(workspaceService.shouldIncludeLegacyNullWorkspaceAssets(userDefaultWorkspace)).thenReturn(false);
+        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+                .thenReturn(List.of(ownedAsset));
+
+        AssetListResponse response = assetService.listAssets(null, null, null, null);
+
+        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.items()).extracting(AssetSummaryResponse::assetId)
+                .containsExactly(ownedAsset.getId());
+        verify(assetRepository, never()).findByWorkspaceIsNull(assetListSort());
+        verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
     }
 
     @Test

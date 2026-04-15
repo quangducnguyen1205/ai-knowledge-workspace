@@ -188,7 +188,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 ### Legacy Default-Workspace Path
 
 - [ ] If you have older local assets with null `workspace_id`, call `GET /api/assets` without `workspaceId`.
-- [ ] Confirm those legacy assets still appear in the default-workspace list.
+- [ ] Confirm those legacy assets still appear only for the configured local/dev default user.
 - [ ] Confirm those rows are backfilled to the current user's default workspace after the read path.
 
 ### Failure Path

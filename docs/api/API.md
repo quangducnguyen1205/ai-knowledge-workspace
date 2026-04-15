@@ -121,8 +121,8 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Pagination and optional `assetStatus` filtering are applied inside the resolved workspace scope.
 - Non-default workspace listing only returns assets already associated with that workspace.
-- Default-workspace listing also includes older local assets whose `workspace_id` is still null.
-- When default-workspace listing encounters a returned legacy asset with no workspace, Spring backfills that asset to the current user's default workspace.
+- For the configured local/dev default user, default-workspace listing also includes older local assets whose `workspace_id` is still null.
+- When that legacy path is used, Spring backfills those returned null-workspace assets to the current user's default workspace.
 - Ordering is deterministic:
   - `createdAt desc`
   - tie-break by `assetId desc`
