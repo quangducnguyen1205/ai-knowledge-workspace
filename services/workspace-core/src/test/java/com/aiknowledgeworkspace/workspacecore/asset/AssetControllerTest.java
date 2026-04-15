@@ -295,7 +295,36 @@ class AssetControllerTest {
     }
 
     @Test
-    void updateAssetTitleReturnsStructuredNotFoundWhenAssetDoesNotExist() throws Exception {
+    void updateAssetTitleReturnsStructuredBadRequestForMissingTitleField() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest(null)))
+                .thenThrow(new InvalidAssetTitleException("title is required"));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_TITLE"))
+                .andExpect(jsonPath("$.message").value("title is required"));
+    }
+
+    @Test
+    void updateAssetTitleReturnsStructuredBadRequestForMissingBody() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, null))
+                .thenThrow(new InvalidAssetTitleException("title is required"));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_TITLE"))
+                .andExpect(jsonPath("$.message").value("title is required"));
+    }
+
+    @Test
+    void updateAssetTitleReturnsNotFoundWhenAssetDoesNotExist() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
                 .thenThrow(new org.springframework.web.server.ResponseStatusException(
