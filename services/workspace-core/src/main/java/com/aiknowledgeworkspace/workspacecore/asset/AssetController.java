@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 
@@ -21,15 +23,18 @@ public class AssetController {
 
     private final AssetService assetService;
     private final AssetDeletionService assetDeletionService;
+    private final AssetTitleUpdateService assetTitleUpdateService;
     private final TranscriptIndexingService transcriptIndexingService;
 
     public AssetController(
             AssetService assetService,
             AssetDeletionService assetDeletionService,
+            AssetTitleUpdateService assetTitleUpdateService,
             TranscriptIndexingService transcriptIndexingService
     ) {
         this.assetService = assetService;
         this.assetDeletionService = assetDeletionService;
+        this.assetTitleUpdateService = assetTitleUpdateService;
         this.transcriptIndexingService = transcriptIndexingService;
     }
 
@@ -46,6 +51,14 @@ public class AssetController {
     @GetMapping("/{assetId}")
     public Asset getAsset(@PathVariable UUID assetId) {
         return assetService.getAsset(assetId);
+    }
+
+    @PatchMapping("/{assetId}")
+    public Asset updateAssetTitle(
+            @PathVariable UUID assetId,
+            @RequestBody(required = false) UpdateAssetTitleRequest request
+    ) {
+        return assetTitleUpdateService.updateAssetTitle(assetId, request);
     }
 
     @DeleteMapping("/{assetId}")

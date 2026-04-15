@@ -264,6 +264,36 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `503` or `502` depending on the failure mode.
 - [ ] Confirm the local asset still exists after the failed delete attempt.
 
+## 6B. Product Asset Title Update Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `PATCH /api/assets/{assetId}` with JSON body:
+  - [ ] `title`
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the returned asset now includes the updated `title`.
+- [ ] Repeat the same `PATCH` with a title that normalizes to the same stored value.
+- [ ] Expect HTTP `200` again.
+- [ ] Confirm the call behaves like a no-op success.
+- [ ] If the asset is currently `SEARCHABLE`, call `GET /api/search?q=...&assetId=<assetId>` after the patch.
+- [ ] Confirm returned search hits now reflect the updated `assetTitle`.
+
+### Failure Path
+
+- [ ] Call `PATCH /api/assets/{assetId}` with `{"title":"   "}`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_TITLE"`
+- [ ] Call `PATCH /api/assets/{assetId}` with a title longer than the current max length.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_ASSET_TITLE"`
+- [ ] Call `PATCH /api/assets/<random-uuid>` with a valid title.
+- [ ] Expect HTTP `404`.
+- [ ] If possible, stop Elasticsearch and call `PATCH /api/assets/{assetId}` for a `SEARCHABLE` asset.
+- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] Confirm the persisted asset title is unchanged after the failed patch attempt.
+
 ## 7. Product Transcript Fetch Checks
 
 ### Implemented And Testable Now

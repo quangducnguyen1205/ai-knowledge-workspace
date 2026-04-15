@@ -15,6 +15,7 @@ The currently implemented product-facing endpoints are:
 - `GET /api/workspaces/{workspaceId}`
 - `GET /api/assets`
 - `GET /api/assets/{assetId}`
+- `PATCH /api/assets/{assetId}`
 - `DELETE /api/assets/{assetId}`
 - `POST /api/assets/upload`
 - `GET /api/assets/{assetId}/status`
@@ -32,7 +33,7 @@ The implemented flow is:
 5. Spring forwards `file` and `title` to FastAPI.
 6. Spring validates the live FastAPI upload response.
 7. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
-8. Spring exposes workspace-aware asset listing plus simple per-asset reads and deletion.
+8. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
 9. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
 10. Spring exposes transcript reads through the product API using the stored `fastapiVideoId`.
 11. Spring exposes a narrow transcript-context follow-up endpoint that returns a row window around one transcript hit.
@@ -109,6 +110,9 @@ Workspace management and asset listing are also product-facing.
 - Asset listing uses deterministic default ordering:
   - `createdAt desc`
   - tie-break by `assetId desc`
+- Asset title update runs through `PATCH /api/assets/{assetId}`.
+- Title update is intentionally narrow in v1 and only allows editing the product-owned title.
+- For `SEARCHABLE` assets, Spring syncs `assetTitle` in Elasticsearch before updating the local DB title.
 - Asset deletion runs through `DELETE /api/assets/{assetId}`.
 - Local deletion removes the linked `ProcessingJob` plus `Asset`, but never deletes a `Workspace`.
 - If the asset is `SEARCHABLE`, Spring deletes that asset's Elasticsearch documents before removing local DB records.

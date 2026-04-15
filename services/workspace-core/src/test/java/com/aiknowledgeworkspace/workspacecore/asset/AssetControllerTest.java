@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,6 +32,7 @@ class AssetControllerTest {
 
     private AssetService assetService;
     private AssetDeletionService assetDeletionService;
+    private AssetTitleUpdateService assetTitleUpdateService;
     private TranscriptIndexingService transcriptIndexingService;
     private MockMvc mockMvc;
 
@@ -38,8 +40,14 @@ class AssetControllerTest {
     void setUp() {
         assetService = mock(AssetService.class);
         assetDeletionService = mock(AssetDeletionService.class);
+        assetTitleUpdateService = mock(AssetTitleUpdateService.class);
         transcriptIndexingService = mock(TranscriptIndexingService.class);
-        AssetController assetController = new AssetController(assetService, assetDeletionService, transcriptIndexingService);
+        AssetController assetController = new AssetController(
+                assetService,
+                assetDeletionService,
+                assetTitleUpdateService,
+                transcriptIndexingService
+        );
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -243,6 +251,105 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
                 .andExpect(jsonPath("$.message").value(
                         "Elasticsearch returned HTTP 500 while trying to delete transcript documents for asset " + assetId
+                ));
+    }
+
+    @Test
+    void updateAssetTitleReturnsUpdatedAsset() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset updatedAsset = new Asset("lecture.mp4", "New Title", AssetStatus.SEARCHABLE, new com.aiknowledgeworkspace.workspacecore.workspace.Workspace(workspaceId, "Algorithms"));
+        org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "id", assetId);
+        org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "createdAt", Instant.parse("2026-04-10T03:00:00Z"));
+        org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "updatedAt", Instant.parse("2026-04-10T03:05:00Z"));
+
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
+                .thenReturn(updatedAsset);
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New Title"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(assetId.toString()))
+                .andExpect(jsonPath("$.title").value("New Title"))
+                .andExpect(jsonPath("$.status").value("SEARCHABLE"))
+                .andExpect(jsonPath("$.workspaceId").value(workspaceId.toString()));
+    }
+
+    @Test
+    void updateAssetTitleReturnsStructuredBadRequestForBlankTitle() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("   ")))
+                .thenThrow(new InvalidAssetTitleException("title must not be blank"));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"   "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ASSET_TITLE"))
+                .andExpect(jsonPath("$.message").value("title must not be blank"));
+    }
+
+    @Test
+    void updateAssetTitleReturnsStructuredNotFoundWhenAssetDoesNotExist() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND,
+                        "Asset not found"
+                ));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New Title"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(status().reason("Asset not found"));
+    }
+
+    @Test
+    void updateAssetTitleReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
+                .thenThrow(new ElasticsearchConnectivityException(
+                        "Elasticsearch is unavailable while trying to sync search metadata for asset " + assetId,
+                        new RuntimeException("connection refused")
+                ));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New Title"}
+                                """))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value(
+                        "Elasticsearch is unavailable while trying to sync search metadata for asset " + assetId
+                ));
+    }
+
+    @Test
+    void updateAssetTitleReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
+                .thenThrow(new ElasticsearchIntegrationException(
+                        "Elasticsearch title sync failed for asset " + assetId + ": queue full"
+                ));
+
+        mockMvc.perform(patch("/api/assets/{assetId}", assetId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New Title"}
+                                """))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(
+                        "Elasticsearch title sync failed for asset " + assetId + ": queue full"
                 ));
     }
 

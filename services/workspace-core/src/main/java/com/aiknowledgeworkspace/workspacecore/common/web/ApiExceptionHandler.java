@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.web;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetListRequestException;
+import com.aiknowledgeworkspace.workspacecore.asset.InvalidAssetTitleException;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
@@ -57,6 +58,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidWorkspaceName(InvalidWorkspaceNameException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse("INVALID_WORKSPACE_NAME", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidAssetTitleException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidAssetTitle(InvalidAssetTitleException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse("INVALID_ASSET_TITLE", exception.getMessage()));
     }
 
     @ExceptionHandler(InvalidTranscriptContextWindowException.class)
