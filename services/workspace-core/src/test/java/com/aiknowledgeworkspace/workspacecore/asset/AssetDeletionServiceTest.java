@@ -15,7 +15,6 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +33,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 class AssetDeletionServiceTest {
 
     @Mock
-    private AssetRepository assetRepository;
+    private AssetService assetService;
 
     @Mock
     private AssetPersistenceService assetPersistenceService;
@@ -53,7 +52,7 @@ class AssetDeletionServiceTest {
         properties.setTranscriptIndexName("asset-transcript-rows");
 
         assetDeletionService = new AssetDeletionService(
-                assetRepository,
+                assetService,
                 assetPersistenceService,
                 builder.build(),
                 properties
@@ -65,7 +64,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -78,7 +77,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.TRANSCRIPT_READY);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -91,7 +90,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
@@ -108,7 +107,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
@@ -126,7 +125,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.FAILED);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -137,7 +136,7 @@ class AssetDeletionServiceTest {
     @Test
     void deletingMissingAssetReturnsNotFound() {
         UUID assetId = UUID.randomUUID();
-        when(assetRepository.findById(assetId)).thenReturn(Optional.empty());
+        when(assetService.getAsset(assetId)).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
@@ -150,7 +149,9 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING);
 
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset), Optional.empty());
+        when(assetService.getAsset(assetId))
+                .thenReturn(asset)
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
 
         assetDeletionService.deleteAsset(assetId);
 

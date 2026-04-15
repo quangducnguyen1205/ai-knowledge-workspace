@@ -220,6 +220,19 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Call `GET /api/assets?workspaceId=<workspace-owned-by-another-user>`.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
+## 5A. Product Asset Read Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `GET /api/assets/{assetId}` for an asset owned by the current user.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the returned asset matches the persisted asset metadata.
+
+### Ownership Path
+
+- [ ] Call `GET /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
+
 ## 6. Product Status Refresh Checks
 
 ### Implemented And Testable Now
@@ -246,6 +259,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `GET /api/assets/{assetId}/status` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
+- [ ] Call `GET /api/assets/{assetId}/status` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If you have a DB fixture or manual record that can represent an asset without a linked processing job, call the status endpoint for that asset.
 - [ ] Expect HTTP `409`.
 
@@ -273,6 +288,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `DELETE /api/assets/<random-uuid>` for an asset that does not exist.
 - [ ] Expect HTTP `404`.
+- [ ] Call `DELETE /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `DELETE /api/assets/{assetId}` for a `SEARCHABLE` asset.
 - [ ] Expect HTTP `503` or `502` depending on the failure mode.
 - [ ] Confirm the local asset still exists after the failed delete attempt.
@@ -303,6 +320,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `code = "INVALID_ASSET_TITLE"`
 - [ ] Call `PATCH /api/assets/<random-uuid>` with a valid title.
 - [ ] Expect HTTP `404`.
+- [ ] Call `PATCH /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `PATCH /api/assets/{assetId}` for a `SEARCHABLE` asset.
 - [ ] Expect HTTP `503` or `502` depending on the failure mode.
 - [ ] Confirm the persisted asset title is unchanged after the failed patch attempt.
@@ -336,6 +355,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `GET /api/assets/{assetId}/transcript` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
+- [ ] Call `GET /api/assets/{assetId}/transcript` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 8. Empty-Transcript Handling Checks
 
@@ -401,6 +422,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
 - [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
 - [ ] If you can safely simulate a partial Elasticsearch bulk item failure, confirm the whole indexing request still fails and the asset remains non-`SEARCHABLE`.
+- [ ] Call `POST /api/assets/{assetId}/index` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 11. Product Search Checks
 
@@ -463,6 +486,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `400`.
 - [ ] Call the same endpoint with a valid-but-missing `transcriptRowId`.
 - [ ] Expect HTTP `404`.
+- [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ### Validation Path
 

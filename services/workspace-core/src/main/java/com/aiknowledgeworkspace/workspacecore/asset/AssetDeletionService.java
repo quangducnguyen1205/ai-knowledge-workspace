@@ -1,43 +1,40 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 
 @Service
 public class AssetDeletionService {
 
-    private final AssetRepository assetRepository;
+    private final AssetService assetService;
     private final AssetPersistenceService assetPersistenceService;
     private final RestClient elasticsearchRestClient;
     private final ElasticsearchProperties elasticsearchProperties;
 
     public AssetDeletionService(
-            AssetRepository assetRepository,
+            AssetService assetService,
             AssetPersistenceService assetPersistenceService,
             @Qualifier("elasticsearchRestClient") RestClient elasticsearchRestClient,
             ElasticsearchProperties elasticsearchProperties
     ) {
-        this.assetRepository = assetRepository;
+        this.assetService = assetService;
         this.assetPersistenceService = assetPersistenceService;
         this.elasticsearchRestClient = elasticsearchRestClient;
         this.elasticsearchProperties = elasticsearchProperties;
     }
 
     public void deleteAsset(UUID assetId) {
-        Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+        Asset asset = assetService.getAsset(assetId);
 
         if (asset.getStatus() == AssetStatus.SEARCHABLE) {
             deleteIndexedTranscriptRows(assetId);
