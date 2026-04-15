@@ -25,6 +25,10 @@ workspace:
   default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
 
+current-user:
+  header-name: ${CURRENT_USER_HEADER_NAME:X-Current-User-Id}
+  default-id: ${CURRENT_USER_ID:local-dev-user}
+
 integration:
   fastapi:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}

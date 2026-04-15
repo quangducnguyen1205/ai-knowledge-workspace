@@ -18,6 +18,12 @@ public class Workspace {
     @Column(nullable = false, length = 255)
     private String name;
 
+    @Column(length = 255)
+    private String ownerId;
+
+    @Column
+    private Boolean defaultWorkspace = Boolean.FALSE;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -25,8 +31,14 @@ public class Workspace {
     }
 
     public Workspace(UUID id, String name) {
+        this(id, name, null, false);
+    }
+
+    public Workspace(UUID id, String name, String ownerId, boolean defaultWorkspace) {
         this.id = id;
         this.name = name;
+        this.ownerId = ownerId;
+        this.defaultWorkspace = defaultWorkspace;
     }
 
     @PrePersist
@@ -49,6 +61,22 @@ public class Workspace {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public boolean isDefaultWorkspace() {
+        return Boolean.TRUE.equals(defaultWorkspace);
+    }
+
+    public void setDefaultWorkspace(boolean defaultWorkspace) {
+        this.defaultWorkspace = defaultWorkspace;
     }
 
     public Instant getCreatedAt() {

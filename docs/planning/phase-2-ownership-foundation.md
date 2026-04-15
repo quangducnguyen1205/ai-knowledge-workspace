@@ -1,0 +1,28 @@
+# Phase 2 Ownership Foundation
+
+## Purpose
+
+This note records the first Phase 2 foundation already implemented in Repo B: ownership now starts at the workspace boundary through a minimal current-user mechanism in Spring.
+
+## What This Slice Added
+
+- a minimal current-user identity mechanism using `X-Current-User-Id`
+- a configured local/dev fallback current user when the header is omitted
+- workspace ownership in the domain model
+- one default workspace path per current user
+- ownership enforcement first on:
+  - workspace create/list/read
+  - workspace-scoped asset listing
+  - workspace-scoped search
+
+## What Stayed Intentionally Out Of Scope
+
+- login flows, passwords, tokens, OAuth, or a full session platform
+- collaboration, sharing, teams, roles, or memberships
+- broad ownership enforcement across every mutation endpoint
+- transcript persistence
+- chatbot/RAG work
+
+## Why This Is A Phase 2 Foundation
+
+Phase 1 proved the narrow search-first MVP. This slice starts Phase 2 by making ownership semantics real in the product core without turning the repo into a full auth platform.

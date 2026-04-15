@@ -140,7 +140,7 @@ class WorkspaceControllerTest {
     }
 
     @Test
-    void getWorkspaceReturnsStructuredNotFoundForUnknownWorkspace() throws Exception {
+    void getWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         when(workspaceService.getWorkspace(workspaceId))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
