@@ -12,12 +12,40 @@ This document is the current product-facing API summary for Repo B (`workspace-c
 
 Repo B now uses a minimal current-user identity foundation for ownership-aware workspace scope.
 
-- Spring reads the current user from the request header `X-Current-User-Id`.
-- If that header is omitted, Spring falls back to the configured local/dev default user.
+- The primary product-facing path is `POST /api/auth/session`, which stores the current user in the Spring HTTP session.
+- For local/dev support, Spring still accepts `X-Current-User-Id` as a secondary fallback when no session user is present.
+- If both session and header are absent, Spring falls back to the configured local/dev default user.
 - This slice is intentionally not a full authentication platform.
 - Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing and search.
 
 ## Current Product Endpoints
+
+### `POST /api/auth/session`
+
+Establishes the current user in the Spring product session.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `userId` required
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `userId`
+
+Current behavior:
+
+- This is the primary product-facing current-user entry for Phase 2.
+- Spring trims `userId` before storing it in the session.
+- Repeating the call replaces the current session user with the new `userId`.
+- This slice intentionally does not add passwords, tokens, OAuth, sign-up, or a full session platform.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_CURRENT_USER_ID"` if `userId` is missing, blank after trim, or longer than the current max length
 
 ### `POST /api/workspaces`
 

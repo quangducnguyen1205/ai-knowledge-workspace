@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class CurrentUserProperties {
 
     private String headerName = "X-Current-User-Id";
+    private String sessionAttributeName = "CURRENT_USER_ID";
     private String defaultId = "local-dev-user";
 
     public String getHeaderName() {
@@ -14,6 +15,14 @@ public class CurrentUserProperties {
 
     public void setHeaderName(String headerName) {
         this.headerName = headerName;
+    }
+
+    public String getSessionAttributeName() {
+        return sessionAttributeName;
+    }
+
+    public void setSessionAttributeName(String sessionAttributeName) {
+        this.sessionAttributeName = sessionAttributeName;
     }
 
     public String getDefaultId() {

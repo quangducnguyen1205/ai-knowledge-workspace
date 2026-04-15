@@ -4,7 +4,9 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
 
-For this Phase 2 foundation slice, ownership-aware workspace behavior uses the request header `X-Current-User-Id`. If the header is omitted, Spring falls back to the configured local/dev default user.
+For this Phase 2 auth-entry slice, the primary product-facing current-user path is `POST /api/auth/session`.
+For local/dev support, `X-Current-User-Id` still works as a secondary fallback when no session user is present.
+If both session and header are absent, Spring falls back to the configured local/dev default user.
 
 ## Helper Shortcut
 
@@ -37,6 +39,7 @@ make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NA
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
 The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does not assume a contributor-specific local file path.
+The helper still works without an explicit auth session because local/dev default-user fallback remains available.
 
 ## 1. Environment Readiness
 
@@ -74,12 +77,32 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `code = "FASTAPI_CONNECTIVITY_ERROR"`
   - [ ] non-empty `message`
 
+## 2A. Product Auth Entry Checks
+
+### Implemented And Testable Now
+
+- [ ] Call `POST /api/auth/session` with JSON body:
+  - [ ] `userId`
+- [ ] Expect HTTP `200`.
+- [ ] Expect JSON with:
+  - [ ] `userId`
+- [ ] Reuse the returned session cookie for subsequent workspace, asset, and search checks.
+- [ ] Repeat the same endpoint with a different `userId`.
+- [ ] Confirm the active session user changes to the new value.
+
+### Failure Path
+
+- [ ] Call `POST /api/auth/session` with an empty or missing `userId`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_CURRENT_USER_ID"`
+
 ## 3. Product Workspace Management Checks
 
 ### Implemented And Testable Now
 
-- [ ] Call `GET /api/workspaces` without `X-Current-User-Id`.
-- [ ] Confirm Spring returns workspaces for the configured default current user.
+- [ ] Call `GET /api/workspaces` after establishing a session user through `POST /api/auth/session`.
+- [ ] Confirm Spring returns workspaces for that session user.
 - [ ] Call `POST /api/workspaces` with JSON body:
   - [ ] `name`
 - [ ] Expect HTTP `201`.
@@ -94,7 +117,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
-- [ ] Call `GET /api/workspaces` with a different `X-Current-User-Id`.
+- [ ] Re-establish the session with a different `userId`.
 - [ ] Confirm the first user's non-default workspace does not appear.
 - [ ] Confirm a separate default workspace is created lazily for the second user if needed.
 
@@ -110,7 +133,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
-- [ ] Call `GET /api/workspaces/{workspaceId}` for a workspace created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `GET /api/workspaces/{workspaceId}` for a workspace created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 4. Product Upload Flow Checks
@@ -182,7 +205,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] If you uploaded into a known non-default workspace, call `GET /api/assets?workspaceId=<workspaceId>`.
 - [ ] Confirm the uploaded asset appears in that workspace-scoped list.
 - [ ] Confirm non-default workspace listing only returns assets in that workspace.
-- [ ] Call `GET /api/assets` with a different `X-Current-User-Id`.
+- [ ] Re-establish the auth session as a different user, then call `GET /api/assets`.
 - [ ] Confirm assets in another user's workspace do not appear.
 
 ### Legacy Default-Workspace Path
@@ -230,7 +253,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 ### Ownership Path
 
-- [ ] Call `GET /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `GET /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 6. Product Status Refresh Checks
@@ -259,7 +282,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `GET /api/assets/{assetId}/status` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
-- [ ] Call `GET /api/assets/{assetId}/status` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `GET /api/assets/{assetId}/status` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If you have a DB fixture or manual record that can represent an asset without a linked processing job, call the status endpoint for that asset.
 - [ ] Expect HTTP `409`.
@@ -288,7 +311,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `DELETE /api/assets/<random-uuid>` for an asset that does not exist.
 - [ ] Expect HTTP `404`.
-- [ ] Call `DELETE /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `DELETE /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `DELETE /api/assets/{assetId}` for a `SEARCHABLE` asset.
 - [ ] Expect HTTP `503` or `502` depending on the failure mode.
@@ -320,7 +343,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `code = "INVALID_ASSET_TITLE"`
 - [ ] Call `PATCH /api/assets/<random-uuid>` with a valid title.
 - [ ] Expect HTTP `404`.
-- [ ] Call `PATCH /api/assets/{assetId}` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `PATCH /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `PATCH /api/assets/{assetId}` for a `SEARCHABLE` asset.
 - [ ] Expect HTTP `503` or `502` depending on the failure mode.
@@ -355,7 +378,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 - [ ] Call `GET /api/assets/{assetId}/transcript` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
-- [ ] Call `GET /api/assets/{assetId}/transcript` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `GET /api/assets/{assetId}/transcript` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 8. Empty-Transcript Handling Checks
@@ -422,7 +445,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
 - [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
 - [ ] If you can safely simulate a partial Elasticsearch bulk item failure, confirm the whole indexing request still fails and the asset remains non-`SEARCHABLE`.
-- [ ] Call `POST /api/assets/{assetId}/index` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `POST /api/assets/{assetId}/index` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 11. Product Search Checks
@@ -449,7 +472,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Confirm `workspaceIdFilter` matches the requested workspace or the current user's default workspace when omitted.
 - [ ] Confirm search only returns results inside the resolved workspace scope.
 - [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
-- [ ] Call `GET /api/search?q=your-query` with a different `X-Current-User-Id`.
+- [ ] Re-establish the auth session as a different user, then call `GET /api/search?q=your-query`.
 - [ ] Confirm results from another user's workspace do not appear.
 
 ### Optional Asset Filter Check
@@ -486,7 +509,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `400`.
 - [ ] Call the same endpoint with a valid-but-missing `transcriptRowId`.
 - [ ] Expect HTTP `404`.
-- [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>` for an asset created under one user, but send a different `X-Current-User-Id`.
+- [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ### Validation Path

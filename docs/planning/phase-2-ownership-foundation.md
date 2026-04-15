@@ -6,8 +6,9 @@ This note records the first Phase 2 foundation already implemented in Repo B: ow
 
 ## What This Slice Added
 
-- a minimal current-user identity mechanism using `X-Current-User-Id`
-- a configured local/dev fallback current user when the header is omitted
+- an initial minimal current-user identity mechanism using `X-Current-User-Id`
+- a configured local/dev fallback current user when session and header are omitted
+- a later minimal auth-entry step using `POST /api/auth/session` as the primary product-facing current-user path
 - workspace ownership in the domain model
 - one default workspace path per current user
 - ownership enforcement first on:
@@ -34,3 +35,9 @@ This note records the first Phase 2 foundation already implemented in Repo B: ow
 ## Why This Is A Phase 2 Foundation
 
 Phase 1 proved the narrow search-first MVP. This slice starts Phase 2 by making ownership semantics real in the product core without turning the repo into a full auth platform.
+
+The current phase-2 state is still intentionally minimal:
+
+- session-based current-user entry is primary for product-facing requests
+- header/default-user behavior remains only as local/dev fallback
+- ownership rules remain centered on workspace ownership rather than a larger auth model
