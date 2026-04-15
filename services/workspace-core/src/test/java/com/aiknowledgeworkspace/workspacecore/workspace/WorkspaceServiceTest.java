@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,13 +15,18 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.data.domain.Sort;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @ExtendWith(MockitoExtension.class)
 class WorkspaceServiceTest {
@@ -30,6 +36,11 @@ class WorkspaceServiceTest {
 
     @Mock
     private CurrentUserService currentUserService;
+
+    @AfterEach
+    void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
+    }
 
     @Test
     void listWorkspacesReturnsOnlyCurrentUserWorkspacesAndEnsuresDefaultWorkspaceFirst() {
@@ -172,6 +183,66 @@ class WorkspaceServiceTest {
     }
 
     @Test
+    void createWorkspaceUsesCurrentUserFromSessionAuthEntry() {
+        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
+        CurrentUserService realCurrentUserService = new CurrentUserService(currentUserProperties);
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                workspaceProperties,
+                realCurrentUserService
+        );
+        Workspace savedWorkspace = workspace(
+                UUID.randomUUID(),
+                "Algorithms",
+                "session-user",
+                false,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        bindSessionCurrentUser(realCurrentUserService, "session-user");
+        when(workspaceRepository.save(any(Workspace.class))).thenReturn(savedWorkspace);
+
+        Workspace result = workspaceService.createWorkspace("Algorithms");
+
+        assertThat(result).isSameAs(savedWorkspace);
+        ArgumentCaptor<Workspace> workspaceCaptor = ArgumentCaptor.forClass(Workspace.class);
+        verify(workspaceRepository).save(workspaceCaptor.capture());
+        assertThat(workspaceCaptor.getValue().getOwnerId()).isEqualTo("session-user");
+    }
+
+    @Test
+    void listWorkspacesUsesCurrentUserFromSessionAuthEntry() {
+        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
+        CurrentUserService realCurrentUserService = new CurrentUserService(currentUserProperties);
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                workspaceProperties,
+                realCurrentUserService
+        );
+        String currentUserId = "session-user";
+        Workspace defaultWorkspace = workspace(
+                UUID.randomUUID(),
+                workspaceProperties.getDefaultName(),
+                currentUserId,
+                true,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        bindSessionCurrentUser(realCurrentUserService, currentUserId);
+        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(Optional.of(defaultWorkspace));
+        when(workspaceRepository.findByOwnerId(eq(currentUserId), any(Sort.class)))
+                .thenReturn(List.of(defaultWorkspace));
+
+        List<Workspace> workspaces = workspaceService.listWorkspaces();
+
+        assertThat(workspaces).containsExactly(defaultWorkspace);
+        verify(workspaceRepository).findByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
+        verify(workspaceRepository).findByOwnerId(eq(currentUserId), eq(workspaceListSort()));
+    }
+
+    @Test
     void resolveWorkspaceOrDefaultCreatesDefaultWorkspaceForCurrentUserWhenMissing() {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
@@ -252,5 +323,13 @@ class WorkspaceServiceTest {
                 Sort.Order.asc("createdAt"),
                 Sort.Order.asc("name")
         );
+    }
+
+    private void bindSessionCurrentUser(CurrentUserService currentUserService, String currentUserId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        currentUserService.establishCurrentUser(session, currentUserId);
+        request.setSession(session);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 }

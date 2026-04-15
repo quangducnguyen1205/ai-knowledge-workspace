@@ -5,6 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.InvalidAssetTitleException;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
@@ -64,6 +65,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidAssetTitle(InvalidAssetTitleException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse("INVALID_ASSET_TITLE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidCurrentUserIdException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidCurrentUserId(InvalidCurrentUserIdException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse("INVALID_CURRENT_USER_ID", exception.getMessage()));
     }
 
     @ExceptionHandler(InvalidTranscriptContextWindowException.class)

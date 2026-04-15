@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
+import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
@@ -16,21 +18,28 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.data.domain.Sort;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.mockito.Mockito.lenient;
@@ -52,6 +61,11 @@ class AssetServiceTest {
 
     @Mock
     private WorkspaceService workspaceService;
+
+    @AfterEach
+    void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
+    }
 
     @BeforeEach
     void setUp() {
@@ -249,6 +263,79 @@ class AssetServiceTest {
 
         verify(workspaceService, never()).ensureDefaultWorkspace();
         verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
+    }
+
+    @Test
+    void listAssetsUsesCurrentUserFromSessionAuthEntry() {
+        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
+        CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
+        WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService realWorkspaceService = new WorkspaceService(
+                workspaceRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                realWorkspaceService
+        );
+
+        String currentUserId = "session-user";
+        Workspace defaultWorkspace = new Workspace(UUID.randomUUID(), "Default Workspace", currentUserId, true);
+        Asset asset = asset(
+                UUID.randomUUID(),
+                "lecture.mp4",
+                "Lecture 1",
+                AssetStatus.SEARCHABLE,
+                defaultWorkspace,
+                Instant.parse("2026-04-10T02:00:00Z")
+        );
+
+        bindSessionCurrentUser(currentUserService, currentUserId);
+        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
+                .thenReturn(Optional.of(defaultWorkspace));
+        when(assetRepository.findByWorkspace_Id(defaultWorkspace.getId(), assetListSort()))
+                .thenReturn(List.of(asset));
+
+        AssetListResponse response = assetService.listAssets(null, null, null, null);
+
+        assertThat(response.items()).extracting(AssetSummaryResponse::assetId)
+                .containsExactly(asset.getId());
+    }
+
+    @Test
+    void getAssetRejectsNonOwnedAssetWhenCurrentUserComesFromSession() {
+        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
+        CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
+        WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
+        WorkspaceService realWorkspaceService = new WorkspaceService(
+                workspaceRepository,
+                new WorkspaceProperties(),
+                currentUserService
+        );
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                realWorkspaceService
+        );
+
+        Workspace nonOwnedWorkspace = new Workspace(UUID.randomUUID(), "Algorithms", "other-user", false);
+        Asset nonOwnedAsset = asset(UUID.randomUUID(), "lecture.mp4", "Lecture 1", AssetStatus.SEARCHABLE, nonOwnedWorkspace, null);
+
+        bindSessionCurrentUser(currentUserService, "session-user");
+        when(assetRepository.findById(nonOwnedAsset.getId())).thenReturn(Optional.of(nonOwnedAsset));
+
+        assertThatThrownBy(() -> assetService.getAsset(nonOwnedAsset.getId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
+                    assertThat(exception.getReason()).isEqualTo("Asset not found");
+                });
     }
 
     @Test
@@ -848,5 +935,13 @@ class AssetServiceTest {
                 text,
                 "2026-04-12T00:00:00Z"
         );
+    }
+
+    private void bindSessionCurrentUser(CurrentUserService currentUserService, String currentUserId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        currentUserService.establishCurrentUser(session, currentUserId);
+        request.setSession(session);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 }
