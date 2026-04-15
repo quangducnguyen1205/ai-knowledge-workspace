@@ -4,6 +4,8 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
 
+For this Phase 2 foundation slice, ownership-aware workspace behavior uses the request header `X-Current-User-Id`. If the header is omitted, Spring falls back to the configured local/dev default user.
+
 ## Helper Shortcut
 
 Default-workspace path:
@@ -76,6 +78,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 
 ### Implemented And Testable Now
 
+- [ ] Call `GET /api/workspaces` without `X-Current-User-Id`.
+- [ ] Confirm Spring returns workspaces for the configured default current user.
 - [ ] Call `POST /api/workspaces` with JSON body:
   - [ ] `name`
 - [ ] Expect HTTP `201`.
@@ -85,11 +89,14 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `createdAt`
 - [ ] Call `GET /api/workspaces`.
 - [ ] Expect HTTP `200`.
-- [ ] Confirm the created workspace appears in the list.
-- [ ] Confirm the configured default workspace also appears once it has been created lazily or explicitly read.
+- [ ] Confirm the created workspace appears in the list for that current user.
+- [ ] Confirm the current user's default workspace also appears once it has been created lazily or explicitly read.
 - [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
+- [ ] Call `GET /api/workspaces` with a different `X-Current-User-Id`.
+- [ ] Confirm the first user's non-default workspace does not appear.
+- [ ] Confirm a separate default workspace is created lazily for the second user if needed.
 
 ### Failure Path
 
@@ -103,6 +110,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
+- [ ] Call `GET /api/workspaces/{workspaceId}` for a workspace created under one user, but send a different `X-Current-User-Id`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 4. Product Upload Flow Checks
 
@@ -121,7 +130,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `workspaceId`
 - [ ] Confirm the response does not expose raw `fastapiTaskId`.
 - [ ] Confirm the response does not expose raw `fastapiVideoId`.
-- [ ] If `workspaceId` was omitted, confirm the response uses the configured default workspace ID.
+- [ ] If `workspaceId` was omitted, confirm the response uses the current user's default workspace.
 - [ ] Confirm initial `assetStatus` is:
   - [ ] `PROCESSING` for accepted upstream work
   - [ ] or `FAILED` if the upstream acknowledgment is already failed
@@ -165,7 +174,7 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `assetStatus`
   - [ ] `workspaceId`
   - [ ] `createdAt`
-- [ ] Confirm omitted `workspaceId` uses the configured default workspace scope.
+- [ ] Confirm omitted `workspaceId` uses the current user's default workspace scope.
 - [ ] Call `GET /api/assets?page=0&size=1`.
 - [ ] Confirm paging metadata changes consistently with the returned subset.
 - [ ] Call `GET /api/assets?assetStatus=SEARCHABLE`.
@@ -173,12 +182,14 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] If you uploaded into a known non-default workspace, call `GET /api/assets?workspaceId=<workspaceId>`.
 - [ ] Confirm the uploaded asset appears in that workspace-scoped list.
 - [ ] Confirm non-default workspace listing only returns assets in that workspace.
+- [ ] Call `GET /api/assets` with a different `X-Current-User-Id`.
+- [ ] Confirm assets in another user's workspace do not appear.
 
 ### Legacy Default-Workspace Path
 
 - [ ] If you have older local assets with null `workspace_id`, call `GET /api/assets` without `workspaceId`.
 - [ ] Confirm those legacy assets still appear in the default-workspace list.
-- [ ] Confirm those rows are backfilled to the default workspace after the read path.
+- [ ] Confirm those rows are backfilled to the current user's default workspace after the read path.
 
 ### Failure Path
 
@@ -206,6 +217,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
+- [ ] Call `GET /api/assets?workspaceId=<workspace-owned-by-another-user>`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 6. Product Status Refresh Checks
 
@@ -410,9 +423,11 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
   - [ ] `createdAt`
   - [ ] `score`
 - [ ] Confirm results come from Spring's product response shape, not a FastAPI search response.
-- [ ] Confirm `workspaceIdFilter` matches the requested workspace or the configured default workspace when omitted.
+- [ ] Confirm `workspaceIdFilter` matches the requested workspace or the current user's default workspace when omitted.
 - [ ] Confirm search only returns results inside the resolved workspace scope.
 - [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
+- [ ] Call `GET /api/search?q=your-query` with a different `X-Current-User-Id`.
+- [ ] Confirm results from another user's workspace do not appear.
 
 ### Optional Asset Filter Check
 
@@ -461,6 +476,8 @@ The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does no
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
+- [ ] Call `GET /api/search?q=test&workspaceId=<workspace-owned-by-another-user>`.
+- [ ] Expect the same ownership-safe HTTP `404`.
 
 ### Elasticsearch Failure Path
 

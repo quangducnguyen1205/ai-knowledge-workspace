@@ -8,6 +8,15 @@ This document is the current product-facing API summary for Repo B (`workspace-c
 - Repo A (FastAPI) remains an internal processing dependency.
 - FastAPI `/videos/search` is not part of the product API.
 
+## Current User Foundation
+
+Repo B now uses a minimal current-user identity foundation for ownership-aware workspace scope.
+
+- Spring reads the current user from the request header `X-Current-User-Id`.
+- If that header is omitted, Spring falls back to the configured local/dev default user.
+- This slice is intentionally not a full authentication platform.
+- Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing and search.
+
 ## Current Product Endpoints
 
 ### `POST /api/workspaces`
@@ -32,7 +41,8 @@ Current behavior:
 
 - This is a minimal product-owned workspace create endpoint.
 - Spring trims the requested name before persisting.
-- Workspace create stays intentionally small and does not add ownership, sharing, or collaboration rules.
+- The created workspace is owned by the current user.
+- Workspace create stays intentionally small and does not add sharing, collaboration, or a full auth model.
 
 Common failure cases:
 
@@ -53,7 +63,8 @@ Response:
 
 Current behavior:
 
-- Spring ensures the configured default workspace exists before returning the list.
+- Spring ensures the current user's default workspace exists before returning the list.
+- The list only returns workspaces owned by the current user.
 - Results are intentionally minimal and do not include asset counts or membership data.
 
 ### `GET /api/workspaces/{workspaceId}`
@@ -70,12 +81,13 @@ Response:
 
 Current behavior:
 
-- Reading the configured default workspace ID returns the bootstrap workspace, creating it first if needed.
+- Workspace read is ownership-aware.
+- The same `WORKSPACE_NOT_FOUND` response is used when a workspace does not exist or is not owned by the current user.
 
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
-- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
 
 ### `GET /api/assets`
 
@@ -106,11 +118,11 @@ Response:
 
 Current behavior:
 
-- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
+- Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Pagination and optional `assetStatus` filtering are applied inside the resolved workspace scope.
 - Non-default workspace listing only returns assets already associated with that workspace.
 - Default-workspace listing also includes older local assets whose `workspace_id` is still null.
-- When default-workspace listing encounters a returned legacy asset with no workspace, Spring backfills that asset to the default workspace.
+- When default-workspace listing encounters a returned legacy asset with no workspace, Spring backfills that asset to the current user's default workspace.
 - Ordering is deterministic:
   - `createdAt desc`
   - tie-break by `assetId desc`
@@ -122,7 +134,7 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_ASSET_PAGE"` if `page` is malformed or negative
 - HTTP `400` with `code = "INVALID_ASSET_SIZE"` if `size` is malformed, non-positive, or greater than `100`
 - HTTP `400` with `code = "INVALID_ASSET_STATUS"` if `assetStatus` is not one of the current product asset statuses
-- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 
 ### `POST /api/assets/upload`
 
@@ -148,7 +160,7 @@ Response:
 Current behavior:
 
 - Spring forwards `file` and `title` to FastAPI upload.
-- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
+- Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Spring validates the upstream response before persisting local state.
 - Spring associates the created asset with one workspace in Repo B.
 - Raw FastAPI IDs are stored internally but not returned to the client.
@@ -157,7 +169,7 @@ Common failure cases:
 
 - HTTP `400` if `file` is missing or empty
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
-- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `502` or `504` if upstream FastAPI fails
 
 ### `GET /api/assets/{assetId}`
@@ -173,7 +185,7 @@ Current behavior:
 
 - This remains a simple product-owned asset read endpoint.
 - It is useful for debugging and local inspection.
-- If the asset still has no workspace association, Spring backfills it to the default workspace before returning it.
+- If the asset still has no workspace association, Spring backfills it to the current user's default workspace before returning it.
 
 Common failure cases:
 
@@ -384,8 +396,8 @@ Each result currently contains:
 Current behavior:
 
 - Search is backed by Elasticsearch, not FastAPI.
-- Spring resolves the requested `workspaceId`, or falls back to the configured default workspace when omitted.
-- Search only considers documents inside the resolved workspace scope.
+- Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
+- Search only considers documents inside the resolved workspace scope owned by the current user.
 - Only documents for assets already marked `SEARCHABLE` are eligible.
 - `assetId` is an exact filter when provided.
 - The current search baseline is simple text search over transcript text and asset title.
@@ -395,7 +407,7 @@ Common failure cases:
 
 - HTTP `400` if `q` is missing or blank
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
-- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 

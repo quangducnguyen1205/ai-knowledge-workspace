@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
@@ -14,27 +15,33 @@ public class WorkspaceService {
 
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceProperties workspaceProperties;
+    private final CurrentUserService currentUserService;
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
-            WorkspaceProperties workspaceProperties
+            WorkspaceProperties workspaceProperties,
+            CurrentUserService currentUserService
     ) {
         this.workspaceRepository = workspaceRepository;
         this.workspaceProperties = workspaceProperties;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
     public Workspace createWorkspace(String name) {
-        return workspaceRepository.save(new Workspace(null, normalizeWorkspaceName(name)));
+        return workspaceRepository.save(new Workspace(
+                null,
+                normalizeWorkspaceName(name),
+                currentUserService.getCurrentUserId(),
+                false
+        ));
     }
 
     @Transactional
     public List<Workspace> listWorkspaces() {
-        ensureDefaultWorkspace();
-        return workspaceRepository.findAll(Sort.by(
-                Sort.Order.asc("createdAt"),
-                Sort.Order.asc("name")
-        ));
+        String currentUserId = currentUserService.getCurrentUserId();
+        ensureDefaultWorkspace(currentUserId);
+        return workspaceRepository.findByOwnerId(currentUserId, workspaceListSort());
     }
 
     @Transactional
@@ -42,26 +49,31 @@ public class WorkspaceService {
         return resolveWorkspaceOrDefault(workspaceId);
     }
 
-    public UUID getDefaultWorkspaceId() {
-        return workspaceProperties.getDefaultId();
+    public boolean isDefaultWorkspace(Workspace workspace) {
+        return workspace != null && workspace.isDefaultWorkspace();
     }
 
     @Transactional
     public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
-        if (workspaceId == null || workspaceProperties.getDefaultId().equals(workspaceId)) {
-            return ensureDefaultWorkspace();
+        String currentUserId = currentUserService.getCurrentUserId();
+        if (workspaceId == null) {
+            return ensureDefaultWorkspace(currentUserId);
         }
 
-        return workspaceRepository.findById(workspaceId)
+        return workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)
                 .orElseThrow(() -> new WorkspaceNotFoundException(workspaceId));
     }
 
     @Transactional
     public Workspace ensureDefaultWorkspace() {
-        return workspaceRepository.findById(workspaceProperties.getDefaultId())
-                .orElseGet(() -> workspaceRepository.save(
-                        new Workspace(workspaceProperties.getDefaultId(), workspaceProperties.getDefaultName())
-                ));
+        return ensureDefaultWorkspace(currentUserService.getCurrentUserId());
+    }
+
+    @Transactional
+    public Workspace ensureDefaultWorkspace(String currentUserId) {
+        return workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)
+                .orElseGet(() -> adoptLegacyDefaultWorkspaceIfNeeded(currentUserId)
+                        .orElseGet(() -> createDefaultWorkspace(currentUserId)));
     }
 
     private String normalizeWorkspaceName(String name) {
@@ -77,5 +89,55 @@ public class WorkspaceService {
         }
 
         return normalizedName;
+    }
+
+    private Sort workspaceListSort() {
+        return Sort.by(
+                Sort.Order.asc("createdAt"),
+                Sort.Order.asc("name")
+        );
+    }
+
+    private java.util.Optional<Workspace> adoptLegacyDefaultWorkspaceIfNeeded(String currentUserId) {
+        if (!currentUserService.isDefaultUser(currentUserId)) {
+            return java.util.Optional.empty();
+        }
+
+        return workspaceRepository.findById(workspaceProperties.getDefaultId())
+                .filter(workspace -> !StringUtils.hasText(workspace.getOwnerId())
+                        || currentUserId.equals(workspace.getOwnerId()))
+                .map(workspace -> {
+                    boolean changed = false;
+
+                    if (!currentUserId.equals(workspace.getOwnerId())) {
+                        workspace.setOwnerId(currentUserId);
+                        changed = true;
+                    }
+
+                    if (!workspace.isDefaultWorkspace()) {
+                        workspace.setDefaultWorkspace(true);
+                        changed = true;
+                    }
+
+                    if (!StringUtils.hasText(workspace.getName())) {
+                        workspace.setName(workspaceProperties.getDefaultName());
+                        changed = true;
+                    }
+
+                    return changed ? workspaceRepository.save(workspace) : workspace;
+                });
+    }
+
+    private Workspace createDefaultWorkspace(String currentUserId) {
+        UUID workspaceId = currentUserService.isDefaultUser(currentUserId)
+                ? workspaceProperties.getDefaultId()
+                : null;
+
+        return workspaceRepository.save(new Workspace(
+                workspaceId,
+                workspaceProperties.getDefaultName(),
+                currentUserId,
+                true
+        ));
     }
 }

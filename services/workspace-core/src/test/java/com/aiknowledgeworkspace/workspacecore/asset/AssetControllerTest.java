@@ -59,7 +59,7 @@ class AssetControllerTest {
     }
 
     @Test
-    void uploadReturnsStructuredNotFoundForUnknownWorkspace() throws Exception {
+    void uploadReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         MockMultipartFile file = new MockMultipartFile(
                 "file",
@@ -149,7 +149,7 @@ class AssetControllerTest {
     }
 
     @Test
-    void listAssetsReturnsStructuredNotFoundForUnknownWorkspace() throws Exception {
+    void listAssetsReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         when(assetService.listAssets(workspaceId, null, null, null))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));

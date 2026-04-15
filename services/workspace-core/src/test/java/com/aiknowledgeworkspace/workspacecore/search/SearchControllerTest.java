@@ -178,7 +178,7 @@ class SearchControllerTest {
     }
 
     @Test
-    void unknownWorkspaceReturnsNotFound() throws Exception {
+    void unknownOrNonOwnedWorkspaceReturnsNotFound() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));

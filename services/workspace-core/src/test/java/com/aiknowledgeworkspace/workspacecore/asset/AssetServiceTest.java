@@ -179,6 +179,7 @@ class AssetServiceTest {
 
         UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         Workspace defaultWorkspace = new Workspace(defaultWorkspaceId, "Default Workspace");
+        defaultWorkspace.setDefaultWorkspace(true);
         Asset workspaceAsset = asset(
                 UUID.randomUUID(),
                 "lecture.mp4",
@@ -205,7 +206,7 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(workspaceService.getDefaultWorkspaceId()).thenReturn(defaultWorkspaceId);
+        when(workspaceService.isDefaultWorkspace(defaultWorkspace)).thenReturn(true);
         when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(workspaceAsset));
         when(assetRepository.findByWorkspaceIsNull(assetListSort()))
@@ -250,7 +251,6 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(workspaceService.getDefaultWorkspaceId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
                 .thenReturn(List.of(asset));
 
@@ -300,7 +300,6 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(workspaceService.getDefaultWorkspaceId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
                 .thenReturn(List.of(oldestAsset, middleAsset, newestAsset));
 
@@ -345,7 +344,6 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(workspaceService.getDefaultWorkspaceId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
                 .thenReturn(List.of(processingAsset, searchableAsset));
 
@@ -413,6 +411,7 @@ class AssetServiceTest {
 
         UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         Workspace defaultWorkspace = new Workspace(defaultWorkspaceId, "Default Workspace");
+        defaultWorkspace.setDefaultWorkspace(true);
         Instant sharedCreatedAt = Instant.parse("2026-04-10T02:00:00Z");
         UUID smallerId = UUID.fromString("00000000-0000-0000-0000-000000000010");
         UUID largerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
@@ -442,7 +441,7 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(workspaceService.getDefaultWorkspaceId()).thenReturn(defaultWorkspaceId);
+        when(workspaceService.isDefaultWorkspace(defaultWorkspace)).thenReturn(true);
         when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(workspaceAsset));
         when(assetRepository.findByWorkspaceIsNull(assetListSort()))
