@@ -1,11 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,10 +18,16 @@ public class AssetPersistenceService {
 
     private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
+    private final AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
 
-    public AssetPersistenceService(AssetRepository assetRepository, ProcessingJobRepository processingJobRepository) {
+    public AssetPersistenceService(
+            AssetRepository assetRepository,
+            ProcessingJobRepository processingJobRepository,
+            AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository
+    ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
+        this.assetTranscriptRowSnapshotRepository = assetTranscriptRowSnapshotRepository;
     }
 
     @Transactional
@@ -110,10 +120,46 @@ public class AssetPersistenceService {
         return asset;
     }
 
+    @Transactional(readOnly = true)
+    public List<AssetTranscriptRowSnapshot> loadTranscriptSnapshot(UUID assetId) {
+        return sortTranscriptSnapshots(assetTranscriptRowSnapshotRepository.findByAssetId(assetId));
+    }
+
+    @Transactional
+    public List<AssetTranscriptRowSnapshot> replaceTranscriptSnapshot(
+            Asset asset,
+            List<FastApiTranscriptRowResponse> transcriptRows
+    ) {
+        assetTranscriptRowSnapshotRepository.deleteByAssetId(asset.getId());
+
+        List<AssetTranscriptRowSnapshot> snapshots = transcriptRows.stream()
+                .map(transcriptRow -> new AssetTranscriptRowSnapshot(
+                        asset.getId(),
+                        transcriptRow.id(),
+                        transcriptRow.videoId(),
+                        transcriptRow.segmentIndex(),
+                        transcriptRow.text(),
+                        transcriptRow.createdAt()
+                ))
+                .toList();
+
+        return sortTranscriptSnapshots(assetTranscriptRowSnapshotRepository.saveAll(snapshots));
+    }
+
     @Transactional
     public void deleteAssetRecords(Asset asset) {
+        assetTranscriptRowSnapshotRepository.deleteByAssetId(asset.getId());
         processingJobRepository.findByAssetId(asset.getId())
                 .ifPresent(processingJobRepository::delete);
         assetRepository.delete(asset);
+    }
+
+    private List<AssetTranscriptRowSnapshot> sortTranscriptSnapshots(List<AssetTranscriptRowSnapshot> snapshots) {
+        return snapshots.stream()
+                .sorted(Comparator.comparing(
+                        AssetTranscriptRowSnapshot::getSegmentIndex,
+                        Comparator.nullsLast(Integer::compareTo)
+                ))
+                .toList();
     }
 }

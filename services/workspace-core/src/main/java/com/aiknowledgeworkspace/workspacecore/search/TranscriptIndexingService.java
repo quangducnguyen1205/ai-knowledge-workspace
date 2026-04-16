@@ -5,8 +5,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -62,7 +62,7 @@ public class TranscriptIndexingService {
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
 
-        List<FastApiTranscriptRowResponse> transcriptRows = assetService.loadUsableTranscriptRows(asset, processingJob);
+        List<AssetTranscriptRowSnapshot> transcriptRows = assetService.loadUsableTranscriptSnapshot(asset, processingJob);
 
         AssetStatus fallbackStatus = asset.getStatus() == AssetStatus.SEARCHABLE
                 ? AssetStatus.SEARCHABLE
@@ -81,7 +81,7 @@ public class TranscriptIndexingService {
         return new AssetIndexResponse(asset.getId(), AssetStatus.SEARCHABLE, transcriptRows.size());
     }
 
-    private void bulkIndexTranscriptRows(Asset asset, List<FastApiTranscriptRowResponse> transcriptRows) {
+    private void bulkIndexTranscriptRows(Asset asset, List<AssetTranscriptRowSnapshot> transcriptRows) {
         String bulkRequestBody = buildBulkRequestBody(asset, transcriptRows);
         JsonNode bulkResponse = execute(
                 () -> elasticsearchRestClient.post()
@@ -95,11 +95,11 @@ public class TranscriptIndexingService {
         validateBulkResponse(bulkResponse);
     }
 
-    private String buildBulkRequestBody(Asset asset, List<FastApiTranscriptRowResponse> transcriptRows) {
+    private String buildBulkRequestBody(Asset asset, List<AssetTranscriptRowSnapshot> transcriptRows) {
         StringBuilder body = new StringBuilder();
 
         try {
-            for (FastApiTranscriptRowResponse transcriptRow : transcriptRows) {
+            for (AssetTranscriptRowSnapshot transcriptRow : transcriptRows) {
                 String documentId = transcriptIndexDocumentMapper.toDocumentId(asset, transcriptRow);
                 TranscriptIndexDocument document = transcriptIndexDocumentMapper.toDocument(
                         asset,

@@ -153,7 +153,7 @@ public class AssetService {
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
 
-        return loadUsableTranscriptRows(asset, processingJob).stream()
+        return loadUsableTranscriptSnapshot(asset, processingJob).stream()
                 .map(this::toAssetTranscriptRowResponse)
                 .toList();
     }
@@ -190,7 +190,7 @@ public class AssetService {
         );
     }
 
-    public List<FastApiTranscriptRowResponse> loadUsableTranscriptRows(Asset asset, ProcessingJob processingJob) {
+    public List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJob processingJob) {
         if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -198,14 +198,21 @@ public class AssetService {
             );
         }
 
-        List<FastApiTranscriptRowResponse> transcriptRows = fastApiProcessingClient.getTranscript(processingJob.getFastapiVideoId());
+        List<AssetTranscriptRowSnapshot> transcriptRows = assetPersistenceService.loadTranscriptSnapshot(asset.getId());
 
         if (transcriptRows.isEmpty()) {
-            assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Transcript is empty for this asset"
-            );
+            List<FastApiTranscriptRowResponse> upstreamTranscriptRows =
+                    fastApiProcessingClient.getTranscript(processingJob.getFastapiVideoId());
+
+            if (upstreamTranscriptRows.isEmpty()) {
+                assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Transcript is empty for this asset"
+                );
+            }
+
+            transcriptRows = assetPersistenceService.replaceTranscriptSnapshot(asset, upstreamTranscriptRows);
         }
 
         AssetStatus updatedAssetStatus = asset.getStatus() == AssetStatus.SEARCHABLE
@@ -213,8 +220,6 @@ public class AssetService {
                 : AssetStatus.TRANSCRIPT_READY;
         assetPersistenceService.updateAssetStatus(asset, updatedAssetStatus);
 
-        // TODO: after transcript rows are indexed successfully, move TRANSCRIPT_READY to SEARCHABLE.
-        // TODO: if repeated transcript reads become common, consider a local transcript cache or table.
         return transcriptRows;
     }
 
@@ -433,13 +438,13 @@ public class AssetService {
         );
     }
 
-    private AssetTranscriptRowResponse toAssetTranscriptRowResponse(FastApiTranscriptRowResponse transcriptRow) {
+    private AssetTranscriptRowResponse toAssetTranscriptRowResponse(AssetTranscriptRowSnapshot transcriptRow) {
         return new AssetTranscriptRowResponse(
-                transcriptRow.id(),
-                transcriptRow.videoId(),
-                transcriptRow.segmentIndex(),
-                transcriptRow.text(),
-                transcriptRow.createdAt()
+                transcriptRow.getTranscriptRowId(),
+                transcriptRow.getVideoId(),
+                transcriptRow.getSegmentIndex(),
+                transcriptRow.getText(),
+                transcriptRow.getCreatedAt()
         );
     }
 }

@@ -265,6 +265,7 @@ Response:
 Current behavior:
 
 - Deletion is asset-centric and always removes the local `Asset` record.
+- Deletion also removes any local transcript snapshot rows for that asset.
 - Deletion also removes the linked `ProcessingJob` record in the same local DB transaction when it exists.
 - Spring allows deletion for assets in `PROCESSING`, `TRANSCRIPT_READY`, `SEARCHABLE`, or `FAILED`.
 - If the asset is currently `SEARCHABLE`, Spring first deletes that asset's transcript-row documents from Elasticsearch before deleting local DB records.
@@ -316,7 +317,8 @@ Response:
 
 Current behavior:
 
-- Spring fetches transcript rows from FastAPI using stored `fastapiVideoId`.
+- Spring serves transcript rows from a local product-owned transcript snapshot in the normal path.
+- If no local snapshot exists yet but processing has already succeeded, Spring fetches transcript rows from FastAPI using stored `fastapiVideoId`, validates that the transcript is usable, persists the local snapshot, then returns it.
 - Only the currently verified transcript fields are exposed.
 - Transcript fetch is rejected until `processingJobStatus = SUCCEEDED`.
 - Empty transcript is treated as not usable.
@@ -356,6 +358,7 @@ Each context row currently contains:
 Current behavior:
 
 - Spring resolves transcript context through the same product-side transcript path used by `GET /api/assets/{assetId}/transcript`.
+- Transcript context therefore uses the same local transcript snapshot in the normal path.
 - Context rows are selected by transcript ordering on `segmentIndex`.
 - If a transcript row has a real upstream `id`, context lookup matches only that `id`.
 - The fallback identifier `segment-{segmentIndex}` is accepted only when the upstream transcript row `id` is missing or blank.
@@ -383,6 +386,8 @@ Response:
 Current behavior:
 
 - Indexing is explicit and product-side.
+- Spring indexes from the local product-owned transcript snapshot in the normal path.
+- If no local snapshot exists yet but processing has already succeeded, Spring captures that snapshot first through the same transcript path before indexing.
 - Spring builds one logical Elasticsearch document per transcript row and writes them through one bulk indexing request per asset.
 - Indexed transcript-row documents include `workspaceId`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.

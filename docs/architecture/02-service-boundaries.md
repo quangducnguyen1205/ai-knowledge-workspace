@@ -18,8 +18,8 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 ### Not Implemented Yet In This Repo Phase
 
-- Authentication and user identity
-- Authorization and workspace ownership enforcement
+- A full authentication platform
+- Collaboration, sharing, roles, and broader authorization policies
 
 ### Should Not Own In Phase 1
 
@@ -93,4 +93,4 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 - Spring Boot is the only product entry point for clients.
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
-- Authentication and authorization are intentionally out of scope in the current implemented slice.
+- Current-user entry and ownership enforcement now exist in minimal form, but broader auth/collaboration concerns remain out of scope.

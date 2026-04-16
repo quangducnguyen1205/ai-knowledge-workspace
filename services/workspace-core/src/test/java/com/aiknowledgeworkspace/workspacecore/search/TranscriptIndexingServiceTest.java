@@ -20,8 +20,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -85,14 +85,14 @@ class TranscriptIndexingServiceTest {
         UUID workspaceId = UUID.randomUUID();
         Asset asset = asset(assetId, workspaceId, "Lecture 1", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-1", "video-1");
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-1", "video-1", 0, "Binary search tree overview"),
-                transcriptRow("row-2", "video-1", 1, "Traversal example")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-1", "video-1", 0, "Binary search tree overview"),
+                transcriptRow(assetId, "row-2", "video-1", 1, "Traversal example")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
                 .andExpect(method(HttpMethod.POST))
@@ -135,7 +135,7 @@ class TranscriptIndexingServiceTest {
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob))
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob))
                 .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Transcript is empty for this asset"));
 
         assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
@@ -154,14 +154,14 @@ class TranscriptIndexingServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 3", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-3", "video-3");
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-3", "video-3", 0, "Heap property explanation"),
-                transcriptRow("row-4", "video-3", 1, "Heap sort walkthrough")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-3", "video-3", 0, "Heap property explanation"),
+                transcriptRow(assetId, "row-4", "video-3", 1, "Heap sort walkthrough")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
                 .andExpect(method(HttpMethod.POST))
@@ -193,13 +193,13 @@ class TranscriptIndexingServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 4", AssetStatus.TRANSCRIPT_READY);
         ProcessingJob processingJob = processingJob(assetId, "task-4", "video-4");
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-5", "video-4", 0, "Red black tree overview")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-5", "video-4", 0, "Red black tree overview")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
                 .andExpect(method(HttpMethod.POST))
@@ -222,15 +222,15 @@ class TranscriptIndexingServiceTest {
         Asset firstAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.TRANSCRIPT_READY);
         Asset searchableAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.SEARCHABLE);
         ProcessingJob processingJob = processingJob(assetId, "task-5", "video-5");
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-6", "video-5", 0, "Graph traversal overview"),
-                transcriptRow("row-7", "video-5", 1, "Breadth first search example")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-6", "video-5", 0, "Graph traversal overview"),
+                transcriptRow(assetId, "row-7", "video-5", 1, "Breadth first search example")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(firstAsset, searchableAsset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(firstAsset, processingJob)).thenReturn(transcriptRows);
-        when(assetService.loadUsableTranscriptRows(searchableAsset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(firstAsset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(searchableAsset, processingJob)).thenReturn(transcriptRows);
 
         mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
                 .andExpect(method(HttpMethod.POST))
@@ -266,13 +266,13 @@ class TranscriptIndexingServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 6", AssetStatus.SEARCHABLE);
         ProcessingJob processingJob = processingJob(assetId, "task-6", "video-6");
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-8", "video-6", 0, "Union find recap")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-8", "video-6", 0, "Union find recap")
         );
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptRows(asset, processingJob)).thenReturn(transcriptRows);
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
                 .andExpect(method(HttpMethod.POST))
@@ -310,9 +310,16 @@ class TranscriptIndexingServiceTest {
         );
     }
 
-    private FastApiTranscriptRowResponse transcriptRow(String id, String videoId, int segmentIndex, String text) {
-        return new FastApiTranscriptRowResponse(
-                id,
+    private AssetTranscriptRowSnapshot transcriptRow(
+            UUID assetId,
+            String transcriptRowId,
+            String videoId,
+            int segmentIndex,
+            String text
+    ) {
+        return new AssetTranscriptRowSnapshot(
+                assetId,
+                transcriptRowId,
                 videoId,
                 segmentIndex,
                 text,
