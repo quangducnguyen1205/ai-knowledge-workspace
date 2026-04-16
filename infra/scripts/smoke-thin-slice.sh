@@ -8,10 +8,15 @@ SMOKE_POLL_TIMEOUT_SECONDS="${SMOKE_POLL_TIMEOUT_SECONDS:-180}"
 SMOKE_WORKSPACE_NAME="${SMOKE_WORKSPACE_NAME:-}"
 SMOKE_VERIFY_CONTEXT="${SMOKE_VERIFY_CONTEXT:-}"
 SMOKE_CONTEXT_WINDOW="${SMOKE_CONTEXT_WINDOW:-2}"
+SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-smoke-user@example.com}"
+SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-password123}"
+SMOKE_USE_LEGACY_AUTH_FALLBACK="${SMOKE_USE_LEGACY_AUTH_FALLBACK:-}"
+SMOKE_LEGACY_USER_ID="${SMOKE_LEGACY_USER_ID:-smoke-dev-user}"
 
 API_HTTP_CODE=""
 API_BODY_FILE=""
 TEMP_DIR=""
+COOKIE_JAR=""
 SMOKE_WORKSPACE_ID=""
 
 usage() {
@@ -26,14 +31,21 @@ Environment variables:
   SMOKE_WORKSPACE_NAME          Optional: create and use a non-default workspace for this run
   SMOKE_VERIFY_CONTEXT          Optional: when set to 1/true/yes/on, fetch transcript context for the top search hit
   SMOKE_CONTEXT_WINDOW          Optional: transcript context window to use when SMOKE_VERIFY_CONTEXT is enabled (default: 2)
+  SMOKE_AUTH_EMAIL              Default: smoke-user@example.com
+  SMOKE_AUTH_PASSWORD           Default: password123
+  SMOKE_USE_LEGACY_AUTH_FALLBACK Optional: when set to 1/true/yes/on, skip register/login and use /api/auth/session instead
+  SMOKE_LEGACY_USER_ID          Optional: userId to use with the legacy auth-session fallback (default: smoke-dev-user)
 
 Notes:
   - Repo A, PostgreSQL, Elasticsearch, and workspace-core must already be running.
+  - The helper now uses the authenticated product path by default:
+    register/login -> /api/me -> workspace -> upload -> status -> transcript -> index -> search -> context.
   - If search-query is omitted, the script derives a simple query from the first transcript row.
   - If SMOKE_WORKSPACE_NAME is set, the script creates a workspace, reads it back, uploads into it,
     lists assets in it, and searches within it.
   - If SMOKE_VERIFY_CONTEXT is enabled, the script also opens the top search hit through
     /api/assets/{assetId}/transcript/context.
+  - The older /api/auth/session path remains available only when SMOKE_USE_LEGACY_AUTH_FALLBACK is enabled.
 EOF
 }
 
@@ -69,6 +81,7 @@ pretty_print_body() {
 
 fail_api() {
     local message="$1"
+    local error_code=""
     echo
     echo "ERROR: $message" >&2
     echo "HTTP status: $API_HTTP_CODE" >&2
@@ -76,7 +89,25 @@ fail_api() {
     if [[ -s "$API_BODY_FILE" ]]; then
         echo "Response body:" >&2
         pretty_print_body "$API_BODY_FILE" >&2
+        error_code="$(jq -r '.code // empty' "$API_BODY_FILE" 2>/dev/null || true)"
     fi
+
+    case "$error_code" in
+        FASTAPI_CONNECTIVITY_ERROR)
+            echo "Classification hint: likely upstream FastAPI readiness/connectivity issue." >&2
+            ;;
+        ELASTICSEARCH_UNAVAILABLE|ELASTICSEARCH_INTEGRATION_ERROR)
+            echo "Classification hint: likely Elasticsearch readiness/integration issue." >&2
+            ;;
+        INVALID_CREDENTIALS|INVALID_AUTH_REQUEST|INVALID_EMAIL|INVALID_PASSWORD|AUTHENTICATION_REQUIRED)
+            echo "Classification hint: auth/session setup failed before the product flow could run." >&2
+            ;;
+        "")
+            if [[ "$API_HTTP_CODE" == "502" || "$API_HTTP_CODE" == "504" ]]; then
+                echo "Classification hint: likely upstream dependency or integration issue rather than a frontend proxy problem." >&2
+            fi
+            ;;
+    esac
 
     exit 1
 }
@@ -91,7 +122,7 @@ api_call() {
 
     body_file="$(mktemp "${TEMP_DIR}/response.XXXXXX")"
 
-    if ! API_HTTP_CODE=$(curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$url" "$@"); then
+    if ! API_HTTP_CODE=$(curl -sS -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$body_file" -w "%{http_code}" -X "$method" "$url" "$@"); then
         fail "Spring is unreachable at ${WORKSPACE_CORE_BASE_URL}. Make sure workspace-core is running."
     fi
 
@@ -139,6 +170,67 @@ derive_search_query() {
     ' <<<"$transcript_text"
 }
 
+ensure_workspace_core_ready() {
+    print_step "Checking workspace-core health"
+    api_call GET "/health"
+
+    if [[ "$API_HTTP_CODE" != "200" ]]; then
+        fail_api "workspace-core health check failed"
+    fi
+
+    echo "healthStatus: $(read_json '.status')"
+    echo "healthService: $(read_json '.service')"
+}
+
+establish_authenticated_session() {
+    if is_truthy "$SMOKE_USE_LEGACY_AUTH_FALLBACK"; then
+        print_step "Establishing local/dev auth-session fallback"
+        LEGACY_AUTH_BODY="$(jq -nc --arg userId "$SMOKE_LEGACY_USER_ID" '{userId: $userId}')"
+        api_call POST "/api/auth/session" \
+            -H "Content-Type: application/json" \
+            --data "$LEGACY_AUTH_BODY"
+
+        if [[ "$API_HTTP_CODE" != "200" ]]; then
+            fail_api "Legacy auth-session setup failed"
+        fi
+
+        echo "authMode: legacy-auth-session"
+        echo "currentUserId: $(read_json '.userId')"
+        return
+    fi
+
+    print_step "Establishing authenticated product session"
+    AUTH_REQUEST_BODY="$(jq -nc --arg email "$SMOKE_AUTH_EMAIL" --arg password "$SMOKE_AUTH_PASSWORD" '{email: $email, password: $password}')"
+
+    api_call POST "/api/auth/register" \
+        -H "Content-Type: application/json" \
+        --data "$AUTH_REQUEST_BODY"
+
+    if [[ "$API_HTTP_CODE" == "201" ]]; then
+        echo "authMode: register"
+    elif [[ "$API_HTTP_CODE" == "409" && "$(read_json '.code')" == "EMAIL_ALREADY_REGISTERED" ]]; then
+        api_call POST "/api/auth/login" \
+            -H "Content-Type: application/json" \
+            --data "$AUTH_REQUEST_BODY"
+
+        if [[ "$API_HTTP_CODE" != "200" ]]; then
+            fail_api "Auth login failed after duplicate-register fallback"
+        fi
+
+        echo "authMode: login"
+    else
+        fail_api "Auth register failed"
+    fi
+
+    api_call GET "/api/me"
+    if [[ "$API_HTTP_CODE" != "200" ]]; then
+        fail_api "Authenticated current-user read failed"
+    fi
+
+    echo "authenticatedUserId: $(read_json '.id')"
+    echo "authenticatedUserEmail: $(read_json '.email')"
+}
+
 if [[ $# -lt 1 ]]; then
     usage
     exit 1
@@ -165,6 +257,11 @@ require_command jq
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/workspace-core-smoke.XXXXXX")"
 trap cleanup EXIT
+COOKIE_JAR="${TEMP_DIR}/cookies.txt"
+touch "$COOKIE_JAR"
+
+ensure_workspace_core_ready
+establish_authenticated_session
 
 if [[ -n "${SMOKE_WORKSPACE_NAME// }" ]]; then
     print_step "Creating a non-default workspace"
@@ -235,7 +332,7 @@ if [[ "$API_HTTP_CODE" != "200" ]]; then
     fail_api "Asset list failed"
 fi
 
-LISTED_ASSET_COUNT="$(jq --arg asset_id "$ASSET_ID" '[.[] | select(.assetId == $asset_id)] | length' "$API_BODY_FILE")"
+LISTED_ASSET_COUNT="$(jq --arg asset_id "$ASSET_ID" '[.items[]? | select(.assetId == $asset_id)] | length' "$API_BODY_FILE")"
 echo "matchingListedAssets: ${LISTED_ASSET_COUNT}"
 
 if (( LISTED_ASSET_COUNT == 0 )); then
