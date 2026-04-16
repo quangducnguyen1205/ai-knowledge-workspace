@@ -5,7 +5,11 @@ import com.aiknowledgeworkspace.workspacecore.asset.InvalidAssetTitleException;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.EmailAlreadyRegisteredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidAuthRequestException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCredentialsException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
@@ -71,6 +75,30 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidCurrentUserId(InvalidCurrentUserIdException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse("INVALID_CURRENT_USER_ID", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidAuthRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidAuthRequest(InvalidAuthRequestException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(EmailAlreadyRegisteredException.class)
+    public ResponseEntity<ApiErrorResponse> handleEmailAlreadyRegistered(EmailAlreadyRegisteredException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse("EMAIL_ALREADY_REGISTERED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiErrorResponse("INVALID_CREDENTIALS", exception.getMessage()));
+    }
+
+    @ExceptionHandler(AuthenticationRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationRequired(AuthenticationRequiredException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiErrorResponse("AUTHENTICATION_REQUIRED", exception.getMessage()));
     }
 
     @ExceptionHandler(InvalidTranscriptContextWindowException.class)

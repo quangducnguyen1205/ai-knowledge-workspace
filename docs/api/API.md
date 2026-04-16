@@ -12,17 +12,115 @@ This document is the current product-facing API summary for Repo B (`workspace-c
 
 Repo B now uses a minimal current-user identity foundation for ownership-aware workspace scope.
 
-- The primary product-facing path is `POST /api/auth/session`, which stores the current user in the Spring HTTP session.
-- For local/dev support, Spring still accepts `X-Current-User-Id` as a secondary fallback when no session user is present.
-- If both session and header are absent, Spring falls back to the configured local/dev default user.
+- The primary product-facing path is now session-based basic auth through register/login.
+- `POST /api/auth/register` and `POST /api/auth/login` establish the current user in the Spring HTTP session.
+- `GET /api/me` reads the authenticated session user.
+- `POST /api/auth/logout` clears the authenticated session.
+- For local/dev support, Spring still accepts `POST /api/auth/session` and `X-Current-User-Id` as secondary fallbacks.
+- If session, auth-session fallback, and header are all absent, Spring still falls back to the configured local/dev default user for ownership-aware local workflows.
 - This slice is intentionally not a full authentication platform.
-- Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing and search.
+- Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing, search, and asset-by-id flows.
 
 ## Current Product Endpoints
 
+### `POST /api/auth/register`
+
+Registers one minimal product user and establishes the authenticated Spring session.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `email` required
+  - `password` required
+
+Response:
+
+- HTTP `201`
+- Body:
+  - `id`
+  - `email`
+
+Current behavior:
+
+- Spring normalizes `email` by trimming and lowercasing before persistence.
+- Passwords are stored as hashed values, not raw plaintext.
+- Successful register also authenticates the new user into the current session.
+- This slice intentionally does not add email verification, password reset, roles, or JWTs.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
+- HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
+- HTTP `409` with `code = "EMAIL_ALREADY_REGISTERED"` if the normalized email already exists
+
+### `POST /api/auth/login`
+
+Authenticates one minimal product user and establishes the authenticated Spring session.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `email` required
+  - `password` required
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `id`
+  - `email`
+
+Current behavior:
+
+- Spring normalizes `email` by trimming and lowercasing before credential lookup.
+- Successful login stores the authenticated user in the Spring HTTP session.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
+- HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
+- HTTP `401` with `code = "INVALID_CREDENTIALS"` if the email/password pair is not valid
+
+### `POST /api/auth/logout`
+
+Clears the authenticated Spring session.
+
+Response:
+
+- HTTP `204`
+
+Current behavior:
+
+- Logout is intentionally small and invalidates the current HTTP session when present.
+- This slice does not add device/session management.
+
+### `GET /api/me`
+
+Reads the currently authenticated product user.
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `id`
+  - `email`
+
+Current behavior:
+
+- `GET /api/me` only uses the authenticated session user.
+- Local/dev header or default-user fallback does not count as authenticated product auth for this endpoint.
+
+Common failure cases:
+
+- HTTP `401` with `code = "AUTHENTICATION_REQUIRED"` if no authenticated session user exists
+
 ### `POST /api/auth/session`
 
-Establishes the current user in the Spring product session.
+Establishes a secondary local/dev current-user session shortcut.
 
 Request:
 
@@ -38,10 +136,10 @@ Response:
 
 Current behavior:
 
-- This is the primary product-facing current-user entry for Phase 2.
+- This is now a local/dev fallback path rather than the primary product auth path.
 - Spring trims `userId` before storing it in the session.
 - Repeating the call replaces the current session user with the new `userId`.
-- This slice intentionally does not add passwords, tokens, OAuth, sign-up, or a full session platform.
+- This remains useful for narrow local/dev ownership checks without going through register/login.
 
 Common failure cases:
 

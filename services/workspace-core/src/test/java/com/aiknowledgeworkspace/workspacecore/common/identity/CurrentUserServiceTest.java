@@ -69,6 +69,24 @@ class CurrentUserServiceTest {
     }
 
     @Test
+    void getAuthenticatedSessionUserIdReturnsOnlySessionUser() {
+        CurrentUserProperties properties = new CurrentUserProperties();
+        CurrentUserService currentUserService = new CurrentUserService(properties);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(properties.getHeaderName(), "header-user");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        assertThat(currentUserService.getAuthenticatedSessionUserId()).isNull();
+
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(properties.getSessionAttributeName(), "session-user");
+        request.setSession(session);
+
+        assertThat(currentUserService.getAuthenticatedSessionUserId()).isEqualTo("session-user");
+    }
+
+    @Test
     void establishCurrentUserStoresTrimmedUserIdInSession() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
@@ -88,5 +106,17 @@ class CurrentUserServiceTest {
         assertThatThrownBy(() -> currentUserService.establishCurrentUser(new MockHttpSession(), "   "))
                 .isInstanceOf(InvalidCurrentUserIdException.class)
                 .hasMessage("userId is required");
+    }
+
+    @Test
+    void clearCurrentUserInvalidatesSession() {
+        CurrentUserProperties properties = new CurrentUserProperties();
+        CurrentUserService currentUserService = new CurrentUserService(properties);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(properties.getSessionAttributeName(), "study-user-4");
+
+        currentUserService.clearCurrentUser(session);
+
+        assertThat(session.isInvalid()).isTrue();
     }
 }

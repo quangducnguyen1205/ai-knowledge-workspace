@@ -4,9 +4,9 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
 
-For this Phase 2 auth-entry slice, the primary product-facing current-user path is `POST /api/auth/session`.
-For local/dev support, `X-Current-User-Id` still works as a secondary fallback when no session user is present.
-If both session and header are absent, Spring falls back to the configured local/dev default user.
+For this Phase 2 basic-auth slice, the primary product-facing current-user path is now session-based auth through register/login.
+`POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
+If authenticated session, auth-session fallback, and header are all absent, Spring falls back to the configured local/dev default user.
 
 ## Helper Shortcut
 
@@ -39,7 +39,7 @@ make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NA
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
 The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does not assume a contributor-specific local file path.
-The helper still works without an explicit auth session because local/dev default-user fallback remains available.
+The helper still works without explicit auth because local/dev fallback remains available.
 
 ## 1. Environment Readiness
 
@@ -81,17 +81,51 @@ The helper still works without an explicit auth session because local/dev defaul
 
 ### Implemented And Testable Now
 
+- [ ] Call `POST /api/auth/register` with JSON body:
+  - [ ] `email`
+  - [ ] `password`
+- [ ] Expect HTTP `201`.
+- [ ] Expect JSON with:
+  - [ ] `id`
+  - [ ] `email`
+- [ ] Reuse the returned session cookie for `GET /api/me`.
+- [ ] Expect `GET /api/me` to return the same `id` and `email`.
+- [ ] Call `POST /api/auth/logout`.
+- [ ] Expect HTTP `204`.
+- [ ] Call `GET /api/me` again with the same cookie.
+- [ ] Expect HTTP `401` with `code = "AUTHENTICATION_REQUIRED"`.
+- [ ] Call `POST /api/auth/login` with the same email/password.
+- [ ] Expect HTTP `200`.
+- [ ] Reuse the returned session cookie for subsequent workspace, asset, and search checks.
+
+### Failure Path
+
+- [ ] Call `POST /api/auth/register` with missing body.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_AUTH_REQUEST"`
+- [ ] Call `POST /api/auth/register` with malformed email or short password.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_EMAIL"` or `code = "INVALID_PASSWORD"`
+- [ ] Call `POST /api/auth/login` with valid-looking but wrong credentials.
+- [ ] Expect HTTP `401`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_CREDENTIALS"`
+- [ ] Call `GET /api/me` without an authenticated session.
+- [ ] Expect HTTP `401`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "AUTHENTICATION_REQUIRED"`
+
+### Local/Dev Fallback Path
+
 - [ ] Call `POST /api/auth/session` with JSON body:
   - [ ] `userId`
 - [ ] Expect HTTP `200`.
 - [ ] Expect JSON with:
   - [ ] `userId`
-- [ ] Reuse the returned session cookie for subsequent workspace, asset, and search checks.
 - [ ] Repeat the same endpoint with a different `userId`.
 - [ ] Confirm the active session user changes to the new value.
-
-### Failure Path
-
 - [ ] Call `POST /api/auth/session` with an empty or missing `userId`.
 - [ ] Expect HTTP `400`.
 - [ ] Expect structured error JSON with:
@@ -101,7 +135,7 @@ The helper still works without an explicit auth session because local/dev defaul
 
 ### Implemented And Testable Now
 
-- [ ] Call `GET /api/workspaces` after establishing a session user through `POST /api/auth/session`.
+- [ ] Call `GET /api/workspaces` after establishing an authenticated user through register/login or the local/dev auth-session fallback.
 - [ ] Confirm Spring returns workspaces for that session user.
 - [ ] Call `POST /api/workspaces` with JSON body:
   - [ ] `name`
@@ -117,7 +151,7 @@ The helper still works without an explicit auth session because local/dev defaul
 - [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
-- [ ] Re-establish the session with a different `userId`.
+- [ ] Re-authenticate as a different user.
 - [ ] Confirm the first user's non-default workspace does not appear.
 - [ ] Confirm a separate default workspace is created lazily for the second user if needed.
 
@@ -205,7 +239,7 @@ The helper still works without an explicit auth session because local/dev defaul
 - [ ] If you uploaded into a known non-default workspace, call `GET /api/assets?workspaceId=<workspaceId>`.
 - [ ] Confirm the uploaded asset appears in that workspace-scoped list.
 - [ ] Confirm non-default workspace listing only returns assets in that workspace.
-- [ ] Re-establish the auth session as a different user, then call `GET /api/assets`.
+- [ ] Re-authenticate as a different user, then call `GET /api/assets`.
 - [ ] Confirm assets in another user's workspace do not appear.
 
 ### Legacy Default-Workspace Path
@@ -253,7 +287,7 @@ The helper still works without an explicit auth session because local/dev defaul
 
 ### Ownership Path
 
-- [ ] Call `GET /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
+- [ ] Call `GET /api/assets/{assetId}` for an asset created under one user, but first re-authenticate as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 6. Product Status Refresh Checks

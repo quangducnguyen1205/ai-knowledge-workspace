@@ -39,10 +39,25 @@ public class CurrentUserService {
         return currentUserProperties.getDefaultId();
     }
 
+    public String getAuthenticatedSessionUserId() {
+        ServletRequestAttributes requestAttributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (requestAttributes == null) {
+            return null;
+        }
+
+        return resolveSessionUserId(requestAttributes.getRequest());
+    }
+
     public String establishCurrentUser(HttpSession session, String requestedUserId) {
         String normalizedUserId = normalizeRequestedUserId(requestedUserId);
         session.setAttribute(currentUserProperties.getSessionAttributeName(), normalizedUserId);
         return normalizedUserId;
+    }
+
+    public void clearCurrentUser(HttpSession session) {
+        session.removeAttribute(currentUserProperties.getSessionAttributeName());
+        session.invalidate();
     }
 
     public boolean isDefaultUser(String userId) {
