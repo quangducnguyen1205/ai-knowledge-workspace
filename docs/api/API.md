@@ -440,7 +440,8 @@ Current behavior:
 - Search only considers documents inside the resolved workspace scope owned by the current user.
 - Only documents for assets already marked `SEARCHABLE` are eligible.
 - `assetId` is an exact filter when provided.
-- The current search baseline is simple text search over transcript text and asset title.
+- The current search baseline is still lexical search over transcript text and asset title.
+- Spring keeps the baseline `multi_match` query and adds a small phrase-style boost layer so clearer exact or phrase-like matches can rise more appropriately.
 - Search ordering is deterministic on score ties: `_score desc`, then `segmentIndex`, `assetId`, and `transcriptRowId`.
 
 Common failure cases:
