@@ -7,6 +7,7 @@ The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current defa
 For this Phase 2 basic-auth slice, the primary product-facing current-user path is now session-based auth through register/login.
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
 If authenticated session, auth-session fallback, and header are all absent, Spring falls back to the configured local/dev default user.
+The smoke helper now follows the authenticated product path by default and only uses the older auth-session shortcut when `SMOKE_USE_LEGACY_AUTH_FALLBACK=1` is set explicitly.
 
 ## Helper Shortcut
 
@@ -36,10 +37,38 @@ make smoke MEDIA_FILE=/absolute/path/to/lecture-video.mp4
 make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NAME="Algorithms"
 ```
 
+Authenticated smoke overrides:
+
+```bash
+make smoke \
+  MEDIA_FILE=/absolute/path/to/lecture-video.mp4 \
+  SMOKE_AUTH_EMAIL="smoke-user@example.com" \
+  SMOKE_AUTH_PASSWORD="password123"
+```
+
+Explicit legacy fallback override:
+
+```bash
+make smoke \
+  MEDIA_FILE=/absolute/path/to/lecture-video.mp4 \
+  SMOKE_USE_LEGACY_AUTH_FALLBACK=1 \
+  SMOKE_LEGACY_USER_ID="smoke-dev-user"
+```
+
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
 The `Makefile` smoke targets require `MEDIA_FILE` explicitly so the repo does not assume a contributor-specific local file path.
-The helper still works without explicit auth because local/dev fallback remains available.
+The helper now establishes an authenticated backend session with register/login before running the golden path.
+If register returns `EMAIL_ALREADY_REGISTERED`, the helper falls back to login with the same credentials so reruns stay repeatable.
+Use the legacy fallback path only when you intentionally want a local/dev shortcut rather than the main authenticated product flow.
+
+## 0. Verification Order
+
+- [ ] Run backend smoke against `http://localhost:8081` first.
+- [ ] Only treat FE proxy checks as the next layer after backend smoke passes.
+- [ ] If backend smoke fails before upload, classify it first as environment, auth-session setup, or Spring runtime issue.
+- [ ] If upload or non-terminal status refresh fails with `FASTAPI_CONNECTIVITY_ERROR`, classify it first as an upstream FastAPI readiness/integration issue.
+- [ ] If backend smoke passes but browser verification through `http://localhost:5173` fails, classify that first as FE proxy/runtime integration, not immediately as a backend product bug.
 
 ## 1. Environment Readiness
 
@@ -49,6 +78,7 @@ The helper still works without explicit auth because local/dev fallback remains 
 - [ ] Start Repo B infrastructure with `docker compose --env-file .env -f infra/docker-compose.dev.yml up -d`.
 - [ ] Confirm Repo B PostgreSQL is up.
 - [ ] Confirm Repo B PostgreSQL is using the intended host port `5434`.
+- [ ] Confirm Repo B Elasticsearch is up on `9201`.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`
@@ -56,6 +86,7 @@ The helper still works without explicit auth because local/dev fallback remains 
   - [ ] Expect JSON with:
     - [ ] `status = "UP"`
     - [ ] `service = "workspace-core"`
+- [ ] If you plan to verify the browser path too, start the frontend and confirm `http://localhost:5173` is serving the app shell before treating FE failures as product bugs.
 
 ## 2. Upstream FastAPI Readiness
 
@@ -97,6 +128,7 @@ The helper still works without explicit auth because local/dev fallback remains 
 - [ ] Call `POST /api/auth/login` with the same email/password.
 - [ ] Expect HTTP `200`.
 - [ ] Reuse the returned session cookie for subsequent workspace, asset, and search checks.
+- [ ] Confirm the default smoke helper now performs this authenticated setup automatically unless you opt into legacy fallback mode.
 
 ### Failure Path
 

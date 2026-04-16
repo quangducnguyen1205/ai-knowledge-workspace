@@ -104,6 +104,14 @@ Once Repo A, PostgreSQL, Elasticsearch, and Spring Boot are all running, you can
 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
 ```
 
+By default, the helper now uses the authenticated product path:
+
+- `POST /api/auth/register` or `POST /api/auth/login`
+- `GET /api/me`
+- workspace -> upload -> status -> transcript -> index -> search -> context
+
+This makes the authenticated backend path the default smoke verification route instead of the older local/dev shortcut.
+
 Optional arguments:
 
 ```bash
@@ -118,6 +126,10 @@ Optional environment overrides:
 - `SMOKE_WORKSPACE_NAME`
 - `SMOKE_VERIFY_CONTEXT`
 - `SMOKE_CONTEXT_WINDOW`
+- `SMOKE_AUTH_EMAIL`
+- `SMOKE_AUTH_PASSWORD`
+- `SMOKE_USE_LEGACY_AUTH_FALLBACK`
+- `SMOKE_LEGACY_USER_ID`
 
 Optional non-default workspace example:
 
@@ -131,8 +143,26 @@ Optional search-to-context follow-up example:
 SMOKE_VERIFY_CONTEXT=1 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
 ```
 
+Explicit authenticated smoke credentials example:
+
+```bash
+SMOKE_AUTH_EMAIL="smoke-user@example.com" \
+SMOKE_AUTH_PASSWORD="password123" \
+./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
+Explicit legacy local/dev fallback example:
+
+```bash
+SMOKE_USE_LEGACY_AUTH_FALLBACK=1 \
+SMOKE_LEGACY_USER_ID="smoke-dev-user" \
+./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
+```
+
 The helper runs the current Spring-owned flow only:
 
+- backend health check
+- authenticated session setup in the default path
 - optional workspace create/read
 - workspace-aware asset listing
 - upload
@@ -146,6 +176,14 @@ It prints the created `assetId`, processing progress, transcript row count, inde
 When context verification is enabled, it also prints the chosen hit row and the returned transcript window.
 If `SMOKE_WORKSPACE_NAME` is omitted, it exercises the default-workspace path.
 If `SMOKE_WORKSPACE_NAME` is set, it also verifies a non-default workspace path end to end.
+If register returns `EMAIL_ALREADY_REGISTERED`, the helper automatically falls back to login with the same credentials so reruns stay repeatable.
+
+Failure classification hints:
+
+- If the helper cannot reach `/health`, treat that first as a Spring/environment issue.
+- If the helper fails at register/login or `/api/me`, treat that first as an auth/session setup issue.
+- If upload or non-terminal status refresh fails with `FASTAPI_CONNECTIVITY_ERROR`, treat that first as a FastAPI readiness/integration issue.
+- If backend smoke passes but the browser path through `http://localhost:5173` still fails, treat that first as a FE proxy/runtime integration issue rather than a backend-core bug.
 
 ## Local Verification Shortcuts
 
@@ -156,6 +194,15 @@ make help
 make test-workspace-core
 make smoke MEDIA_FILE=/absolute/path/to/lecture-video.mp4
 make smoke-workspace MEDIA_FILE=/absolute/path/to/lecture-video.mp4 WORKSPACE_NAME="Algorithms"
+```
+
+Authenticated smoke through `make`:
+
+```bash
+make smoke \
+  MEDIA_FILE=/absolute/path/to/lecture-video.mp4 \
+  SMOKE_AUTH_EMAIL="smoke-user@example.com" \
+  SMOKE_AUTH_PASSWORD="password123"
 ```
 
 `MEDIA_FILE` is intentionally required for `make smoke` and `make smoke-workspace` so the repo does not hardcode one contributor's local file path.
