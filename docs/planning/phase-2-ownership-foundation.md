@@ -8,7 +8,8 @@ This note records the first Phase 2 foundation already implemented in Repo B: ow
 
 - an initial minimal current-user identity mechanism using `X-Current-User-Id`
 - a configured local/dev fallback current user when session and header are omitted
-- a later minimal auth-entry step using `POST /api/auth/session` as the primary product-facing current-user path
+- a later minimal auth-entry step using `POST /api/auth/session` as a local/dev session shortcut
+- a further basic-auth step using session-based register/login/logout and `GET /api/me` as the primary product-facing auth path
 - workspace ownership in the domain model
 - one default workspace path per current user
 - ownership enforcement first on:
@@ -26,7 +27,7 @@ This note records the first Phase 2 foundation already implemented in Repo B: ow
 
 ## What Stayed Intentionally Out Of Scope
 
-- login flows, passwords, tokens, OAuth, or a full session platform
+- JWTs, refresh tokens, OAuth, password reset, or a full auth platform
 - collaboration, sharing, teams, roles, or memberships
 - broad ownership enforcement across every mutation endpoint
 - transcript persistence
@@ -38,6 +39,7 @@ Phase 1 proved the narrow search-first MVP. This slice starts Phase 2 by making 
 
 The current phase-2 state is still intentionally minimal:
 
-- session-based current-user entry is primary for product-facing requests
-- header/default-user behavior remains only as local/dev fallback
+- session-based register/login is primary for product-facing requests
+- `/api/me` reads only the authenticated session user
+- `POST /api/auth/session`, header fallback, and default-user fallback remain only as secondary local/dev paths
 - ownership rules remain centered on workspace ownership rather than a larger auth model
