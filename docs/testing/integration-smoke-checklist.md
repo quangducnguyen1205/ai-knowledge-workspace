@@ -304,6 +304,8 @@ The helper still works without an explicit auth session because local/dev defaul
 - [ ] Expect HTTP `204`.
 - [ ] Call `GET /api/assets/{assetId}` afterward.
 - [ ] Expect HTTP `404`.
+- [ ] Call `GET /api/assets/{assetId}/transcript` afterward.
+- [ ] Expect HTTP `404`, which also confirms the local transcript snapshot was removed with the asset.
 - [ ] If the deleted asset was `SEARCHABLE`, call `GET /api/search?q=...&assetId=<deleted-asset-id>` after deletion.
 - [ ] Confirm search no longer returns hits for that deleted asset.
 
@@ -355,6 +357,7 @@ The helper still works without an explicit auth session because local/dev defaul
 
 - [ ] Call `GET /api/assets/{assetId}/transcript` only after the status response shows `processingJobStatus = SUCCEEDED`.
 - [ ] Expect HTTP `200` when transcript rows are present.
+- [ ] Treat the first successful transcript read as the point where Spring can capture the local product-owned transcript snapshot if it is still missing.
 - [ ] Confirm the response is a JSON array ordered by transcript `segmentIndex`.
 - [ ] Confirm each row only contains:
   - [ ] `id`
@@ -422,6 +425,7 @@ The helper still works without an explicit auth session because local/dev defaul
 ### Implemented And Testable Now
 
 - [ ] Use an asset that already has a non-empty transcript response through Spring.
+- [ ] Treat indexing as operating from the local transcript snapshot in the normal path.
 - [ ] Call `POST /api/assets/{assetId}/index`.
 - [ ] Expect HTTP `200`.
 - [ ] Expect JSON with:
@@ -540,15 +544,11 @@ The helper still works without an explicit auth session because local/dev defaul
 
 ### Not Implemented Yet
 
-- [ ] Auth-based workspace ownership enforcement
 - [ ] Workspace management beyond the current create/list/read surface and default-workspace bootstrap
-- [ ] Local transcript-table persistence
 - [ ] Hybrid or vector-assisted ranking
 - [ ] Search snippets, highlights, or richer retrieval UX
 
 ### Placeholder Checks For Later
 
-- [ ] When auth exists, verify workspace ownership rules are enforced consistently on upload, asset reads, indexing, and search.
 - [ ] When hybrid retrieval exists, verify lexical-only fallback behavior remains understandable.
-- [ ] When transcript persistence exists, verify transcript fetch behavior stays consistent with the product API.
 - [ ] Keep verifying that Repo B does not depend on FastAPI `/videos/search`.

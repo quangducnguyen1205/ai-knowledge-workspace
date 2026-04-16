@@ -664,6 +664,86 @@ class AssetServiceTest {
     }
 
     @Test
+    void getAssetTranscriptUsesPersistedSnapshotInNormalPath() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 3", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Algorithms"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-3a",
+                "video-3a",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                snapshotRow(assetId, "row-2", "video-3a", 2, "second"),
+                snapshotRow(assetId, "row-1", "video-3a", 1, "first")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
+
+        List<AssetTranscriptRowResponse> response = assetService.getAssetTranscript(assetId);
+
+        assertThat(response).extracting(AssetTranscriptRowResponse::id)
+                .containsExactly("row-2", "row-1");
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verifyNoInteractions(fastApiProcessingClient);
+    }
+
+    @Test
+    void getAssetTranscriptCapturesAndPersistsSnapshotWhenLocalRowsAreMissing() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 3B", AssetStatus.PROCESSING, new Workspace(workspaceId, "Algorithms"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-3b",
+                "video-3b",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        List<FastApiTranscriptRowResponse> upstreamRows = List.of(
+                transcriptRow("row-1", "video-3b", 1, "first"),
+                transcriptRow("row-2", "video-3b", 2, "second")
+        );
+        List<AssetTranscriptRowSnapshot> persistedRows = List.of(
+                snapshotRow(assetId, "row-1", "video-3b", 1, "first"),
+                snapshotRow(assetId, "row-2", "video-3b", 2, "second")
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
+        when(fastApiProcessingClient.getTranscript("video-3b")).thenReturn(upstreamRows);
+        when(assetPersistenceService.replaceTranscriptSnapshot(asset, upstreamRows)).thenReturn(persistedRows);
+
+        List<AssetTranscriptRowResponse> response = assetService.getAssetTranscript(assetId);
+
+        assertThat(response).extracting(AssetTranscriptRowResponse::id)
+                .containsExactly("row-1", "row-2");
+        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, upstreamRows);
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+    }
+
+    @Test
     void transcriptContextReturnsRequestedWindowAroundMatchedRow() {
         AssetService assetService = new AssetService(
                 assetRepository,
@@ -683,17 +763,17 @@ class AssetServiceTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-3", "video-3", 3, "third"),
-                transcriptRow("row-1", "video-3", 1, "first"),
-                transcriptRow("row-4", "video-3", 4, "fourth"),
-                transcriptRow("row-2", "video-3", 2, "second"),
-                transcriptRow("row-5", "video-3", 5, "fifth")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                snapshotRow(assetId, "row-3", "video-3", 3, "third"),
+                snapshotRow(assetId, "row-1", "video-3", 1, "first"),
+                snapshotRow(assetId, "row-4", "video-3", 4, "fourth"),
+                snapshotRow(assetId, "row-2", "video-3", 2, "second"),
+                snapshotRow(assetId, "row-5", "video-3", 5, "fifth")
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(fastApiProcessingClient.getTranscript("video-3")).thenReturn(transcriptRows);
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "row-3", 1);
 
@@ -705,6 +785,7 @@ class AssetServiceTest {
                 .extracting(AssetTranscriptRowResponse::id)
                 .containsExactly("row-2", "row-3", "row-4");
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verifyNoInteractions(fastApiProcessingClient);
     }
 
     @Test
@@ -727,15 +808,15 @@ class AssetServiceTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow(null, "video-4", 0, "intro"),
-                transcriptRow("row-1", "video-4", 1, "detail"),
-                transcriptRow("row-2", "video-4", 2, "more")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                snapshotRow(assetId, null, "video-4", 0, "intro"),
+                snapshotRow(assetId, "row-1", "video-4", 1, "detail"),
+                snapshotRow(assetId, "row-2", "video-4", 2, "more")
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(fastApiProcessingClient.getTranscript("video-4")).thenReturn(transcriptRows);
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "segment-0", null);
 
@@ -744,6 +825,7 @@ class AssetServiceTest {
         assertThat(response.window()).isEqualTo(2);
         assertThat(response.rows()).hasSize(3);
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+        verifyNoInteractions(fastApiProcessingClient);
     }
 
     @Test
@@ -766,19 +848,20 @@ class AssetServiceTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-0", "video-4b", 0, "intro"),
-                transcriptRow("row-1", "video-4b", 1, "detail")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                snapshotRow(assetId, "row-0", "video-4b", 0, "intro"),
+                snapshotRow(assetId, "row-1", "video-4b", 1, "detail")
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(fastApiProcessingClient.getTranscript("video-4b")).thenReturn(transcriptRows);
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "segment-0", null))
                 .isInstanceOf(TranscriptRowNotFoundException.class)
                 .hasMessageContaining("Transcript row not found for asset " + assetId + ": segment-0");
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+        verifyNoInteractions(fastApiProcessingClient);
     }
 
     @Test
@@ -856,6 +939,7 @@ class AssetServiceTest {
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(fastApiProcessingClient.getTranscript("video-6")).thenReturn(List.of());
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
@@ -886,18 +970,19 @@ class AssetServiceTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        List<FastApiTranscriptRowResponse> transcriptRows = List.of(
-                transcriptRow("row-1", "video-5", 1, "first"),
-                transcriptRow("row-2", "video-5", 2, "second")
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                snapshotRow(assetId, "row-1", "video-5", 1, "first"),
+                snapshotRow(assetId, "row-2", "video-5", 2, "second")
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(fastApiProcessingClient.getTranscript("video-5")).thenReturn(transcriptRows);
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-404", 2))
                 .isInstanceOf(TranscriptRowNotFoundException.class)
                 .hasMessageContaining("Transcript row not found for asset " + assetId + ": row-404");
+        verifyNoInteractions(fastApiProcessingClient);
     }
 
     private Asset asset(UUID assetId, String originalFilename, String title, AssetStatus status) {
@@ -929,6 +1014,23 @@ class AssetServiceTest {
 
     private FastApiTranscriptRowResponse transcriptRow(String id, String videoId, int segmentIndex, String text) {
         return new FastApiTranscriptRowResponse(
+                id,
+                videoId,
+                segmentIndex,
+                text,
+                "2026-04-12T00:00:00Z"
+        );
+    }
+
+    private AssetTranscriptRowSnapshot snapshotRow(
+            UUID assetId,
+            String id,
+            String videoId,
+            Integer segmentIndex,
+            String text
+    ) {
+        return new AssetTranscriptRowSnapshot(
+                assetId,
                 id,
                 videoId,
                 segmentIndex,

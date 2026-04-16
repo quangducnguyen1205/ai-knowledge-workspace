@@ -1,8 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -11,26 +11,26 @@ public class TranscriptIndexDocumentMapper {
 
     public TranscriptIndexDocument toDocument(
             Asset asset,
-            FastApiTranscriptRowResponse transcriptRow,
+            AssetTranscriptRowSnapshot transcriptRow,
             AssetStatus indexedAssetStatus
     ) {
         return new TranscriptIndexDocument(
                 asset.getId(),
                 asset.getWorkspaceId(),
                 asset.getTitle(),
-                transcriptRow.id(),
-                transcriptRow.segmentIndex(),
-                transcriptRow.text(),
-                transcriptRow.createdAt(),
+                transcriptRow.getTranscriptRowId(),
+                transcriptRow.getSegmentIndex(),
+                transcriptRow.getText(),
+                transcriptRow.getCreatedAt(),
                 indexedAssetStatus
         );
     }
 
-    public String toDocumentId(Asset asset, FastApiTranscriptRowResponse transcriptRow) {
+    public String toDocumentId(Asset asset, AssetTranscriptRowSnapshot transcriptRow) {
         // Keep document IDs stable so a re-index overwrites the same transcript row document.
-        String transcriptRowId = StringUtils.hasText(transcriptRow.id())
-                ? transcriptRow.id()
-                : "segment-" + transcriptRow.segmentIndex();
+        String transcriptRowId = StringUtils.hasText(transcriptRow.getTranscriptRowId())
+                ? transcriptRow.getTranscriptRowId()
+                : "segment-" + transcriptRow.getSegmentIndex();
         return asset.getId() + "-" + transcriptRowId;
     }
 }

@@ -9,11 +9,12 @@ This document summarizes what Repo B currently persists in PostgreSQL.
 
 ## Current Relational Model
 
-Repo B currently persists three main records:
+Repo B currently persists four main records:
 
 - `Workspace`
 - `Asset`
 - `ProcessingJob`
+- `AssetTranscriptRowSnapshot`
 
 ## `Workspace`
 
@@ -23,13 +24,15 @@ Current fields:
 
 - `id` UUID primary key
 - `name`
+- `ownerId`
+- `defaultWorkspace`
 - `createdAt`
 
 Current role:
 
-- Represents the current phase-1 logical container for assets.
-- Supports product-side workspace scoping without introducing auth or collaboration yet.
-- Provides the default workspace bootstrap used when `workspaceId` is omitted.
+- Represents the current product-side ownership container for assets.
+- Supports ownership-aware workspace scoping without introducing collaboration or richer auth features yet.
+- Provides one default workspace path per current user when `workspaceId` is omitted.
 - Can be created explicitly through the current minimal workspace API, or lazily when the default workspace is first needed.
 
 ## `Asset`
@@ -87,28 +90,52 @@ Current role:
 - Retains both upstream identifiers needed for task polling and transcript fetch.
 - Keeps the raw upstream task state for debugging.
 
+## `AssetTranscriptRowSnapshot`
+
+Table: `asset_transcript_rows`
+
+Current fields:
+
+- `snapshotId` UUID primary key
+- `assetId` UUID
+- `transcriptRowId`
+- `videoId`
+- `segmentIndex`
+- `text`
+- `createdAt`
+
+Current role:
+
+- Stores the product-owned transcript snapshot for one asset.
+- Persists only the currently verified transcript fields used by the product API and indexing flow.
+- Supports transcript read, transcript context, and explicit indexing without requiring a fresh upstream transcript fetch in the normal path.
+
 ## Current Relationship Shape
 
 - One `Workspace` can contain many `Asset` records.
 - The current flow creates one `ProcessingJob` for one `Asset`.
+- One `Asset` can have many `AssetTranscriptRowSnapshot` rows.
 - The link is currently stored through `ProcessingJob.assetId`.
 - The code looks up the processing job by asset ID.
 
 ## Current Write Behavior
 
-- Workspace create persists a minimal `Workspace` row with `name`, and default-workspace reads can lazily create the configured default workspace row if it is still missing.
+- Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
 - Upload resolves a workspace first, then persists `Asset` and `ProcessingJob` together after FastAPI acknowledges the upload.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
-- Transcript fetch can move an asset to `TRANSCRIPT_READY`.
+- Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
+- Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
+- Transcript capture can move an asset to `TRANSCRIPT_READY`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
-- Asset reads and default-workspace asset listing backfill a missing workspace association to the configured default workspace so older local rows stay usable.
+- Asset reads and the local/dev default-user legacy listing path can backfill a missing workspace association to the current user's default workspace so older local rows stay usable.
+- Asset deletion removes local transcript snapshot rows together with the linked `ProcessingJob` and `Asset`.
 
 ## Intentionally Not Persisted Yet
 
-- A local transcript table
-- A local transcript cache
-- Workspace ownership or sharing rules
+- Transcript version history
+- Transcript sync state beyond the current snapshot
+- Workspace sharing rules
 - Search history or query analytics
 
 ## Note On Elasticsearch
