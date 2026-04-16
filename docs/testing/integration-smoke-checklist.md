@@ -476,6 +476,7 @@ The helper still works without an explicit auth session because local/dev defaul
 - [ ] Confirm `workspaceIdFilter` matches the requested workspace or the current user's default workspace when omitted.
 - [ ] Confirm search only returns results inside the resolved workspace scope.
 - [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
+- [ ] If you know a short phrase that appears verbatim in one transcript row or asset title, search for that phrase and confirm the obvious phrase match rises near the top of the returned results.
 - [ ] Re-establish the auth session as a different user, then call `GET /api/search?q=your-query`.
 - [ ] Confirm results from another user's workspace do not appear.
 

@@ -24,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class SearchService {
 
     private static final int DEFAULT_RESULT_SIZE = 20;
+    private static final float TEXT_PHRASE_BOOST = 6.0f;
+    private static final float ASSET_TITLE_PHRASE_BOOST = 4.0f;
 
     private final RestClient elasticsearchRestClient;
     private final ElasticsearchProperties elasticsearchProperties;
@@ -77,6 +79,7 @@ public class SearchService {
 
         Map<String, Object> boolQuery = new LinkedHashMap<>();
         boolQuery.put("must", List.of(Map.of("multi_match", multiMatchQuery)));
+        boolQuery.put("should", buildPhraseBoostClauses(query));
         boolQuery.put("filter", filterClauses);
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -84,6 +87,20 @@ public class SearchService {
         body.put("query", Map.of("bool", boolQuery));
         body.put("sort", buildSortClauses());
         return body;
+    }
+
+    private List<Map<String, Object>> buildPhraseBoostClauses(String query) {
+        return List.of(
+                matchPhraseClause("text", query, TEXT_PHRASE_BOOST),
+                matchPhraseClause("assetTitle", query, ASSET_TITLE_PHRASE_BOOST)
+        );
+    }
+
+    private Map<String, Object> matchPhraseClause(String field, String query, float boost) {
+        Map<String, Object> phraseOptions = new LinkedHashMap<>();
+        phraseOptions.put("query", query);
+        phraseOptions.put("boost", boost);
+        return Map.of("match_phrase", Map.of(field, phraseOptions));
     }
 
     private List<Map<String, Object>> buildSortClauses() {
@@ -140,7 +157,7 @@ public class SearchService {
             ));
         }
 
-        // TODO: consider a richer Elasticsearch query once keyword-only baseline search is proven useful.
+        // TODO: consider richer lexical or hybrid retrieval only after this small boosted-phrase baseline is proven useful.
         return new SearchResponse(query, workspaceId, assetId, results.size(), results);
     }
 

@@ -88,6 +88,8 @@ class SearchControllerTest {
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
+                .andExpect(content().string(containsString("\"match_phrase\":{\"text\":{\"query\":\"dynamic programming\",\"boost\":6.0}}")))
+                .andExpect(content().string(containsString("\"match_phrase\":{\"assetTitle\":{\"query\":\"dynamic programming\",\"boost\":4.0}}")))
                 .andExpect(content().string(containsString("\"_score\":{\"order\":\"desc\"}")))
                 .andExpect(content().string(containsString("\"segmentIndex\":{\"order\":\"asc\"}")))
                 .andExpect(content().string(containsString("\"assetId.keyword\":{\"order\":\"asc\"}")))
@@ -163,6 +165,33 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.workspaceIdFilter").value(workspaceId.toString()))
                 .andExpect(jsonPath("$.assetIdFilter").value(nullValue()))
                 .andExpect(jsonPath("$.resultCount").value(0));
+
+        mockServer.verify();
+    }
+
+    @Test
+    void searchAddsPhraseBoostLayerWithoutChangingResponseContract() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new Workspace(workspaceId, "Systems"));
+
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"multi_match\":{\"query\":\"binary search tree\",\"fields\":[\"text^3\",\"assetTitle\"]}")))
+                .andExpect(content().string(containsString("\"should\":[")))
+                .andExpect(content().string(containsString("\"match_phrase\":{\"text\":{\"query\":\"binary search tree\",\"boost\":6.0}}")))
+                .andExpect(content().string(containsString("\"match_phrase\":{\"assetTitle\":{\"query\":\"binary search tree\",\"boost\":4.0}}")))
+                .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "binary search tree")
+                        .param("workspaceId", workspaceId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.query").value("binary search tree"))
+                .andExpect(jsonPath("$.workspaceIdFilter").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.assetIdFilter").value(nullValue()))
+                .andExpect(jsonPath("$.resultCount").value(0))
+                .andExpect(jsonPath("$.results").isArray());
 
         mockServer.verify();
     }
