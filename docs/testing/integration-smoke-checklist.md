@@ -4,6 +4,14 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
 
+For the current deployable-demo baseline, the supported verification order is:
+
+1. Start Repo A.
+2. Start Repo B infrastructure.
+3. Start Repo B Spring Boot on the host.
+4. Run backend smoke against `http://localhost:8081`.
+5. Start Repo FE and verify the browser path through `http://localhost:5173`.
+
 For this Phase 2 basic-auth slice, the primary product-facing current-user path is now session-based auth through register/login.
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
 If authenticated session, auth-session fallback, and header are all absent, Spring falls back to the configured local/dev default user.
