@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,15 +17,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
-
 @Service
 public class TranscriptIndexingService {
 
@@ -60,7 +58,7 @@ public class TranscriptIndexingService {
     public AssetIndexResponse indexAssetTranscript(UUID assetId) {
         Asset asset = assetService.getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
+                .orElseThrow(ProcessingJobNotFoundException::new);
 
         List<AssetTranscriptRowSnapshot> transcriptRows = assetService.loadUsableTranscriptSnapshot(asset, processingJob);
 

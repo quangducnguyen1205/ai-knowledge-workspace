@@ -22,11 +22,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.server.ResponseStatusException;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,7 +92,14 @@ class AssetDeletionServiceTest {
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
-                .andRespond(withSuccess());
+                .andRespond(withSuccess("""
+                        {
+                          "total": 2,
+                          "deleted": 2,
+                          "version_conflicts": 0,
+                          "failures": []
+                        }
+                        """, org.springframework.http.MediaType.APPLICATION_JSON));
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -121,6 +126,31 @@ class AssetDeletionServiceTest {
     }
 
     @Test
+    void deletingSearchableAssetStopsWhenDeleteByQueryReportsPartialFailure() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "total": 2,
+                          "deleted": 1,
+                          "version_conflicts": 0,
+                          "failures": []
+                        }
+                        """, org.springframework.http.MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining("Elasticsearch delete removed only 1 of 2 transcript documents");
+
+        verify(assetPersistenceService, never()).deleteAssetRecords(asset);
+        mockServer.verify();
+    }
+
+    @Test
     void deletingFailedAssetRemovesLocalRecordsWithoutElasticsearchCleanup() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.FAILED);
@@ -136,12 +166,11 @@ class AssetDeletionServiceTest {
     @Test
     void deletingMissingAssetReturnsNotFound() {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAsset(assetId)).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+        when(assetService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-                });
+                .isInstanceOf(AssetNotFoundException.class)
+                .hasMessageContaining("Asset not found");
     }
 
     @Test
@@ -151,14 +180,13 @@ class AssetDeletionServiceTest {
 
         when(assetService.getAsset(assetId))
                 .thenReturn(asset)
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+                .thenThrow(new AssetNotFoundException());
 
         assetDeletionService.deleteAsset(assetId);
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-                });
+                .isInstanceOf(AssetNotFoundException.class)
+                .hasMessageContaining("Asset not found");
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
     }

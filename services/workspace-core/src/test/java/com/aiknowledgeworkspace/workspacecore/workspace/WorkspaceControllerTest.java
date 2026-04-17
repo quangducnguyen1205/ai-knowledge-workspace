@@ -98,6 +98,18 @@ class WorkspaceControllerTest {
     }
 
     @Test
+    void createWorkspaceRejectsMissingBody() throws Exception {
+        when(workspaceService.createWorkspace(null))
+                .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
+
+        mockMvc.perform(post("/api/workspaces")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_NAME"))
+                .andExpect(jsonPath("$.message").value("Workspace name is required"));
+    }
+
+    @Test
     void listWorkspacesReturnsWorkspaceSummaries() throws Exception {
         Workspace defaultWorkspace = workspace(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),

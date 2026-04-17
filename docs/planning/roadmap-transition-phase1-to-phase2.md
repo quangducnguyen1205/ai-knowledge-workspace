@@ -1,5 +1,7 @@
 # Roadmap Transition: Phase 1 to Phase 2
 
+Historical note: this captures the transition point between Phase 1 and early Phase 2. It should be read as a roadmap checkpoint, not as the current product state or current backend contract.
+
 ## Phase 1 Closed
 
 Phase 1 is closed at a practical level.
@@ -21,7 +23,7 @@ The project has a working search-first MVP with a Spring-owned backend flow and 
 ### Record-Only Notes
 
 - `processingJobStatus` and `assetStatus` are intentionally related but not identical product signals.
-- Transcript reads, transcript context, and indexing still rely on fetch-on-demand from FastAPI.
+- At that transition point, transcript reads, transcript context, and indexing still relied on fetch-on-demand from FastAPI.
 - Elasticsearch remains an external index, so some failure-path concerns are operational notes rather than Phase 1 blockers.
 - Existing smoke and lightweight test coverage are good enough for the MVP slice, but they are not a substitute for later broader integration hardening if the project scope grows.
 

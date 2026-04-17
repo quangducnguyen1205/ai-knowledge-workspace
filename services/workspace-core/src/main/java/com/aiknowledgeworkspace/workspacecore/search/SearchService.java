@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -18,7 +17,6 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class SearchService {
@@ -59,7 +57,7 @@ public class SearchService {
 
     private String normalizeQuery(String query) {
         if (!StringUtils.hasText(query)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Query parameter q is required");
+            throw new InvalidSearchRequestException("INVALID_SEARCH_QUERY", "q query parameter is required");
         }
         return query.trim();
     }

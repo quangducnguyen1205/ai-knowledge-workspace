@@ -80,6 +80,15 @@ class AssetControllerTest {
     }
 
     @Test
+    void uploadReturnsStructuredBadRequestWhenFilePartIsMissing() throws Exception {
+        mockMvc.perform(multipart("/api/assets/upload")
+                        .param("title", "Lecture 1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_UPLOAD_FILE"))
+                .andExpect(jsonPath("$.message").value("file is required"));
+    }
+
+    @Test
     void listAssetsReturnsPaginatedWorkspaceScopedAssetSummaries() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
@@ -228,14 +237,12 @@ class AssetControllerTest {
     @Test
     void getAssetReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAsset(assetId)).thenThrow(new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND,
-                "Asset not found"
-        ));
+        when(assetService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
@@ -260,14 +267,12 @@ class AssetControllerTest {
     @Test
     void getAssetStatusReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetStatus(assetId)).thenThrow(new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND,
-                "Asset not found"
-        ));
+        when(assetService.getAssetStatus(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/status", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
@@ -294,14 +299,28 @@ class AssetControllerTest {
     @Test
     void getAssetTranscriptReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscript(assetId)).thenThrow(new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND,
-                "Asset not found"
-        ));
+        when(assetService.getAssetTranscript(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
+    }
+
+    @Test
+    void getAssetTranscriptReturnsStructuredConflictWhenTranscriptIsNotReady() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetService.getAssetTranscript(assetId)).thenThrow(new TranscriptUnavailableException(
+                "TRANSCRIPT_NOT_READY",
+                "Transcript is not ready until processing reaches terminal success"
+        ));
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript", assetId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRANSCRIPT_NOT_READY"))
+                .andExpect(jsonPath("$.message").value(
+                        "Transcript is not ready until processing reaches terminal success"
+                ));
     }
 
     @Test
@@ -315,27 +334,23 @@ class AssetControllerTest {
     @Test
     void deleteAssetReturnsNotFoundWhenAssetDoesNotExist() throws Exception {
         UUID assetId = UUID.randomUUID();
-        doThrow(new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND,
-                "Asset not found"
-        )).when(assetDeletionService).deleteAsset(assetId);
+        doThrow(new AssetNotFoundException()).when(assetDeletionService).deleteAsset(assetId);
 
         mockMvc.perform(delete("/api/assets/{assetId}", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
     void deleteAssetReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        doThrow(new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND,
-                "Asset not found"
-        )).when(assetDeletionService).deleteAsset(assetId);
+        doThrow(new AssetNotFoundException()).when(assetDeletionService).deleteAsset(assetId);
 
         mockMvc.perform(delete("/api/assets/{assetId}", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
@@ -442,10 +457,7 @@ class AssetControllerTest {
     void updateAssetTitleReturnsNotFoundWhenAssetDoesNotExist() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .thenThrow(new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Asset not found"
-                ));
+                .thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(patch("/api/assets/{assetId}", assetId)
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
@@ -453,17 +465,15 @@ class AssetControllerTest {
                                 {"title":"New Title"}
                                 """))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
     void updateAssetTitleReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .thenThrow(new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Asset not found"
-                ));
+                .thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(patch("/api/assets/{assetId}", assetId)
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
@@ -471,7 +481,8 @@ class AssetControllerTest {
                                 {"title":"New Title"}
                                 """))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
@@ -552,15 +563,13 @@ class AssetControllerTest {
     void indexAssetReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(transcriptIndexingService.indexAssetTranscript(assetId))
-                .thenThrow(new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Asset not found"
-                ));
+                .thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
                         "/api/assets/{assetId}/index", assetId))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test
@@ -634,16 +643,14 @@ class AssetControllerTest {
     void transcriptContextReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetService.getAssetTranscriptContext(assetId, "row-2", 2))
-                .thenThrow(new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Asset not found"
-                ));
+                .thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
                         .param("transcriptRowId", "row-2")
                         .param("window", "2"))
                 .andExpect(status().isNotFound())
-                .andExpect(status().reason("Asset not found"));
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
     }
 
     @Test

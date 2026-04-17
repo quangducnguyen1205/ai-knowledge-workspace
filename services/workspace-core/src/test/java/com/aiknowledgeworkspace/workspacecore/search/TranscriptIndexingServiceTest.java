@@ -37,11 +37,9 @@ import org.springframework.http.MediaType;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class TranscriptIndexingServiceTest {
@@ -136,14 +134,18 @@ class TranscriptIndexingServiceTest {
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptSnapshot(asset, processingJob))
-                .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Transcript is empty for this asset"));
+                .thenThrow(new com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException(
+                        "TRANSCRIPT_NOT_USABLE",
+                        "Transcript is empty or unusable for this asset"
+                ));
 
         assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
-                .isInstanceOf(ResponseStatusException.class)
+                .isInstanceOf(com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException.class)
                 .satisfies(exception -> {
-                    ResponseStatusException responseStatusException = (ResponseStatusException) exception;
-                    assertThat(responseStatusException.getStatusCode().value()).isEqualTo(409);
-                    assertThat(responseStatusException.getReason()).isEqualTo("Transcript is empty for this asset");
+                    com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException transcriptException =
+                            (com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException) exception;
+                    assertThat(transcriptException.getCode()).isEqualTo("TRANSCRIPT_NOT_USABLE");
+                    assertThat(transcriptException.getMessage()).isEqualTo("Transcript is empty or unusable for this asset");
                 });
 
         verify(assetPersistenceService, never()).updateAssetStatus(eq(asset), eq(AssetStatus.SEARCHABLE));
