@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import java.util.List;
 import java.util.UUID;
@@ -14,15 +15,18 @@ public class WorkspaceService {
     private static final int MAX_WORKSPACE_NAME_LENGTH = 255;
 
     private final WorkspaceRepository workspaceRepository;
+    private final AssetRepository assetRepository;
     private final WorkspaceProperties workspaceProperties;
     private final CurrentUserService currentUserService;
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
+            AssetRepository assetRepository,
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService
     ) {
         this.workspaceRepository = workspaceRepository;
+        this.assetRepository = assetRepository;
         this.workspaceProperties = workspaceProperties;
         this.currentUserService = currentUserService;
     }
@@ -47,6 +51,35 @@ public class WorkspaceService {
     @Transactional
     public Workspace getWorkspace(UUID workspaceId) {
         return resolveWorkspaceOrDefault(workspaceId);
+    }
+
+    @Transactional
+    public Workspace updateWorkspace(UUID workspaceId, String name) {
+        String normalizedName = normalizeWorkspaceName(name);
+        Workspace workspace = resolveWorkspaceOrDefault(workspaceId);
+        workspace.setName(normalizedName);
+        return workspaceRepository.save(workspace);
+    }
+
+    @Transactional
+    public void deleteWorkspace(UUID workspaceId) {
+        Workspace workspace = resolveWorkspaceOrDefault(workspaceId);
+
+        if (workspace.isDefaultWorkspace()) {
+            throw new WorkspaceDeleteConflictException(
+                    "DEFAULT_WORKSPACE_DELETE_FORBIDDEN",
+                    "Default workspace cannot be deleted"
+            );
+        }
+
+        if (assetRepository.countByWorkspace_Id(workspace.getId()) > 0) {
+            throw new WorkspaceDeleteConflictException(
+                    "WORKSPACE_NOT_EMPTY",
+                    "Workspace cannot be deleted while it still contains assets"
+            );
+        }
+
+        workspaceRepository.delete(workspace);
     }
 
     public boolean isDefaultWorkspace(Workspace workspace) {

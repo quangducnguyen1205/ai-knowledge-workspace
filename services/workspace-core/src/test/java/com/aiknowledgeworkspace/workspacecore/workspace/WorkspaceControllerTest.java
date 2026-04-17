@@ -1,8 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -149,6 +152,104 @@ class WorkspaceControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void updateWorkspaceReturnsUpdatedWorkspace() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = workspace(workspaceId, "Renamed Workspace", Instant.parse("2026-04-03T10:00:00Z"));
+        when(workspaceService.updateWorkspace(workspaceId, "Renamed Workspace")).thenReturn(workspace);
+
+        mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Renamed Workspace"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.name").value("Renamed Workspace"))
+                .andExpect(jsonPath("$.createdAt").value("2026-04-03T10:00:00Z"));
+    }
+
+    @Test
+    void updateWorkspaceRejectsMissingBody() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.updateWorkspace(workspaceId, null))
+                .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
+
+        mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_NAME"))
+                .andExpect(jsonPath("$.message").value("Workspace name is required"));
+    }
+
+    @Test
+    void updateWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceService.updateWorkspace(workspaceId, "Renamed Workspace"))
+                .thenThrow(new WorkspaceNotFoundException(workspaceId));
+
+        mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Renamed Workspace"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void deleteWorkspaceReturnsNoContent() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deleteWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        doThrow(new WorkspaceNotFoundException(workspaceId))
+                .when(workspaceService).deleteWorkspace(workspaceId);
+
+        mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void deleteWorkspaceReturnsConflictForDefaultWorkspace() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        doThrow(new WorkspaceDeleteConflictException(
+                "DEFAULT_WORKSPACE_DELETE_FORBIDDEN",
+                "Default workspace cannot be deleted"
+        )).when(workspaceService).deleteWorkspace(workspaceId);
+
+        mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DEFAULT_WORKSPACE_DELETE_FORBIDDEN"))
+                .andExpect(jsonPath("$.message").value("Default workspace cannot be deleted"));
+    }
+
+    @Test
+    void deleteWorkspaceReturnsConflictWhenWorkspaceStillHasAssets() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        doThrow(new WorkspaceDeleteConflictException(
+                "WORKSPACE_NOT_EMPTY",
+                "Workspace cannot be deleted while it still contains assets"
+        )).when(workspaceService).deleteWorkspace(workspaceId);
+
+        mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_EMPTY"))
+                .andExpect(jsonPath("$.message").value("Workspace cannot be deleted while it still contains assets"));
     }
 
     private Workspace workspace(UUID id, String name, Instant createdAt) {

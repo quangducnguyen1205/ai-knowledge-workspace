@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +36,9 @@ class WorkspaceServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @Mock
+    private AssetRepository assetRepository;
+
+    @Mock
     private CurrentUserService currentUserService;
 
     @AfterEach
@@ -47,6 +51,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -86,6 +91,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -107,6 +113,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -126,6 +133,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -157,6 +165,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -171,6 +180,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -189,6 +199,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 realCurrentUserService
         );
@@ -218,6 +229,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 realCurrentUserService
         );
@@ -247,6 +259,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -280,6 +293,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
+                assetRepository,
                 workspaceProperties,
                 currentUserService
         );
@@ -310,6 +324,139 @@ class WorkspaceServiceTest {
         assertThat(result).isSameAs(adoptedWorkspace);
         assertThat(legacyDefaultWorkspace.getOwnerId()).isEqualTo(currentUserId);
         assertThat(legacyDefaultWorkspace.isDefaultWorkspace()).isTrue();
+    }
+
+    @Test
+    void updateWorkspaceTrimsAndPersistsNameForOwnedWorkspace() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-1";
+        UUID workspaceId = UUID.randomUUID();
+        Workspace ownedWorkspace = workspace(
+                workspaceId,
+                "Operating Systems",
+                currentUserId,
+                false,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
+        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(workspaceRepository.save(ownedWorkspace)).thenReturn(ownedWorkspace);
+
+        Workspace result = workspaceService.updateWorkspace(workspaceId, "  Renamed Workspace  ");
+
+        assertThat(result).isSameAs(ownedWorkspace);
+        assertThat(ownedWorkspace.getName()).isEqualTo("Renamed Workspace");
+        verify(workspaceRepository).save(ownedWorkspace);
+    }
+
+    @Test
+    void updateWorkspaceRejectsBlankName() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+
+        assertThatThrownBy(() -> workspaceService.updateWorkspace(UUID.randomUUID(), "   "))
+                .isInstanceOf(InvalidWorkspaceNameException.class)
+                .hasMessageContaining("Workspace name is required");
+    }
+
+    @Test
+    void deleteWorkspaceDeletesOwnedEmptyNonDefaultWorkspace() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-1";
+        UUID workspaceId = UUID.randomUUID();
+        Workspace ownedWorkspace = workspace(
+                workspaceId,
+                "Algorithms",
+                currentUserId,
+                false,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
+        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(0L);
+
+        workspaceService.deleteWorkspace(workspaceId);
+
+        verify(workspaceRepository).delete(ownedWorkspace);
+    }
+
+    @Test
+    void deleteWorkspaceRejectsDefaultWorkspace() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-1";
+        UUID workspaceId = UUID.randomUUID();
+        Workspace defaultWorkspace = workspace(
+                workspaceId,
+                "Default Workspace",
+                currentUserId,
+                true,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
+        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(defaultWorkspace));
+
+        assertThatThrownBy(() -> workspaceService.deleteWorkspace(workspaceId))
+                .isInstanceOf(WorkspaceDeleteConflictException.class)
+                .hasMessage("Default workspace cannot be deleted");
+
+        verify(workspaceRepository, never()).delete(any());
+        verify(assetRepository, never()).countByWorkspace_Id(any());
+    }
+
+    @Test
+    void deleteWorkspaceRejectsWorkspaceThatStillHasAssets() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-1";
+        UUID workspaceId = UUID.randomUUID();
+        Workspace ownedWorkspace = workspace(
+                workspaceId,
+                "Algorithms",
+                currentUserId,
+                false,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
+        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(2L);
+
+        assertThatThrownBy(() -> workspaceService.deleteWorkspace(workspaceId))
+                .isInstanceOf(WorkspaceDeleteConflictException.class)
+                .hasMessage("Workspace cannot be deleted while it still contains assets");
+
+        verify(workspaceRepository, never()).delete(any());
     }
 
     private Workspace workspace(UUID id, String name, String ownerId, boolean defaultWorkspace, Instant createdAt) {

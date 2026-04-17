@@ -4,6 +4,15 @@
 
 This repository runs as the new product core for AI Knowledge Workspace. The legacy FastAPI repository remains a separate dependency and should be treated as an external internal service through `FASTAPI_BASE_URL`.
 
+For the current minimal usable web product, the canonical supported run mode is a Docker-first demo topology with one supported local Spring Boot process:
+
+- Repo A / FastAPI through its own existing Docker Compose path
+- Repo B PostgreSQL + Elasticsearch through Repo B Docker Compose
+- Repo B Spring Boot (`workspace-core`) on the host
+- Repo FE frontend through its own Docker Compose path
+
+See [deployable-demo-baseline.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/planning/deployable-demo-baseline.md) for the concise supported-baseline decision.
+
 ## Local Port Plan
 
 Repo A already uses:
@@ -95,6 +104,32 @@ Check that Spring is still pointing at Repo A:
 echo $FASTAPI_BASE_URL
 curl "$FASTAPI_BASE_URL/openapi.json"
 ```
+
+### 6. Verify Backend Before Browser
+
+Before opening the frontend, treat the backend smoke helper as the default verification step for the supported demo baseline:
+
+```bash
+make smoke MEDIA_FILE=/absolute/path/to/lecture-video.mp4
+```
+
+Only move on to browser verification through the frontend after the backend smoke path passes.
+
+### 7. Start The Frontend Last
+
+From the frontend repo:
+
+```bash
+docker compose up --build
+```
+
+Expected frontend URL:
+
+```bash
+http://localhost:5173
+```
+
+The frontend proxies `/api` requests to the host Spring backend at `http://localhost:8081`.
 
 ## Thin Slice Smoke Helper
 

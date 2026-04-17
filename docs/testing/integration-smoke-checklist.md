@@ -4,6 +4,14 @@ This checklist reflects the current `workspace-core` implementation in Repo B. I
 
 The helper script at `infra/scripts/smoke-thin-slice.sh` covers the current default-workspace happy path and can exercise a non-default workspace path when `SMOKE_WORKSPACE_NAME` is set.
 
+For the current deployable-demo baseline, the supported verification order is:
+
+1. Start Repo A.
+2. Start Repo B infrastructure.
+3. Start Repo B Spring Boot on the host.
+4. Run backend smoke against `http://localhost:8081`.
+5. Start Repo FE and verify the browser path through `http://localhost:5173`.
+
 For this Phase 2 basic-auth slice, the primary product-facing current-user path is now session-based auth through register/login.
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
 If authenticated session, auth-session fallback, and header are all absent, Spring falls back to the configured local/dev default user.
@@ -183,6 +191,12 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` with a new `name`.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the workspace name is updated in both the direct read and workspace list.
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` only after confirming it contains no assets.
+- [ ] Expect HTTP `204`.
+- [ ] Confirm the deleted workspace no longer appears in the visible workspace list.
 - [ ] Re-authenticate as a different user.
 - [ ] Confirm the first user's non-default workspace does not appear.
 - [ ] Confirm a separate default workspace is created lazily for the second user if needed.
@@ -199,7 +213,21 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` with a blank or missing `name`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_NAME"`
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` for the current user's default workspace.
+- [ ] Expect HTTP `409`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "DEFAULT_WORKSPACE_DELETE_FORBIDDEN"`
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` for a non-default workspace that still contains assets.
+- [ ] Expect HTTP `409`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_EMPTY"`
 - [ ] Call `GET /api/workspaces/{workspaceId}` for a workspace created under one user, but first re-establish the auth session as a different user.
+- [ ] Expect the same ownership-safe HTTP `404`.
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` or `DELETE /api/workspaces/{workspaceId}` for a workspace owned by another user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 4. Product Upload Flow Checks
