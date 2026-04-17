@@ -51,6 +51,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
 - HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
 - HTTP `409` with `code = "EMAIL_ALREADY_REGISTERED"` if the normalized email already exists
@@ -81,6 +82,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
 - HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
 - HTTP `401` with `code = "INVALID_CREDENTIALS"` if the email/password pair is not valid
@@ -144,6 +146,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_CURRENT_USER_ID"` if `userId` is missing, blank after trim, or longer than the current max length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 
 ### `POST /api/workspaces`
 
@@ -172,8 +175,8 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is blank or longer than the current maximum length
-- HTTP `400` if the request body is missing or malformed
+- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is missing, blank, or longer than the current maximum length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 
 ### `GET /api/workspaces`
 
@@ -244,6 +247,7 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is missing, blank, or longer than the current max length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
 
 ### `DELETE /api/workspaces/{workspaceId}`
@@ -403,6 +407,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_ASSET_TITLE"` if `title` is missing, blank after trim, or longer than the current max length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable while syncing title metadata for a `SEARCHABLE` asset
 - HTTP `502` if Elasticsearch returns an integration error while syncing title metadata for a `SEARCHABLE` asset

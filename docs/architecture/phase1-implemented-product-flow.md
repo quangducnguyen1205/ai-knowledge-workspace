@@ -101,8 +101,7 @@ Status is product-facing and asset-centric.
 Transcript reads are also product-facing.
 
 - Spring uses a local transcript snapshot in the normal path.
-- If the snapshot is still missing but processing already succeeded, Spring fetches transcript rows from FastAPI using `fastapiVideoId`, validates them, and persists the snapshot before serving or indexing them.
-- If the snapshot is still missing but processing already succeeded, Spring fetches transcript rows from FastAPI using `fastapiVideoId`, filters for usable transcript rows, and persists that snapshot before serving or indexing them.
+- If the snapshot is still missing after processing succeeds, Spring fetches transcript rows from FastAPI using `fastapiVideoId`, filters and validates for usable rows, persists the snapshot, then serves or indexes from that local snapshot.
 - Spring only uses the currently verified transcript fields:
   - `id`
   - `video_id`
@@ -111,7 +110,7 @@ Transcript reads are also product-facing.
   - `created_at`
 - Spring does not treat task success alone as proof of usable transcript data.
 - If transcript rows are empty or unusable, Spring explicitly does not treat the asset as usable.
-- A non-empty transcript can move the asset to `TRANSCRIPT_READY`.
+- A usable non-empty transcript can move the asset to `TRANSCRIPT_READY`.
 - Successful indexing moves the asset to `SEARCHABLE`.
 - Spring also exposes a separate transcript-context endpoint for search-hit follow-up.
 - Transcript context is selected by transcript row ordering on `segmentIndex`.

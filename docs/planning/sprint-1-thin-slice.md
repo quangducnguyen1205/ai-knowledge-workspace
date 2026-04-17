@@ -1,5 +1,15 @@
 # Sprint 1 Thin Slice
 
+Historical note: this document records the original thin-slice scope and outcomes at that time. Later work has since added ownership/auth, local transcript snapshot persistence, workspace rename/delete, search refinement, and release-readiness/runbook improvements.
+
+For the current backend source of truth, use:
+
+- [API.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/api/API.md)
+- [phase1-implemented-product-flow.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/architecture/phase1-implemented-product-flow.md)
+- [Database.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/data/Database.md)
+- [local-dev.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/runbooks/local-dev.md)
+- [integration-smoke-checklist.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/testing/integration-smoke-checklist.md)
+
 ## Sprint Goal
 
 Deliver a narrow but real backend slice in which Spring Boot owns the product-facing flow from upload through indexing and search for lecture-video transcript retrieval.
