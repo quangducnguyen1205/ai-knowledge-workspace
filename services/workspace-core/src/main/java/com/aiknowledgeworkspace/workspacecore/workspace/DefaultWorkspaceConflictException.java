@@ -1,0 +1,15 @@
+package com.aiknowledgeworkspace.workspacecore.workspace;
+
+public class DefaultWorkspaceConflictException extends RuntimeException {
+
+    private final String code;
+
+    public DefaultWorkspaceConflictException(String code, String message) {
+        super(message);
+        this.code = code;
+    }
+
+    public String getCode() {
+        return code;
+    }
+}

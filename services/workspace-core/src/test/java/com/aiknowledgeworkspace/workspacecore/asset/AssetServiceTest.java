@@ -293,8 +293,8 @@ class AssetServiceTest {
         );
 
         bindSessionCurrentUser(currentUserService, currentUserId);
-        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
-                .thenReturn(Optional.of(defaultWorkspace));
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
+                .thenReturn(List.of(defaultWorkspace));
         when(assetRepository.findByWorkspace_Id(defaultWorkspace.getId(), assetListSort()))
                 .thenReturn(List.of(asset));
 

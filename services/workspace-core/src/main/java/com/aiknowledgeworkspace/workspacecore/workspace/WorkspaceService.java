@@ -2,8 +2,11 @@ package com.aiknowledgeworkspace.workspacecore.workspace;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,9 +123,9 @@ public class WorkspaceService {
 
     @Transactional
     public Workspace ensureDefaultWorkspace(String currentUserId) {
-        return workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)
+        return findOwnedDefaultWorkspace(currentUserId)
                 .orElseGet(() -> adoptLegacyDefaultWorkspaceIfNeeded(currentUserId)
-                        .orElseGet(() -> createDefaultWorkspace(currentUserId)));
+                        .orElseGet(() -> createDefaultWorkspaceSafely(currentUserId)));
     }
 
     private String normalizeWorkspaceName(String name) {
@@ -147,15 +150,22 @@ public class WorkspaceService {
         );
     }
 
-    private java.util.Optional<Workspace> adoptLegacyDefaultWorkspaceIfNeeded(String currentUserId) {
+    // Transitional legacy-adoption path for the configured local/dev default workspace only.
+    private Optional<Workspace> adoptLegacyDefaultWorkspaceIfNeeded(String currentUserId) {
         if (!currentUserService.isDefaultUser(currentUserId)) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
 
         return workspaceRepository.findById(workspaceProperties.getDefaultId())
-                .filter(workspace -> !StringUtils.hasText(workspace.getOwnerId())
-                        || currentUserId.equals(workspace.getOwnerId()))
                 .map(workspace -> {
+                    if (StringUtils.hasText(workspace.getOwnerId())
+                            && !currentUserId.equals(workspace.getOwnerId())) {
+                        throw new DefaultWorkspaceConflictException(
+                                "DEFAULT_WORKSPACE_ID_CONFLICT",
+                                "Configured default workspace ID is already owned by another user and cannot be adopted safely"
+                        );
+                    }
+
                     boolean changed = false;
 
                     if (!currentUserId.equals(workspace.getOwnerId())) {
@@ -177,16 +187,49 @@ public class WorkspaceService {
                 });
     }
 
-    private Workspace createDefaultWorkspace(String currentUserId) {
-        UUID workspaceId = currentUserService.isDefaultUser(currentUserId)
-                ? workspaceProperties.getDefaultId()
-                : null;
+    private Optional<Workspace> findOwnedDefaultWorkspace(String currentUserId) {
+        List<Workspace> defaultWorkspaces = workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
+        if (defaultWorkspaces.isEmpty()) {
+            return Optional.empty();
+        }
+        if (defaultWorkspaces.size() > 1) {
+            throw new DefaultWorkspaceConflictException(
+                    "DEFAULT_WORKSPACE_CONFLICT",
+                    "Multiple default workspaces exist for the current user"
+            );
+        }
 
-        return workspaceRepository.save(new Workspace(
-                workspaceId,
+        return Optional.of(defaultWorkspaces.get(0));
+    }
+
+    private Workspace createDefaultWorkspaceSafely(String currentUserId) {
+        Workspace defaultWorkspace = new Workspace(
+                defaultWorkspaceIdFor(currentUserId),
                 workspaceProperties.getDefaultName(),
                 currentUserId,
                 true
-        ));
+        );
+
+        try {
+            return workspaceRepository.save(defaultWorkspace);
+        } catch (DataIntegrityViolationException exception) {
+            return findOwnedDefaultWorkspace(currentUserId)
+                    .orElseThrow(this::defaultWorkspaceIdConflict);
+        }
+    }
+
+    private UUID defaultWorkspaceIdFor(String currentUserId) {
+        if (currentUserService.isDefaultUser(currentUserId)) {
+            return workspaceProperties.getDefaultId();
+        }
+
+        return UUID.nameUUIDFromBytes(("default-workspace:" + currentUserId).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private DefaultWorkspaceConflictException defaultWorkspaceIdConflict() {
+        return new DefaultWorkspaceConflictException(
+                "DEFAULT_WORKSPACE_ID_CONFLICT",
+                "Default workspace could not be created safely because the reserved workspace ID is already in use"
+        );
     }
 }

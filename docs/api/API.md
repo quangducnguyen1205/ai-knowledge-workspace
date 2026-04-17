@@ -196,6 +196,11 @@ Current behavior:
 - The list only returns workspaces owned by the current user.
 - Results are intentionally minimal and do not include asset counts or membership data.
 
+Common failure cases:
+
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if the current user's default workspace state is internally conflicted
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if Spring cannot adopt or create the reserved default workspace safely
+
 ### `GET /api/workspaces/{workspaceId}`
 
 Reads one workspace in Repo B.
@@ -320,6 +325,8 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_ASSET_SIZE"` if `size` is malformed, non-positive, or greater than `100`
 - HTTP `400` with `code = "INVALID_ASSET_STATUS"` if `assetStatus` is not one of the current product asset statuses
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
 
 ### `POST /api/assets/upload`
 
@@ -355,6 +362,8 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_UPLOAD_FILE"` if `file` is missing or empty
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
 - HTTP `502` or `504` if upstream FastAPI fails
 
 All asset-by-id endpoints below are ownership-aware through the asset's workspace.
@@ -614,6 +623,8 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_SEARCH_QUERY"` if `q` is missing or blank
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 
@@ -623,6 +634,11 @@ Structured error responses currently use:
 
 - `code`
 - `message`
+
+Default-workspace integrity conflicts currently use:
+
+- `DEFAULT_WORKSPACE_CONFLICT`
+- `DEFAULT_WORKSPACE_ID_CONFLICT`
 
 Current structured error codes:
 

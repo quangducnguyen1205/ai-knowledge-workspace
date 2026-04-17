@@ -37,18 +37,19 @@ The implemented flow is:
 1. Spring exposes minimal product auth through session-based register/login/logout and `GET /api/me`.
 2. Spring exposes minimal ownership-aware workspace create, list, read, rename, and conservative delete endpoints.
 3. Spring creates the current user's default workspace lazily when the default scope is first needed.
-4. Spring receives a multipart upload from the client.
-5. Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace.
-6. Spring forwards `file` and `title` to FastAPI.
-7. Spring validates the live FastAPI upload response.
-8. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
-9. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
-10. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
-11. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
-12. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
-13. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
-14. Successful indexing refreshes the transcript index before returning.
-15. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+4. If that default-workspace state is internally conflicted, Spring now returns an explicit integrity-style `409` instead of a vague runtime failure.
+5. Spring receives a multipart upload from the client.
+6. Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace.
+7. Spring forwards `file` and `title` to FastAPI.
+8. Spring validates the live FastAPI upload response.
+9. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
+10. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
+11. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
+12. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
+13. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
+14. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
+15. Successful indexing refreshes the transcript index before returning.
+16. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -88,6 +89,7 @@ The current transaction boundary is simple:
 - Network calls to FastAPI happen outside the DB write transaction.
 - DB writes are isolated in the persistence service.
 - The current user's default workspace can be created lazily on first use.
+- If default-workspace integrity is inconsistent, Spring fails with explicit conflict codes instead of a vague create/adopt failure.
 
 ## Current Status And Transcript Policy
 
@@ -125,6 +127,7 @@ Workspace management and asset listing are also product-facing.
 - Workspace delete stays conservative: only non-default workspaces can be deleted, and only when they contain no assets.
 - Asset listing runs through `GET /api/assets`.
 - Asset listing resolves `workspaceId` and falls back to the current user's default workspace when it is omitted.
+- If omitted `workspaceId` requires default-workspace resolution and that default-workspace state is conflicted, Spring returns an explicit integrity-style `409`.
 - Asset listing supports small v1 pagination through `page` and `size`, plus one optional `assetStatus` filter.
 - Pagination and filtering are applied within the resolved workspace scope.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
@@ -153,6 +156,7 @@ Indexing and search are also product-facing.
 - If Elasticsearch indexing fails after transcript data is usable, Spring does not collapse the asset back to `FAILED`.
 - Search runs through Spring, not FastAPI.
 - Search resolves `workspaceId` and falls back to the current user's default workspace when it is omitted.
+- If omitted `workspaceId` requires default-workspace resolution and that default-workspace state is conflicted, Spring returns an explicit integrity-style `409`.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
 - Search filters on workspace scope before returning results.
 - Search only returns transcript-row documents for assets currently marked `SEARCHABLE`.

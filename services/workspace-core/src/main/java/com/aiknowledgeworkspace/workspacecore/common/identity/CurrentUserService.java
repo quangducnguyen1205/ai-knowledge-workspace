@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
@@ -19,8 +20,7 @@ public class CurrentUserService {
     }
 
     public String getCurrentUserId() {
-        ServletRequestAttributes requestAttributes =
-                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        ServletRequestAttributes requestAttributes = getServletRequestAttributes();
         if (requestAttributes == null) {
             return currentUserProperties.getDefaultId();
         }
@@ -40,8 +40,7 @@ public class CurrentUserService {
     }
 
     public String getAuthenticatedSessionUserId() {
-        ServletRequestAttributes requestAttributes =
-                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        ServletRequestAttributes requestAttributes = getServletRequestAttributes();
         if (requestAttributes == null) {
             return null;
         }
@@ -70,6 +69,15 @@ public class CurrentUserService {
 
     public String getSessionAttributeName() {
         return currentUserProperties.getSessionAttributeName();
+    }
+
+    private ServletRequestAttributes getServletRequestAttributes() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (requestAttributes instanceof ServletRequestAttributes servletRequestAttributes) {
+            return servletRequestAttributes;
+        }
+
+        return null;
     }
 
     private String resolveSessionUserId(HttpServletRequest request) {

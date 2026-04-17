@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 class CurrentUserServiceTest {
@@ -69,6 +70,17 @@ class CurrentUserServiceTest {
     }
 
     @Test
+    void returnsDefaultUserIdWhenRequestContextIsNotServletBased() {
+        CurrentUserProperties properties = new CurrentUserProperties();
+        CurrentUserService currentUserService = new CurrentUserService(properties);
+
+        RequestContextHolder.setRequestAttributes(new NonServletRequestAttributes());
+
+        assertThat(currentUserService.getCurrentUserId()).isEqualTo(properties.getDefaultId());
+        assertThat(currentUserService.getAuthenticatedSessionUserId()).isNull();
+    }
+
+    @Test
     void getAuthenticatedSessionUserIdReturnsOnlySessionUser() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
@@ -118,5 +130,45 @@ class CurrentUserServiceTest {
         currentUserService.clearCurrentUser(session);
 
         assertThat(session.isInvalid()).isTrue();
+    }
+
+    private static final class NonServletRequestAttributes implements RequestAttributes {
+
+        @Override
+        public Object getAttribute(String name, int scope) {
+            return null;
+        }
+
+        @Override
+        public void setAttribute(String name, Object value, int scope) {
+        }
+
+        @Override
+        public void removeAttribute(String name, int scope) {
+        }
+
+        @Override
+        public String[] getAttributeNames(int scope) {
+            return new String[0];
+        }
+
+        @Override
+        public void registerDestructionCallback(String name, Runnable callback, int scope) {
+        }
+
+        @Override
+        public Object resolveReference(String key) {
+            return null;
+        }
+
+        @Override
+        public String getSessionId() {
+            return "non-servlet-session";
+        }
+
+        @Override
+        public Object getSessionMutex() {
+            return this;
+        }
     }
 }

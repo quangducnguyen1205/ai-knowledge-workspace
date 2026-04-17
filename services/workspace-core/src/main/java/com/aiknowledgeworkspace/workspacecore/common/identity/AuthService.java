@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 import jakarta.servlet.http.HttpSession;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -35,10 +36,15 @@ public class AuthService {
             throw new EmailAlreadyRegisteredException("Email is already registered");
         }
 
-        UserAccount userAccount = userAccountRepository.save(new UserAccount(
-                credentials.email(),
-                passwordEncoder.encode(credentials.password())
-        ));
+        UserAccount userAccount;
+        try {
+            userAccount = userAccountRepository.save(new UserAccount(
+                    credentials.email(),
+                    passwordEncoder.encode(credentials.password())
+            ));
+        } catch (DataIntegrityViolationException exception) {
+            throw new EmailAlreadyRegisteredException("Email is already registered");
+        }
 
         currentUserService.establishCurrentUser(session, userAccount.getId().toString());
         return toResponse(userAccount);
