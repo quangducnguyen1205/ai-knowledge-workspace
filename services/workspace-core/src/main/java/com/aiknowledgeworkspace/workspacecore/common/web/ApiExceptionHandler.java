@@ -15,6 +15,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnect
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.workspace.InvalidWorkspaceNameException;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceDeleteConflictException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -63,6 +64,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidWorkspaceName(InvalidWorkspaceNameException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse("INVALID_WORKSPACE_NAME", exception.getMessage()));
+    }
+
+    @ExceptionHandler(WorkspaceDeleteConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleWorkspaceDeleteConflict(WorkspaceDeleteConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
     }
 
     @ExceptionHandler(InvalidAssetTitleException.class)

@@ -215,6 +215,61 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
 
+### `PATCH /api/workspaces/{workspaceId}`
+
+Updates one owned workspace name.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `name` required
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `id`
+  - `name`
+  - `createdAt`
+
+Current behavior:
+
+- This v1 slice supports workspace name update only.
+- Spring trims the requested name before validation and persistence.
+- Ownership remains enforced through the same ownership-safe `WORKSPACE_NOT_FOUND` behavior.
+- This slice does not change workspace membership, sharing, or default-workspace rules.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is missing, blank, or longer than the current max length
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
+
+### `DELETE /api/workspaces/{workspaceId}`
+
+Deletes one owned workspace under conservative v1 rules.
+
+Response:
+
+- HTTP `204`
+
+Current behavior:
+
+- Only non-default workspaces can be deleted.
+- Deletion is ownership-aware and uses the same ownership-safe `WORKSPACE_NOT_FOUND` response when the workspace does not exist or is not owned by the current user.
+- Deletion is intentionally conservative in v1:
+  - the workspace must not be the default workspace
+  - the workspace must not still contain assets
+- Spring does not silently migrate assets during workspace deletion.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_DELETE_FORBIDDEN"` if the workspace is the current user's default workspace
+- HTTP `409` with `code = "WORKSPACE_NOT_EMPTY"` if the workspace still contains assets
+
 ### `GET /api/assets`
 
 Lists assets in the resolved workspace scope with simple pagination.

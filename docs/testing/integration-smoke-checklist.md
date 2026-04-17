@@ -191,6 +191,12 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `GET /api/workspaces/{workspaceId}` for the created workspace.
 - [ ] Expect HTTP `200`.
 - [ ] Confirm the returned `id`, `name`, and `createdAt` match the created workspace.
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` with a new `name`.
+- [ ] Expect HTTP `200`.
+- [ ] Confirm the workspace name is updated in both the direct read and workspace list.
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` only after confirming it contains no assets.
+- [ ] Expect HTTP `204`.
+- [ ] Confirm the deleted workspace no longer appears in the visible workspace list.
 - [ ] Re-authenticate as a different user.
 - [ ] Confirm the first user's non-default workspace does not appear.
 - [ ] Confirm a separate default workspace is created lazily for the second user if needed.
@@ -207,7 +213,21 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Expect HTTP `404`.
 - [ ] Expect structured error JSON with:
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` with a blank or missing `name`.
+- [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_WORKSPACE_NAME"`
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` for the current user's default workspace.
+- [ ] Expect HTTP `409`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "DEFAULT_WORKSPACE_DELETE_FORBIDDEN"`
+- [ ] Call `DELETE /api/workspaces/{workspaceId}` for a non-default workspace that still contains assets.
+- [ ] Expect HTTP `409`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "WORKSPACE_NOT_EMPTY"`
 - [ ] Call `GET /api/workspaces/{workspaceId}` for a workspace created under one user, but first re-establish the auth session as a different user.
+- [ ] Expect the same ownership-safe HTTP `404`.
+- [ ] Call `PATCH /api/workspaces/{workspaceId}` or `DELETE /api/workspaces/{workspaceId}` for a workspace owned by another user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
 ## 4. Product Upload Flow Checks
