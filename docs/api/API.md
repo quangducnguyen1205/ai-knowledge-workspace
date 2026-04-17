@@ -51,6 +51,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
 - HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
 - HTTP `409` with `code = "EMAIL_ALREADY_REGISTERED"` if the normalized email already exists
@@ -81,6 +82,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_AUTH_REQUEST"` if the request body is missing
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `400` with `code = "INVALID_EMAIL"` if `email` is missing, malformed, or too long
 - HTTP `400` with `code = "INVALID_PASSWORD"` if `password` is missing, blank, too short, or too long
 - HTTP `401` with `code = "INVALID_CREDENTIALS"` if the email/password pair is not valid
@@ -144,6 +146,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_CURRENT_USER_ID"` if `userId` is missing, blank after trim, or longer than the current max length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 
 ### `POST /api/workspaces`
 
@@ -172,8 +175,8 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is blank or longer than the current maximum length
-- HTTP `400` if the request body is missing or malformed
+- HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is missing, blank, or longer than the current maximum length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 
 ### `GET /api/workspaces`
 
@@ -244,6 +247,7 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `400` with `code = "INVALID_WORKSPACE_NAME"` if `name` is missing, blank, or longer than the current max length
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the workspace does not exist or is not owned by the current user
 
 ### `DELETE /api/workspaces/{workspaceId}`
@@ -348,7 +352,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `400` if `file` is missing or empty
+- HTTP `400` with `code = "INVALID_UPLOAD_FILE"` if `file` is missing or empty
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `502` or `504` if upstream FastAPI fails
@@ -373,7 +377,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 
 ### `PATCH /api/assets/{assetId}`
 
@@ -403,7 +407,8 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_ASSET_TITLE"` if `title` is missing, blank after trim, or longer than the current max length
-- HTTP `404` if the asset does not exist or is not owned by the current user
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable while syncing title metadata for a `SEARCHABLE` asset
 - HTTP `502` if Elasticsearch returns an integration error while syncing title metadata for a `SEARCHABLE` asset
 
@@ -427,7 +432,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable while deleting a `SEARCHABLE` asset
 - HTTP `502` if Elasticsearch returns an integration error while deleting a `SEARCHABLE` asset
 
@@ -452,7 +457,8 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
 
 ### `GET /api/assets/{assetId}/transcript`
 
@@ -471,15 +477,17 @@ Response:
 Current behavior:
 
 - Spring serves transcript rows from a local product-owned transcript snapshot in the normal path.
-- If no local snapshot exists yet but processing has already succeeded, Spring fetches transcript rows from FastAPI using stored `fastapiVideoId`, validates that the transcript is usable, persists the local snapshot, then returns it.
+- If no local snapshot exists yet but processing has already succeeded, Spring fetches transcript rows from FastAPI using stored `fastapiVideoId`, filters for usable transcript rows, persists that local snapshot, then returns it.
 - Only the currently verified transcript fields are exposed.
 - Transcript fetch is rejected until `processingJobStatus = SUCCEEDED`.
-- Empty transcript is treated as not usable.
+- Empty or unusable transcript is treated as not usable.
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist, is not owned by the current user, or the processing job does not exist
-- HTTP `409` if processing is not ready or transcript rows are empty
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
+- HTTP `409` with `code = "TRANSCRIPT_NOT_READY"` if processing has not reached terminal success yet
+- HTTP `409` with `code = "TRANSCRIPT_NOT_USABLE"` if transcript rows are empty or unusable
 
 ### `GET /api/assets/{assetId}/transcript/context?transcriptRowId=...&window=...`
 
@@ -521,8 +529,10 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_TRANSCRIPT_CONTEXT_WINDOW"` if `window` is malformed, zero, negative, or above the current maximum
 - HTTP `404` with `code = "TRANSCRIPT_ROW_NOT_FOUND"` if the requested row does not belong to that asset transcript
-- HTTP `404` if the asset does not exist or is not owned by the current user
-- HTTP `409` if the transcript is not ready or is empty
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
+- HTTP `409` with `code = "TRANSCRIPT_NOT_READY"` if the transcript is not ready
+- HTTP `409` with `code = "TRANSCRIPT_NOT_USABLE"` if transcript rows are empty or unusable
 
 ### `POST /api/assets/{assetId}/index`
 
@@ -551,8 +561,10 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `404` if the asset does not exist, is not owned by the current user, or the processing job does not exist
-- HTTP `409` if transcript data is not ready or is empty
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
+- HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
+- HTTP `409` with `code = "TRANSCRIPT_NOT_READY"` if transcript data is not ready
+- HTTP `409` with `code = "TRANSCRIPT_NOT_USABLE"` if transcript data is empty or unusable
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 
@@ -599,7 +611,7 @@ Current behavior:
 
 Common failure cases:
 
-- HTTP `400` if `q` is missing or blank
+- HTTP `400` with `code = "INVALID_SEARCH_QUERY"` if `q` is missing or blank
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `503` if Elasticsearch is unavailable
@@ -620,9 +632,14 @@ Current structured error codes:
 - `ELASTICSEARCH_INTEGRATION_ERROR`
 - `INVALID_WORKSPACE_NAME`
 - `WORKSPACE_NOT_FOUND`
+- `ASSET_NOT_FOUND`
+- `PROCESSING_JOB_NOT_FOUND`
 - `INVALID_WORKSPACE_ID`
+- `INVALID_UPLOAD_FILE`
+- `INVALID_SEARCH_QUERY`
 - `INVALID_TRANSCRIPT_CONTEXT_WINDOW`
+- `TRANSCRIPT_NOT_READY`
+- `TRANSCRIPT_NOT_USABLE`
 - `TRANSCRIPT_ROW_NOT_FOUND`
 - `INVALID_REQUEST_PARAMETER`
-
-Other validation and state errors such as transcript-not-ready `409` still use Spring's standard status handling.
+- `INVALID_REQUEST_BODY`

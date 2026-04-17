@@ -1,5 +1,7 @@
 # Phase 1 Closure Summary
 
+Historical note: this records the Phase 1 closure decision at that time. Later Phase 2 work has since added ownership/auth, transcript snapshot persistence, workspace lifecycle expansion, search refinement, and release-readiness/runbook improvements. Use the current API/runbook docs for present-day behavior.
+
 ## Objective of Phase 1
 
 Phase 1 aimed to prove a narrow search-first MVP for AI Knowledge Workspace with Spring Boot as the product-facing boundary. The goal was not a production-ready app or chatbot/RAG system. The goal was a coherent demo path for workspace-scoped upload, processing follow-up, transcript access, explicit indexing, search, and search-hit context.

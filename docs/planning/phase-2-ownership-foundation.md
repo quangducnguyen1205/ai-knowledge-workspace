@@ -4,6 +4,8 @@
 
 This note records the first Phase 2 foundation already implemented in Repo B: ownership now starts at the workspace boundary through a minimal current-user mechanism in Spring.
 
+This is a historical slice note, not the full current backend status. Later Phase 2 work has since added transcript snapshot persistence, search refinement, workspace rename/delete, and basic session auth productization on top of this ownership foundation.
+
 ## What This Slice Added
 
 - an initial minimal current-user identity mechanism using `X-Current-User-Id`

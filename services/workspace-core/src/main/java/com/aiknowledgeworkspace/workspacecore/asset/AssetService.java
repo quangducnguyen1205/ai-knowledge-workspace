@@ -16,11 +16,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AssetService {
@@ -60,17 +58,17 @@ public class AssetService {
 
     public Asset getAsset(UUID assetId) {
         Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(this::assetNotFound);
+                .orElseThrow(AssetNotFoundException::new);
 
         if (asset.getWorkspace() != null) {
             if (!workspaceService.isOwnedByCurrentUser(asset.getWorkspace())) {
-                throw assetNotFound();
+                throw new AssetNotFoundException();
             }
             return asset;
         }
 
         if (!workspaceService.canAccessLegacyNullWorkspaceAssets()) {
-            throw assetNotFound();
+            throw new AssetNotFoundException();
         }
 
         Workspace defaultWorkspace = workspaceService.ensureDefaultWorkspace();
@@ -116,10 +114,7 @@ public class AssetService {
     public AssetStatusResponse getAssetStatus(UUID assetId) {
         Asset asset = getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Asset is missing its processing job"
-                ));
+                .orElseThrow(ProcessingJobNotFoundException::new);
 
         if (isTerminal(processingJob.getProcessingJobStatus())) {
             return new AssetStatusResponse(
@@ -151,7 +146,7 @@ public class AssetService {
     public List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
         Asset asset = getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Processing job not found"));
+                .orElseThrow(ProcessingJobNotFoundException::new);
 
         return loadUsableTranscriptSnapshot(asset, processingJob).stream()
                 .map(this::toAssetTranscriptRowResponse)
@@ -192,40 +187,24 @@ public class AssetService {
 
     public List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJob processingJob) {
         if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
+            throw new TranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_READY",
                     "Transcript is not ready until processing reaches terminal success"
             );
         }
 
-        List<AssetTranscriptRowSnapshot> transcriptRows = assetPersistenceService.loadTranscriptSnapshot(asset.getId());
-
+        List<AssetTranscriptRowSnapshot> transcriptRows = loadUsablePersistedTranscriptSnapshot(asset.getId());
         if (transcriptRows.isEmpty()) {
-            List<FastApiTranscriptRowResponse> upstreamTranscriptRows =
-                    fastApiProcessingClient.getTranscript(processingJob.getFastapiVideoId());
-
-            if (upstreamTranscriptRows.isEmpty()) {
-                assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Transcript is empty for this asset"
-                );
-            }
-
-            transcriptRows = assetPersistenceService.replaceTranscriptSnapshot(asset, upstreamTranscriptRows);
+            transcriptRows = captureUsableTranscriptSnapshot(asset, processingJob);
         }
 
-        AssetStatus updatedAssetStatus = asset.getStatus() == AssetStatus.SEARCHABLE
-                ? AssetStatus.SEARCHABLE
-                : AssetStatus.TRANSCRIPT_READY;
-        assetPersistenceService.updateAssetStatus(asset, updatedAssetStatus);
-
+        markAssetTranscriptUsable(asset);
         return transcriptRows;
     }
 
     public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A non-empty file is required");
+            throw new InvalidUploadRequestException("A non-empty file is required");
         }
 
         String originalFilename = resolveOriginalFilename(file);
@@ -244,11 +223,6 @@ public class AssetService {
         AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
                 ? AssetStatus.FAILED
                 : AssetStatus.PROCESSING;
-
-        // TODO: replace default-workspace fallback with user-owned workspace selection once auth exists.
-        // TODO: decide how to reconcile orphaned upstream tasks if FastAPI accepts upload but DB persistence fails.
-
-
         return assetPersistenceService.persistUploadResult(
                 originalFilename,
                 title,
@@ -270,10 +244,6 @@ public class AssetService {
         if (!StringUtils.hasText(upstreamResponse.videoId())) {
             throw new InvalidFastApiResponseException("FastAPI upload response did not include video_id");
         }
-    }
-
-    private ResponseStatusException assetNotFound() {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found");
     }
 
     private void validateUpstreamTaskStatusResponse(FastApiTaskStatusResponse upstreamResponse) {
@@ -446,5 +416,46 @@ public class AssetService {
                 transcriptRow.getText(),
                 transcriptRow.getCreatedAt()
         );
+    }
+
+    private List<AssetTranscriptRowSnapshot> loadUsablePersistedTranscriptSnapshot(UUID assetId) {
+        return assetPersistenceService.loadTranscriptSnapshot(assetId).stream()
+                .filter(this::isUsableTranscriptSnapshot)
+                .toList();
+    }
+
+    private List<AssetTranscriptRowSnapshot> captureUsableTranscriptSnapshot(Asset asset, ProcessingJob processingJob) {
+        List<FastApiTranscriptRowResponse> usableTranscriptRows = fastApiProcessingClient.getTranscript(
+                processingJob.getFastapiVideoId()
+        ).stream()
+                .filter(this::isUsableTranscriptRow)
+                .toList();
+
+        if (usableTranscriptRows.isEmpty()) {
+            assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
+            throw new TranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_USABLE",
+                    "Transcript is empty or unusable for this asset"
+            );
+        }
+
+        return assetPersistenceService.replaceTranscriptSnapshot(asset, usableTranscriptRows);
+    }
+
+    private void markAssetTranscriptUsable(Asset asset) {
+        AssetStatus updatedAssetStatus = asset.getStatus() == AssetStatus.SEARCHABLE
+                ? AssetStatus.SEARCHABLE
+                : AssetStatus.TRANSCRIPT_READY;
+        assetPersistenceService.updateAssetStatus(asset, updatedAssetStatus);
+    }
+
+    private boolean isUsableTranscriptSnapshot(AssetTranscriptRowSnapshot transcriptRow) {
+        return transcriptRow.getSegmentIndex() != null && StringUtils.hasText(transcriptRow.getText());
+    }
+
+    private boolean isUsableTranscriptRow(FastApiTranscriptRowResponse transcriptRow) {
+        return transcriptRow != null
+                && transcriptRow.segmentIndex() != null
+                && StringUtils.hasText(transcriptRow.text());
     }
 }

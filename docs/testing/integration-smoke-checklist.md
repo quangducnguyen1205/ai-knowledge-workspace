@@ -256,8 +256,12 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 
 - [ ] Call `POST /api/assets/upload` without `file`.
 - [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_UPLOAD_FILE"`
 - [ ] Call `POST /api/assets/upload` with an empty file.
 - [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_UPLOAD_FILE"`
 - [ ] Call `POST /api/assets/upload` with `workspaceId=not-a-uuid`.
 - [ ] Expect HTTP `400`.
 - [ ] Expect structured error JSON with:
@@ -469,12 +473,16 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 
 - [ ] Call `GET /api/assets/{assetId}/transcript` before the processing job reaches `SUCCEEDED`.
 - [ ] Expect HTTP `409`.
-- [ ] Expect a clear message that transcript is not ready until processing reaches terminal success.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "TRANSCRIPT_NOT_READY"`
+  - [ ] message explaining that transcript is not ready until processing reaches terminal success
 
 ### Not Found Path
 
 - [ ] Call `GET /api/assets/{assetId}/transcript` with a random UUID that does not exist.
 - [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "ASSET_NOT_FOUND"`
 - [ ] Call `GET /api/assets/{assetId}/transcript` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
@@ -485,7 +493,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Use or create a case where upstream task processing succeeds but transcript rows are empty.
 - [ ] Call `GET /api/assets/{assetId}/transcript`.
 - [ ] Expect HTTP `409`.
-- [ ] Expect a clear message that the transcript is empty for this asset.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "TRANSCRIPT_NOT_USABLE"`
+  - [ ] message explaining that the transcript is empty or unusable for this asset
 - [ ] Confirm the asset is not treated as transcript-ready.
 - [ ] Confirm the asset is not treated as searchable.
 - [ ] Confirm a later status read does not show the asset as usable.
@@ -615,6 +625,8 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 
 - [ ] Call `GET /api/search?q=` with a blank or whitespace-only query value.
 - [ ] Expect HTTP `400`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "INVALID_SEARCH_QUERY"`
 - [ ] Call `GET /api/search?q=test&workspaceId=not-a-uuid`.
 - [ ] Expect HTTP `400`.
 - [ ] Expect structured error JSON with:

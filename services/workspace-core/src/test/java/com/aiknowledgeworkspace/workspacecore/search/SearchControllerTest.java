@@ -122,7 +122,16 @@ class SearchControllerTest {
         mockMvc.perform(get("/api/search")
                         .param("q", "   "))
                 .andExpect(status().isBadRequest())
-                .andExpect(status().reason("Query parameter q is required"));
+                .andExpect(jsonPath("$.code").value("INVALID_SEARCH_QUERY"))
+                .andExpect(jsonPath("$.message").value("q query parameter is required"));
+    }
+
+    @Test
+    void missingQueryReturnsStructuredBadRequest() throws Exception {
+        mockMvc.perform(get("/api/search"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SEARCH_QUERY"))
+                .andExpect(jsonPath("$.message").value("q query parameter is required"));
     }
 
     @Test

@@ -40,7 +40,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.web.server.ResponseStatusException;
 
 import static org.mockito.Mockito.lenient;
 
@@ -231,10 +230,8 @@ class AssetServiceTest {
         when(workspaceService.isOwnedByCurrentUser(workspace)).thenReturn(false);
 
         assertThatThrownBy(() -> assetService.getAsset(assetId))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
-                    assertThat(exception.getReason()).isEqualTo("Asset not found");
-                });
+                .isInstanceOf(AssetNotFoundException.class)
+                .hasMessageContaining("Asset not found");
 
         verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
     }
@@ -256,10 +253,8 @@ class AssetServiceTest {
         when(workspaceService.canAccessLegacyNullWorkspaceAssets()).thenReturn(false);
 
         assertThatThrownBy(() -> assetService.getAsset(assetId))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
-                    assertThat(exception.getReason()).isEqualTo("Asset not found");
-                });
+                .isInstanceOf(AssetNotFoundException.class)
+                .hasMessageContaining("Asset not found");
 
         verify(workspaceService, never()).ensureDefaultWorkspace();
         verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
@@ -336,10 +331,8 @@ class AssetServiceTest {
         when(assetRepository.findById(nonOwnedAsset.getId())).thenReturn(Optional.of(nonOwnedAsset));
 
         assertThatThrownBy(() -> assetService.getAsset(nonOwnedAsset.getId()))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode().value()).isEqualTo(404);
-                    assertThat(exception.getReason()).isEqualTo("Asset not found");
-                });
+                .isInstanceOf(AssetNotFoundException.class)
+                .hasMessageContaining("Asset not found");
     }
 
     @Test
@@ -912,9 +905,11 @@ class AssetServiceTest {
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode().value()).isEqualTo(409);
-                    assertThat(exception.getReason())
+                .isInstanceOf(TranscriptUnavailableException.class)
+                .satisfies(exception -> {
+                    TranscriptUnavailableException transcriptException = (TranscriptUnavailableException) exception;
+                    assertThat(transcriptException.getCode()).isEqualTo("TRANSCRIPT_NOT_READY");
+                    assertThat(transcriptException.getMessage())
                             .isEqualTo("Transcript is not ready until processing reaches terminal success");
                 });
         verifyNoInteractions(fastApiProcessingClient, assetPersistenceService);
@@ -947,11 +942,61 @@ class AssetServiceTest {
         when(fastApiProcessingClient.getTranscript("video-6")).thenReturn(List.of());
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode().value()).isEqualTo(409);
-                    assertThat(exception.getReason()).isEqualTo("Transcript is empty for this asset");
+                .isInstanceOf(TranscriptUnavailableException.class)
+                .satisfies(exception -> {
+                    TranscriptUnavailableException transcriptException = (TranscriptUnavailableException) exception;
+                    assertThat(transcriptException.getCode()).isEqualTo("TRANSCRIPT_NOT_USABLE");
+                    assertThat(transcriptException.getMessage()).isEqualTo("Transcript is empty or unusable for this asset");
                 });
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.FAILED);
+    }
+
+    @Test
+    void transcriptContextCapturesOnlyUsableTranscriptRows() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture 7", AssetStatus.PROCESSING, new Workspace(workspaceId, "AI"), null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "task-7",
+                "video-7",
+                ProcessingJobStatus.SUCCEEDED,
+                "success"
+        );
+        FastApiTranscriptRowResponse usableRow = new FastApiTranscriptRowResponse(
+                "row-1",
+                "video-7",
+                1,
+                "Useful transcript row",
+                "2026-04-12T00:00:00Z"
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
+        when(fastApiProcessingClient.getTranscript("video-7")).thenReturn(List.of(
+                new FastApiTranscriptRowResponse("row-blank", "video-7", 0, "   ", "2026-04-12T00:00:00Z"),
+                new FastApiTranscriptRowResponse("row-missing-segment", "video-7", null, "Still bad", "2026-04-12T00:00:01Z"),
+                usableRow
+        ));
+        when(assetPersistenceService.replaceTranscriptSnapshot(asset, List.of(usableRow))).thenReturn(List.of(
+                snapshotRow(assetId, "row-1", "video-7", 1, "Useful transcript row")
+        ));
+
+        AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "row-1", 2);
+
+        assertThat(response.rows()).hasSize(1);
+        assertThat(response.rows().get(0).id()).isEqualTo("row-1");
+        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, List.of(usableRow));
+        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
     }
 
     @Test

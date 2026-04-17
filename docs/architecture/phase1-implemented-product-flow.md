@@ -4,15 +4,23 @@
 
 This note documents the currently implemented product-side flow in Repo B. It is intentionally narrow and reflects the current Spring Boot code rather than the broader target architecture.
 
+Despite the filename, this remains a current backend flow snapshot, not a literal "Phase 1 only" freeze. Historical phase-closure and transition notes live under `docs/planning/` and should not be treated as the current runtime contract.
+
 ## Current Implemented Product Flow
 
 Repo A remains a separate FastAPI processing service. Repo B is the Spring Boot product core.
 
 The currently implemented product-facing endpoints are:
 
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/me`
 - `POST /api/workspaces`
 - `GET /api/workspaces`
 - `GET /api/workspaces/{workspaceId}`
+- `PATCH /api/workspaces/{workspaceId}`
+- `DELETE /api/workspaces/{workspaceId}`
 - `GET /api/assets`
 - `GET /api/assets/{assetId}`
 - `PATCH /api/assets/{assetId}`
@@ -26,20 +34,21 @@ The currently implemented product-facing endpoints are:
 
 The implemented flow is:
 
-1. Spring exposes minimal workspace create, list, and read endpoints.
-2. Spring creates the current user's default workspace lazily when the default scope is first needed.
-3. Spring receives a multipart upload from the client.
-4. Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace.
-5. Spring forwards `file` and `title` to FastAPI.
-6. Spring validates the live FastAPI upload response.
-7. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
-8. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
-9. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
-10. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
-11. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
-12. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
-13. Successful indexing refreshes the transcript index before returning.
-14. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+1. Spring exposes minimal product auth through session-based register/login/logout and `GET /api/me`.
+2. Spring exposes minimal ownership-aware workspace create, list, read, rename, and conservative delete endpoints.
+3. Spring creates the current user's default workspace lazily when the default scope is first needed.
+4. Spring receives a multipart upload from the client.
+5. Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace.
+6. Spring forwards `file` and `title` to FastAPI.
+7. Spring validates the live FastAPI upload response.
+8. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
+9. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
+10. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
+11. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
+12. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
+13. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
+14. Successful indexing refreshes the transcript index before returning.
+15. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -54,6 +63,8 @@ Spring currently persists:
 
 - `id`
 - `name`
+- `ownerId`
+- `defaultWorkspace`
 - `createdAt`
 
 `ProcessingJob` currently stores:
@@ -90,7 +101,7 @@ Status is product-facing and asset-centric.
 Transcript reads are also product-facing.
 
 - Spring uses a local transcript snapshot in the normal path.
-- If the snapshot is still missing but processing already succeeded, Spring fetches transcript rows from FastAPI using `fastapiVideoId`, validates them, and persists the snapshot before serving or indexing them.
+- If the snapshot is still missing after processing succeeds, Spring fetches transcript rows from FastAPI using `fastapiVideoId`, filters and validates for usable rows, persists the snapshot, then serves or indexes from that local snapshot.
 - Spring only uses the currently verified transcript fields:
   - `id`
   - `video_id`
@@ -98,8 +109,8 @@ Transcript reads are also product-facing.
   - `text`
   - `created_at`
 - Spring does not treat task success alone as proof of usable transcript data.
-- If transcript rows are empty, Spring explicitly does not treat the asset as usable.
-- A non-empty transcript can move the asset to `TRANSCRIPT_READY`.
+- If transcript rows are empty or unusable, Spring explicitly does not treat the asset as usable.
+- A usable non-empty transcript can move the asset to `TRANSCRIPT_READY`.
 - Successful indexing moves the asset to `SEARCHABLE`.
 - Spring also exposes a separate transcript-context endpoint for search-hit follow-up.
 - Transcript context is selected by transcript row ordering on `segmentIndex`.
@@ -108,8 +119,10 @@ Transcript reads are also product-facing.
 
 Workspace management and asset listing are also product-facing.
 
-- Spring exposes a minimal workspace API through `POST /api/workspaces`, `GET /api/workspaces`, and `GET /api/workspaces/{workspaceId}`.
+- Spring exposes a minimal workspace API through `POST /api/workspaces`, `GET /api/workspaces`, `GET /api/workspaces/{workspaceId}`, `PATCH /api/workspaces/{workspaceId}`, and `DELETE /api/workspaces/{workspaceId}`.
 - Workspace reads and listing stay intentionally narrow: `id`, `name`, and `createdAt`.
+- Workspace rename is title/name update only.
+- Workspace delete stays conservative: only non-default workspaces can be deleted, and only when they contain no assets.
 - Asset listing runs through `GET /api/assets`.
 - Asset listing resolves `workspaceId` and falls back to the current user's default workspace when it is omitted.
 - Asset listing supports small v1 pagination through `page` and `size`, plus one optional `assetStatus` filter.
@@ -150,9 +163,8 @@ Indexing and search are also product-facing.
 
 - Transcript versioning or history
 - Collaboration or sharing beyond the current ownership model
-- Workspace management beyond the current create/list/read surface plus default-workspace bootstrap
 - Background scheduling or workflow orchestration for polling/indexing
-- Search tuning beyond the current baseline text query
+- Search tuning beyond the current small lexical boosted-phrase baseline
 
 ## Guardrails For The Next Step
 
