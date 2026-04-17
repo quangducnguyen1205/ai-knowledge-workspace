@@ -19,6 +19,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnect
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.InvalidSearchRequestException;
+import com.aiknowledgeworkspace.workspacecore.workspace.DefaultWorkspaceConflictException;
 import com.aiknowledgeworkspace.workspacecore.workspace.InvalidWorkspaceNameException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceDeleteConflictException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
@@ -88,6 +89,14 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(WorkspaceDeleteConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleWorkspaceDeleteConflict(WorkspaceDeleteConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(DefaultWorkspaceConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleDefaultWorkspaceConflict(
+            DefaultWorkspaceConflictException exception
+    ) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
     }

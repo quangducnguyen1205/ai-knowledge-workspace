@@ -12,5 +12,5 @@ public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
 
     Optional<Workspace> findByIdAndOwnerId(UUID id, String ownerId);
 
-    Optional<Workspace> findByOwnerIdAndDefaultWorkspaceTrue(String ownerId);
+    List<Workspace> findAllByOwnerIdAndDefaultWorkspaceTrue(String ownerId);
 }

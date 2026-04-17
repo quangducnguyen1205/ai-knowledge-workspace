@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -77,6 +78,20 @@ class AuthServiceTest {
     void registerRejectsDuplicateEmail() {
         when(userAccountRepository.findByEmail("learner@example.com"))
                 .thenReturn(Optional.of(existingUser(UUID.randomUUID(), "learner@example.com", "hash")));
+
+        assertThatThrownBy(() -> authService.register(
+                new RegisterRequest("learner@example.com", "password123"),
+                new MockHttpSession()
+        ))
+                .isInstanceOf(EmailAlreadyRegisteredException.class)
+                .hasMessage("Email is already registered");
+    }
+
+    @Test
+    void registerTranslatesDuplicateEmailRaceIntoConflict() {
+        when(userAccountRepository.findByEmail("learner@example.com")).thenReturn(Optional.empty());
+        when(userAccountRepository.save(any(UserAccount.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         assertThatThrownBy(() -> authService.register(
                 new RegisterRequest("learner@example.com", "password123"),

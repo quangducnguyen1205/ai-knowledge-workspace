@@ -8,8 +8,8 @@ SMOKE_POLL_TIMEOUT_SECONDS="${SMOKE_POLL_TIMEOUT_SECONDS:-180}"
 SMOKE_WORKSPACE_NAME="${SMOKE_WORKSPACE_NAME:-}"
 SMOKE_VERIFY_CONTEXT="${SMOKE_VERIFY_CONTEXT:-}"
 SMOKE_CONTEXT_WINDOW="${SMOKE_CONTEXT_WINDOW:-2}"
-SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-smoke-user@example.com}"
-SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-password123}"
+SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-}"
+SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-}"
 SMOKE_USE_LEGACY_AUTH_FALLBACK="${SMOKE_USE_LEGACY_AUTH_FALLBACK:-}"
 SMOKE_LEGACY_USER_ID="${SMOKE_LEGACY_USER_ID:-smoke-dev-user}"
 
@@ -31,8 +31,8 @@ Environment variables:
   SMOKE_WORKSPACE_NAME          Optional: create and use a non-default workspace for this run
   SMOKE_VERIFY_CONTEXT          Optional: when set to 1/true/yes/on, fetch transcript context for the top search hit
   SMOKE_CONTEXT_WINDOW          Optional: transcript context window to use when SMOKE_VERIFY_CONTEXT is enabled (default: 2)
-  SMOKE_AUTH_EMAIL              Default: smoke-user@example.com
-  SMOKE_AUTH_PASSWORD           Default: password123
+  SMOKE_AUTH_EMAIL              Optional: defaults to smoke-user@example.com on localhost only; required for non-local targets
+  SMOKE_AUTH_PASSWORD           Optional: defaults to password123 on localhost only; required for non-local targets
   SMOKE_USE_LEGACY_AUTH_FALLBACK Optional: when set to 1/true/yes/on, skip register/login and use /api/auth/session instead
   SMOKE_LEGACY_USER_ID          Optional: userId to use with the legacy auth-session fallback (default: smoke-dev-user)
 
@@ -77,6 +77,32 @@ pretty_print_body() {
     else
         cat "$file_path"
     fi
+}
+
+is_local_base_url() {
+    case "$WORKSPACE_CORE_BASE_URL" in
+        http://localhost:*|http://127.0.0.1:*|http://[::1]:*|https://localhost:*|https://127.0.0.1:*|https://[::1]:*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+initialize_auth_defaults() {
+    if is_truthy "$SMOKE_USE_LEGACY_AUTH_FALLBACK"; then
+        return
+    fi
+
+    if is_local_base_url; then
+        SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-smoke-user@example.com}"
+        SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-password123}"
+        return
+    fi
+
+    [[ -n "${SMOKE_AUTH_EMAIL// }" ]] || fail "SMOKE_AUTH_EMAIL is required when WORKSPACE_CORE_BASE_URL is not localhost"
+    [[ -n "${SMOKE_AUTH_PASSWORD// }" ]] || fail "SMOKE_AUTH_PASSWORD is required when WORKSPACE_CORE_BASE_URL is not localhost"
 }
 
 fail_api() {
@@ -131,7 +157,13 @@ api_call() {
 
 read_json() {
     local query="$1"
-    jq -r "$query" "$API_BODY_FILE"
+    jq -er "$query" "$API_BODY_FILE" 2>/dev/null \
+        || fail "Expected JSON response matching jq query ${query}, but the response was missing that field or was not valid JSON"
+}
+
+read_json_optional() {
+    local query="$1"
+    jq -er "$query" "$API_BODY_FILE" 2>/dev/null || true
 }
 
 urlencode() {
@@ -153,7 +185,7 @@ is_truthy() {
 
 derive_search_query() {
     local transcript_text
-    transcript_text=$(jq -r '.[0].text // empty' "$API_BODY_FILE")
+    transcript_text=$(jq -er '.[0].text // empty' "$API_BODY_FILE" 2>/dev/null || true)
     if [[ -z "${transcript_text// }" ]]; then
         echo ""
         return
@@ -254,6 +286,7 @@ fi
 
 require_command curl
 require_command jq
+initialize_auth_defaults
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/workspace-core-smoke.XXXXXX")"
 trap cleanup EXIT
@@ -443,7 +476,7 @@ if is_truthy "$SMOKE_VERIFY_CONTEXT"; then
     print_step "Fetching transcript context for the top search hit"
     SEARCH_HIT_ASSET_ID="$(read_json '.results[0].assetId')"
     SEARCH_HIT_SEGMENT_INDEX="$(read_json '.results[0].segmentIndex')"
-    SEARCH_HIT_TRANSCRIPT_ROW_ID="$(read_json '.results[0].transcriptRowId // empty')"
+    SEARCH_HIT_TRANSCRIPT_ROW_ID="$(read_json_optional '.results[0].transcriptRowId // empty')"
 
     if [[ -z "${SEARCH_HIT_TRANSCRIPT_ROW_ID// }" ]]; then
         if [[ -z "${SEARCH_HIT_SEGMENT_INDEX// }" || "$SEARCH_HIT_SEGMENT_INDEX" == "null" ]]; then

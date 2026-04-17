@@ -11,7 +11,7 @@ For the current minimal usable web product, the canonical supported run mode is 
 - Repo B Spring Boot (`workspace-core`) on the host
 - Repo FE frontend through its own Docker Compose path
 
-See [deployable-demo-baseline.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/planning/deployable-demo-baseline.md) for the concise supported-baseline decision.
+See [deployable-demo-baseline.md](../planning/deployable-demo-baseline.md) for the concise supported-baseline decision.
 
 ## Local Port Plan
 
@@ -186,6 +186,8 @@ SMOKE_AUTH_PASSWORD="password123" \
 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
 ```
 
+On `localhost`, the helper can still use convenience smoke credentials if you omit them. For non-local `WORKSPACE_CORE_BASE_URL` targets, set `SMOKE_AUTH_EMAIL` and `SMOKE_AUTH_PASSWORD` explicitly so the script does not rely on predictable defaults outside local dev.
+
 Explicit legacy local/dev fallback example:
 
 ```bash
@@ -239,6 +241,8 @@ make smoke \
   SMOKE_AUTH_EMAIL="smoke-user@example.com" \
   SMOKE_AUTH_PASSWORD="password123"
 ```
+
+Those explicit auth overrides are required for non-local smoke targets. They stay optional only for the default localhost path.
 
 `MEDIA_FILE` is intentionally required for `make smoke` and `make smoke-workspace` so the repo does not hardcode one contributor's local file path.
 The smoke targets still enable the optional search-to-context check by default unless `SMOKE_VERIFY_CONTEXT` is overridden.

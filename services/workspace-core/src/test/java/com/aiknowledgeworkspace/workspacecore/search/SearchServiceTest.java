@@ -78,8 +78,8 @@ class SearchServiceTest {
         Workspace defaultWorkspace = new Workspace(java.util.UUID.randomUUID(), "Default Workspace", currentUserId, true);
 
         bindSessionCurrentUser(currentUserId);
-        org.mockito.Mockito.when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
-                .thenReturn(Optional.of(defaultWorkspace));
+        org.mockito.Mockito.when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
+                .thenReturn(java.util.List.of(defaultWorkspace));
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + defaultWorkspace.getId() + "\"")))

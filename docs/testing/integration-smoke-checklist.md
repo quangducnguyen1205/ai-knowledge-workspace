@@ -54,6 +54,8 @@ make smoke \
   SMOKE_AUTH_PASSWORD="password123"
 ```
 
+For the default localhost path, the helper can still fall back to convenience smoke credentials if those values are omitted. For any non-local `WORKSPACE_CORE_BASE_URL`, set `SMOKE_AUTH_EMAIL` and `SMOKE_AUTH_PASSWORD` explicitly.
+
 Explicit legacy fallback override:
 
 ```bash
@@ -403,7 +405,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `GET /api/assets/{assetId}` afterward.
 - [ ] Expect HTTP `404`.
 - [ ] Call `GET /api/assets/{assetId}/transcript` afterward.
-- [ ] Expect HTTP `404`, which also confirms the local transcript snapshot was removed with the asset.
+- [ ] Expect HTTP `404`, which confirms the transcript endpoint no longer exposes rows for the deleted asset. If you need DB-level proof of transcript-row cleanup, verify it separately from this application read.
 - [ ] If the deleted asset was `SEARCHABLE`, call `GET /api/search?q=...&assetId=<deleted-asset-id>` after deletion.
 - [ ] Confirm search no longer returns hits for that deleted asset.
 

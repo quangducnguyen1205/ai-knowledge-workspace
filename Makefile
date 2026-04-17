@@ -10,8 +10,8 @@ UPLOAD_TITLE ?=
 WORKSPACE_NAME ?= Demo Workspace
 SMOKE_VERIFY_CONTEXT ?= 1
 SMOKE_CONTEXT_WINDOW ?= 2
-SMOKE_AUTH_EMAIL ?= smoke-user@example.com
-SMOKE_AUTH_PASSWORD ?= password123
+SMOKE_AUTH_EMAIL ?=
+SMOKE_AUTH_PASSWORD ?=
 SMOKE_USE_LEGACY_AUTH_FALLBACK ?=
 SMOKE_LEGACY_USER_ID ?= smoke-dev-user
 
@@ -38,8 +38,8 @@ help:
 		'  SEARCH_QUERY="binary search tree"' \
 		'  UPLOAD_TITLE="Lecture 7"' \
 		'  WORKSPACE_NAME="Algorithms"' \
-		'  SMOKE_AUTH_EMAIL="smoke-user@example.com"' \
-		'  SMOKE_AUTH_PASSWORD="password123"' \
+		'  SMOKE_AUTH_EMAIL="smoke-user@example.com"  # optional on localhost, required for non-local targets' \
+		'  SMOKE_AUTH_PASSWORD="password123"          # optional on localhost, required for non-local targets' \
 		'  SMOKE_USE_LEGACY_AUTH_FALLBACK=1' \
 		'  SMOKE_LEGACY_USER_ID="smoke-dev-user"' \
 		'  SMOKE_VERIFY_CONTEXT=1' \

@@ -4,11 +4,11 @@ Historical note: this document records the original thin-slice scope and outcome
 
 For the current backend source of truth, use:
 
-- [API.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/api/API.md)
-- [phase1-implemented-product-flow.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/architecture/phase1-implemented-product-flow.md)
-- [Database.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/data/Database.md)
-- [local-dev.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/runbooks/local-dev.md)
-- [integration-smoke-checklist.md](/Users/nqd2005/Projects/ai-knowledge-workspace/docs/testing/integration-smoke-checklist.md)
+- [API.md](../api/API.md)
+- [phase1-implemented-product-flow.md](../architecture/phase1-implemented-product-flow.md)
+- [Database.md](../data/Database.md)
+- [local-dev.md](../runbooks/local-dev.md)
+- [integration-smoke-checklist.md](../testing/integration-smoke-checklist.md)
 
 ## Sprint Goal
 

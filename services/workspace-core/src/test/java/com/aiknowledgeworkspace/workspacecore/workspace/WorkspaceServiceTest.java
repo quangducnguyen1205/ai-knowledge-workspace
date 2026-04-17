@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.data.domain.Sort;
@@ -73,7 +74,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(Optional.of(defaultWorkspace));
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(defaultWorkspace));
         when(workspaceRepository.findByOwnerId(eq(currentUserId), any(Sort.class)))
                 .thenReturn(List.of(defaultWorkspace, secondWorkspace));
 
@@ -81,7 +82,7 @@ class WorkspaceServiceTest {
 
         assertThat(workspaces).containsExactly(defaultWorkspace, secondWorkspace);
         InOrder inOrder = inOrder(workspaceRepository);
-        inOrder.verify(workspaceRepository).findByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
+        inOrder.verify(workspaceRepository).findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
         inOrder.verify(workspaceRepository).findByOwnerId(eq(currentUserId), eq(workspaceListSort()));
         verify(workspaceRepository, never()).save(any());
     }
@@ -243,14 +244,14 @@ class WorkspaceServiceTest {
         );
 
         bindSessionCurrentUser(realCurrentUserService, currentUserId);
-        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(Optional.of(defaultWorkspace));
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(defaultWorkspace));
         when(workspaceRepository.findByOwnerId(eq(currentUserId), any(Sort.class)))
                 .thenReturn(List.of(defaultWorkspace));
 
         List<Workspace> workspaces = workspaceService.listWorkspaces();
 
         assertThat(workspaces).containsExactly(defaultWorkspace);
-        verify(workspaceRepository).findByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
+        verify(workspaceRepository).findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
         verify(workspaceRepository).findByOwnerId(eq(currentUserId), eq(workspaceListSort()));
     }
 
@@ -274,7 +275,7 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
-        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(Optional.empty());
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
         when(workspaceRepository.save(any(Workspace.class))).thenReturn(defaultWorkspace);
 
         Workspace result = workspaceService.resolveWorkspaceOrDefault(null);
@@ -286,6 +287,9 @@ class WorkspaceServiceTest {
         assertThat(workspaceCaptor.getValue().getOwnerId()).isEqualTo(currentUserId);
         assertThat(workspaceCaptor.getValue().isDefaultWorkspace()).isTrue();
         assertThat(workspaceCaptor.getValue().getName()).isEqualTo(workspaceProperties.getDefaultName());
+        assertThat(workspaceCaptor.getValue().getId())
+                .isEqualTo(UUID.nameUUIDFromBytes(("default-workspace:" + currentUserId)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
     @Test
@@ -315,7 +319,7 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
-        when(workspaceRepository.findByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(Optional.empty());
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
         when(workspaceRepository.findById(workspaceProperties.getDefaultId())).thenReturn(Optional.of(legacyDefaultWorkspace));
         when(workspaceRepository.save(legacyDefaultWorkspace)).thenReturn(adoptedWorkspace);
 
@@ -324,6 +328,86 @@ class WorkspaceServiceTest {
         assertThat(result).isSameAs(adoptedWorkspace);
         assertThat(legacyDefaultWorkspace.getOwnerId()).isEqualTo(currentUserId);
         assertThat(legacyDefaultWorkspace.isDefaultWorkspace()).isTrue();
+    }
+
+    @Test
+    void ensureDefaultWorkspaceRecoversFromConcurrentCreateRace() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-2";
+        Workspace persistedDefaultWorkspace = workspace(
+                UUID.nameUUIDFromBytes(("default-workspace:" + currentUserId)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                workspaceProperties.getDefaultName(),
+                currentUserId,
+                true,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
+                .thenReturn(List.of(), List.of(persistedDefaultWorkspace));
+        when(workspaceRepository.save(any(Workspace.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        Workspace result = workspaceService.ensureDefaultWorkspace(currentUserId);
+
+        assertThat(result).isSameAs(persistedDefaultWorkspace);
+    }
+
+    @Test
+    void ensureDefaultWorkspaceRejectsConfiguredDefaultWorkspaceIdOwnedByAnotherUser() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "local-dev-user";
+        Workspace conflictingWorkspace = workspace(
+                workspaceProperties.getDefaultId(),
+                workspaceProperties.getDefaultName(),
+                "another-user",
+                true,
+                Instant.parse("2026-04-03T08:00:00Z")
+        );
+
+        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
+        when(workspaceRepository.findById(workspaceProperties.getDefaultId())).thenReturn(Optional.of(conflictingWorkspace));
+
+        assertThatThrownBy(() -> workspaceService.ensureDefaultWorkspace(currentUserId))
+                .isInstanceOf(DefaultWorkspaceConflictException.class)
+                .hasMessage("Configured default workspace ID is already owned by another user and cannot be adopted safely");
+    }
+
+    @Test
+    void ensureDefaultWorkspaceRejectsMultipleOwnedDefaultWorkspaces() {
+        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        WorkspaceService workspaceService = new WorkspaceService(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService
+        );
+        String currentUserId = "user-1";
+
+        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(
+                workspace(UUID.randomUUID(), "Default Workspace", currentUserId, true,
+                        Instant.parse("2026-04-03T08:00:00Z")),
+                workspace(UUID.randomUUID(), "Default Workspace", currentUserId, true,
+                        Instant.parse("2026-04-03T09:00:00Z"))
+        ));
+
+        assertThatThrownBy(() -> workspaceService.ensureDefaultWorkspace(currentUserId))
+                .isInstanceOf(DefaultWorkspaceConflictException.class)
+                .hasMessage("Multiple default workspaces exist for the current user");
     }
 
     @Test
