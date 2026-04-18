@@ -6,6 +6,8 @@ This note documents the currently implemented product-side flow in Repo B. It is
 
 Despite the filename, this remains a current backend flow snapshot, not a literal "Phase 1 only" freeze. Historical phase-closure and transition notes live under `docs/planning/` and should not be treated as the current runtime contract.
 
+For request/response details and structured error codes, use [API.md](../api/API.md). This note focuses on current runtime behavior and system flow.
+
 ## Current Implemented Product Flow
 
 Repo A remains a separate FastAPI processing service. Repo B is the Spring Boot product core.
@@ -31,6 +33,48 @@ The currently implemented product-facing endpoints are:
 - `GET /api/assets/{assetId}/transcript/context`
 - `POST /api/assets/{assetId}/index`
 - `GET /api/search`
+
+## Golden Path Sequence
+
+```mermaid
+sequenceDiagram
+    actor U as Learner / Client
+    participant S as Spring Boot
+    participant P as PostgreSQL
+    participant F as FastAPI
+    participant E as Elasticsearch
+
+    U->>S: register/login
+    S->>P: persist/read user account
+    S-->>U: establish session cookie
+    U->>S: GET /api/workspaces
+    S->>P: ensure default workspace exists
+    U->>S: POST /api/assets/upload
+    S->>P: resolve workspace
+    S->>F: upload media
+    F-->>S: task and video identifiers
+    S->>P: persist Asset + ProcessingJob
+    loop until terminal
+        U->>S: GET /api/assets/{assetId}/status
+        S->>F: poll task status when needed
+        S->>P: update local job and asset state
+    end
+    U->>S: GET /api/assets/{assetId}/transcript
+    S->>P: read transcript snapshot
+    alt snapshot missing after success
+        S->>F: fetch transcript rows
+        S->>P: persist validated transcript snapshot
+    end
+    U->>S: POST /api/assets/{assetId}/index
+    S->>P: read local transcript snapshot
+    S->>E: bulk index transcript-row documents
+    S->>P: mark asset SEARCHABLE
+    U->>S: GET /api/search
+    S->>E: lexical search with workspace filters
+    E-->>S: ranked transcript-row hits
+    U->>S: GET /api/assets/{assetId}/transcript/context
+    S->>P: read transcript snapshot window
+```
 
 The implemented flow is:
 
