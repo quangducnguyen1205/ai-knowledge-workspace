@@ -9,14 +9,17 @@ This document summarizes what Repo B currently persists in PostgreSQL.
 
 ## Current Relational Model
 
-Repo B currently persists four main records:
+Repo B currently persists five main records:
 
+- `UserAccount`
 - `Workspace`
 - `Asset`
 - `ProcessingJob`
 - `AssetTranscriptRowSnapshot`
 
-## Persistence Relationship Diagram
+## Simplified Persistence Relationship Diagram
+
+This diagram is intentionally simplified and asset-centric. The detailed sections below are the source of truth for the current field lists and notes.
 
 ```mermaid
 erDiagram
@@ -62,7 +65,7 @@ erDiagram
 
 ```mermaid
 flowchart LR
-    U["Authenticated user / current session"] --> W["Owned workspace"]
+    U["Authenticated user / UserAccount"] --> W["Owned workspace"]
     W --> A["Asset"]
     A --> J["ProcessingJob"]
     A --> T["Transcript snapshot rows"]
@@ -70,6 +73,24 @@ flowchart LR
 ```
 
 The transcript-row documents in Elasticsearch are derived search documents, not the system of record. Ownership still flows from user -> workspace -> asset in the product core.
+
+## `UserAccount`
+
+Table: `user_accounts`
+
+Current fields:
+
+- `id` UUID primary key
+- `email`
+- `passwordHash`
+- `createdAt`
+
+Current role:
+
+- Represents the current minimal product user record for session-based auth.
+- Supports register, login, logout, and `GET /api/me`.
+- Owns workspaces logically through `Workspace.ownerId`.
+- Is intentionally narrow and does not introduce roles, sharing, or broader auth-platform features yet.
 
 ## `Workspace`
 
@@ -88,6 +109,7 @@ Current role:
 - Represents the current product-side ownership container for assets.
 - Supports ownership-aware workspace scoping without introducing collaboration or richer auth features yet.
 - Provides one default workspace path per current user when `workspaceId` is omitted.
+- Stores ownership through `ownerId` as a product-level logical link to `UserAccount`, not as a relational foreign key.
 - Can be created explicitly through the current minimal workspace API, or lazily when the default workspace is first needed.
 
 ## `Asset`

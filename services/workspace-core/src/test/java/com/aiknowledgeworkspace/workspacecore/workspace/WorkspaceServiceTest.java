@@ -333,11 +333,15 @@ class WorkspaceServiceTest {
     @Test
     void ensureDefaultWorkspaceRecoversFromConcurrentCreateRace() {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor = workspace -> {
+            throw new DataIntegrityViolationException("duplicate key");
+        };
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
                 assetRepository,
                 workspaceProperties,
-                currentUserService
+                currentUserService,
+                defaultWorkspaceCreationExecutor
         );
         String currentUserId = "user-2";
         Workspace persistedDefaultWorkspace = workspace(
@@ -352,8 +356,6 @@ class WorkspaceServiceTest {
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
         when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
                 .thenReturn(List.of(), List.of(persistedDefaultWorkspace));
-        when(workspaceRepository.save(any(Workspace.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         Workspace result = workspaceService.ensureDefaultWorkspace(currentUserId);
 

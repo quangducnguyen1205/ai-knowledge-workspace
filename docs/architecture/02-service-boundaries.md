@@ -8,7 +8,7 @@ The current pre-AI baseline separates product logic from internal AI/media proce
 
 ```mermaid
 flowchart LR
-    FE["Browser / Repo FE"] --> S["Spring Boot Product Core"]
+    FE["Repo FE frontend"] --> S["Spring Boot Product Core"]
     S --> P["PostgreSQL"]
     S --> E["Elasticsearch"]
     S --> F["FastAPI Processing Service"]
@@ -37,7 +37,7 @@ flowchart LR
 - Local transcript snapshot persistence
 - Explicit transcript indexing into Elasticsearch
 
-### Intentionally Does Not Become Yet
+### Intentionally Keeps Out Of Scope For Now
 
 - A full authentication platform
 - Collaboration, sharing, roles, and broader authorization policies

@@ -81,7 +81,7 @@ pretty_print_body() {
 
 is_local_base_url() {
     case "$WORKSPACE_CORE_BASE_URL" in
-        http://localhost:*|http://127.0.0.1:*|http://[::1]:*|https://localhost:*|https://127.0.0.1:*|https://[::1]:*)
+        http://localhost:*|http://127.0.0.1:*|http://[[]::1[]]:*|https://localhost:*|https://127.0.0.1:*|https://[[]::1[]]:*)
             return 0
             ;;
         *)

@@ -8,7 +8,7 @@ AI Knowledge Workspace is a search-first system for helping a learner recover th
 
 ```mermaid
 flowchart LR
-    B["Browser / Product Client"] --> FE["Repo FE Frontend"]
+    B["Browser / Product Client"] --> FE["Repo FE frontend"]
     FE -->|/api proxy| S["Repo B Spring Boot Product Core"]
     S --> P["PostgreSQL"]
     S --> E["Elasticsearch"]

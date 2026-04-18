@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,22 @@ public class WorkspaceService {
     private final AssetRepository assetRepository;
     private final WorkspaceProperties workspaceProperties;
     private final CurrentUserService currentUserService;
+    private final DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor;
+
+    @Autowired
+    public WorkspaceService(
+            WorkspaceRepository workspaceRepository,
+            AssetRepository assetRepository,
+            WorkspaceProperties workspaceProperties,
+            CurrentUserService currentUserService,
+            DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
+    ) {
+        this.workspaceRepository = workspaceRepository;
+        this.assetRepository = assetRepository;
+        this.workspaceProperties = workspaceProperties;
+        this.currentUserService = currentUserService;
+        this.defaultWorkspaceCreationExecutor = defaultWorkspaceCreationExecutor;
+    }
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
@@ -28,10 +45,13 @@ public class WorkspaceService {
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService
     ) {
-        this.workspaceRepository = workspaceRepository;
-        this.assetRepository = assetRepository;
-        this.workspaceProperties = workspaceProperties;
-        this.currentUserService = currentUserService;
+        this(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService,
+                workspaceRepository::save
+        );
     }
 
     @Transactional
@@ -211,7 +231,7 @@ public class WorkspaceService {
         );
 
         try {
-            return workspaceRepository.save(defaultWorkspace);
+            return defaultWorkspaceCreationExecutor.create(defaultWorkspace);
         } catch (DataIntegrityViolationException exception) {
             return findOwnedDefaultWorkspace(currentUserId)
                     .orElseThrow(this::defaultWorkspaceIdConflict);
