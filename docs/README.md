@@ -1,6 +1,21 @@
 # Documentation Index
 
-This directory is the docs-as-code home for product thinking, architecture decisions, API notes, and planning artifacts.
+This directory is the docs-as-code home for current product behavior, architecture decisions, API notes, runbooks, and historical planning artifacts.
+
+## Start Here
+
+For the current Repo B baseline, this is the fastest useful reading order:
+
+1. `architecture/00-reviewer-overview.md`
+2. `architecture/01-system-context.md`
+3. `architecture/02-service-boundaries.md`
+4. `architecture/phase1-implemented-product-flow.md`
+5. `api/API.md`
+6. `data/Database.md`
+7. `runbooks/local-dev.md`
+8. `testing/integration-smoke-checklist.md`
+
+These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
 ## Sections
 
@@ -22,11 +37,12 @@ This directory is the docs-as-code home for product thinking, architecture decis
 
 ## Architecture Documents
 
+- `architecture/00-reviewer-overview.md`: fastest reviewer/instructor onboarding note for the current backend baseline
 - `architecture/01-system-context.md`: top-level view of product core, processing service, and data dependencies
 - `architecture/02-service-boundaries.md`: ownership boundaries across Spring Boot, FastAPI, search, and storage
 - `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role
 - `architecture/04-integration-assumptions.md`: current assumptions about the separate FastAPI repository and deferred questions
-- `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow in phase 1
+- `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
 
 ## API And Data Documents
 
@@ -45,8 +61,17 @@ This directory is the docs-as-code home for product thinking, architecture decis
 - `adr/ADR-003-elasticsearch-as-search-layer.md`: records Elasticsearch as the target product search layer
 - `adr/ADR-004-no-temporal-in-phase-1.md`: records the decision to exclude Temporal from phase 1
 
-## TODO
+## Historical Planning Notes
 
-- [ ] Establish documentation review conventions
-- [ ] Add contribution guidance for docs updates
-- [ ] Link future service-specific documentation
+Most files under `planning/` are historical slice or transition notes, not the current runtime contract.
+
+Current exception:
+
+- `planning/deployable-demo-baseline.md`: current supported run-mode statement
+
+Historical/reference notes include:
+
+- `planning/phase-1-closure-summary.md`
+- `planning/phase-2-ownership-foundation.md`
+- `planning/roadmap-transition-phase1-to-phase2.md`
+- `planning/sprint-1-thin-slice.md`

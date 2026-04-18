@@ -2,11 +2,31 @@
 
 ## Boundary Summary
 
-Phase 1 separates product logic from AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store.
+The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store.
+
+## Current Boundary Diagram
+
+```mermaid
+flowchart LR
+    FE["Browser / Repo FE"] --> S["Spring Boot Product Core"]
+    S --> P["PostgreSQL"]
+    S --> E["Elasticsearch"]
+    S --> F["FastAPI Processing Service"]
+
+    S:::product
+    P:::storage
+    E:::search
+    F:::processing
+
+    classDef product fill:#e8f3ff,stroke:#2b6cb0,stroke-width:1px
+    classDef storage fill:#edf7ed,stroke:#2f855a,stroke-width:1px
+    classDef search fill:#fff7e6,stroke:#b7791f,stroke-width:1px
+    classDef processing fill:#fff0f0,stroke:#c53030,stroke-width:1px
+```
 
 ## Spring Boot Product Core
 
-### Currently Owns In This Repo Phase
+### Currently Owns In This Repo
 
 - Workspace model and workspace-scoped access rules
 - Asset registration and product-visible asset metadata
@@ -14,18 +34,17 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 - Client-facing APIs
 - Client-facing search API and result shaping
 - Product-facing transcript reads and transcript-context responses
+- Local transcript snapshot persistence
 - Explicit transcript indexing into Elasticsearch
 
-### Not Implemented Yet In This Repo Phase
+### Intentionally Does Not Become Yet
 
 - A full authentication platform
 - Collaboration, sharing, roles, and broader authorization policies
 
-### Should Not Own In Phase 1
+### Does Not Own
 
 - Transcription
-- Chunking
-- Embedding generation
 - Media-processing internals
 - Direct public exposure of legacy search mechanics
 
@@ -35,11 +54,10 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 - Media ingestion for processing
 - Transcription
-- Transcript chunk generation
-- Embedding generation
 - Processing status and processing result payloads
+- Any internal AI/media-processing details still used on that side
 
-### Should Not Own In Phase 1
+### Does Not Own
 
 - Authentication or user management
 - Workspace ownership rules
@@ -56,7 +74,7 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 - Filtered retrieval across workspace and asset metadata
 - Product search retrieval over indexed transcript text
 
-### Should Not Own In Phase 1
+### Does Not Own
 
 - Domain system of record responsibilities
 - Business logic
@@ -69,7 +87,7 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 
 - Domain metadata for workspaces, assets, processing jobs, and related product entities
 
-### Should Not Own In Phase 1
+### Does Not Own
 
 - Primary search retrieval behavior
 - Embedding or transcript-processing concerns
@@ -82,7 +100,7 @@ Phase 1 separates product logic from AI/media processing. Spring Boot is the pro
 - Ephemeral coordination state
 - Short-lived support data
 
-### Should Not Own In Phase 1
+### Does Not Own
 
 - Durable domain records
 - Search index responsibilities

@@ -4,9 +4,9 @@
 
 The legacy FastAPI project currently lives in a separate GitHub repository and a separate local folder. It already represents existing work that can be reused for AI and media-processing responsibilities.
 
-## Phase 1 Assumption
+## Current Baseline Assumption
 
-For phase 1, the architecture assumes that the FastAPI project will be integrated as an external internal service. It is a dependency of the new system, but it is not the product core.
+For the current pre-AI baseline, the architecture assumes that the FastAPI project remains an external internal service. It is a dependency of the new system, but it is not the product core.
 
 This assumption implies:
 

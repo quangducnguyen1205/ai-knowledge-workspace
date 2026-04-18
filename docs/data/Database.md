@@ -16,6 +16,61 @@ Repo B currently persists four main records:
 - `ProcessingJob`
 - `AssetTranscriptRowSnapshot`
 
+## Persistence Relationship Diagram
+
+```mermaid
+erDiagram
+    WORKSPACE ||--o{ ASSET : contains
+    ASSET ||--|| PROCESSING_JOB : tracks
+    ASSET ||--o{ ASSET_TRANSCRIPT_ROW_SNAPSHOT : snapshots
+
+    WORKSPACE {
+        uuid id PK
+        string ownerId
+        boolean defaultWorkspace
+        instant createdAt
+    }
+
+    ASSET {
+        uuid id PK
+        uuid workspace_id FK
+        string title
+        string status
+        instant createdAt
+        instant updatedAt
+    }
+
+    PROCESSING_JOB {
+        uuid id PK
+        uuid assetId FK
+        string fastapiTaskId
+        string fastapiVideoId
+        string processingJobStatus
+    }
+
+    ASSET_TRANSCRIPT_ROW_SNAPSHOT {
+        uuid snapshotId PK
+        uuid assetId FK
+        string transcriptRowId
+        int segmentIndex
+        string text
+        instant createdAt
+    }
+```
+
+## Ownership And Derived-Data Shape
+
+```mermaid
+flowchart LR
+    U["Authenticated user / current session"] --> W["Owned workspace"]
+    W --> A["Asset"]
+    A --> J["ProcessingJob"]
+    A --> T["Transcript snapshot rows"]
+    T --> E["Elasticsearch transcript-row documents"]
+```
+
+The transcript-row documents in Elasticsearch are derived search documents, not the system of record. Ownership still flows from user -> workspace -> asset in the product core.
+
 ## `Workspace`
 
 Table: `workspaces`
