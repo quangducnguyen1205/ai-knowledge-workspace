@@ -160,7 +160,7 @@ How to read this:
 flowchart LR
     F["Repo A FastAPI processing service"] -->|processed transcript rows| S["Repo B Spring Boot product core"]
     S -->|validate usable transcript rows| T["PostgreSQL AssetTranscriptRowSnapshot"]
-    T -->|explicit POST /api/assets/{assetId}/index| I["Indexing path in Repo B"]
+    T -->|explicit indexing request| I["Indexing path in Repo B"]
     I -->|derived transcript-row documents| E["Elasticsearch"]
 
     Q["GET /api/search?q=..."] --> S
@@ -170,6 +170,9 @@ flowchart LR
     E -->|ranked transcript-row hits| S
     S -->|product search response| Q
 ```
+
+Note:
+- The explicit indexing request in the current product flow is `POST /api/assets/{assetId}/index`.
 
 ## 5. Current State Transitions
 
