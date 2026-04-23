@@ -50,6 +50,7 @@ How to read this:
 - This is the current product-visible happy path.
 - The sequence shows where state is read or written as the user moves from auth to search and transcript context.
 - Transcript snapshot persistence and explicit indexing are both part of the real current flow.
+- The search call may omit `workspaceId`, in which case Spring resolves the current user's default workspace. `assetId` stays an optional scope inside that resolved workspace.
 
 ```mermaid
 sequenceDiagram
@@ -99,8 +100,8 @@ sequenceDiagram
     S->>P: update Asset to SEARCHABLE
     S-->>C: indexing result
 
-    C->>S: GET /api/search?q=...&workspaceId=...&assetId=...
-    S->>P: resolve workspace ownership and optional asset scope
+    C->>S: GET /api/search?q=...
+    S->>P: resolve workspace and optional asset scope
     S->>E: lexical search with workspace filter and optional asset filter
     E-->>S: ranked transcript-row hits
     S-->>C: product search results
@@ -125,8 +126,9 @@ flowchart TD
     W["workspace read/create"] --> WS["Workspace write or read"]
     WS --> P
 
-    U["upload"] --> F["Repo A FastAPI processing service"]
-    F --> AJ["Asset + ProcessingJob persist"]
+    U["upload request"] --> S["Repo B Spring Boot product core"]
+    S --> F["Repo A FastAPI processing service"]
+    S --> AJ["Asset + ProcessingJob persist"]
     AJ --> P
 
     ST["status refresh"] --> PJ["ProcessingJob status update"]
@@ -148,6 +150,9 @@ flowchart TD
     DEL --> EDEL["delete derived search documents when asset is SEARCHABLE"]
     EDEL --> E
 ```
+
+Note:
+- Upload is product-facing through Repo B Spring Boot first. Spring then calls Repo A FastAPI and persists `Asset` plus `ProcessingJob` after the upload is accepted.
 
 ## 4. Search And Indexing Lifecycle
 
@@ -185,6 +190,7 @@ How to read this:
 ```mermaid
 stateDiagram-v2
     [*] --> PROCESSING
+    [*] --> FAILED: upload maps to failed state
     PROCESSING --> TRANSCRIPT_READY: usable transcript snapshot captured
     PROCESSING --> FAILED: upstream processing fails\nor transcript is unusable
     TRANSCRIPT_READY --> SEARCHABLE: explicit indexing succeeds
@@ -192,6 +198,9 @@ stateDiagram-v2
 ```
 
 ### 5B. ProcessingJob Lifecycle
+
+Note:
+- At upload time, the initial mapped `ProcessingJob` status may be `PENDING`, `RUNNING`, `SUCCEEDED`, or `FAILED` depending on the upstream response. The diagram below keeps `PENDING` as the usual illustrative path.
 
 ```mermaid
 stateDiagram-v2
