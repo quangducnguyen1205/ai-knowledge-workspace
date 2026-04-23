@@ -7,13 +7,14 @@ This directory is the docs-as-code home for current product behavior, architectu
 For the current Repo B baseline, this is the fastest useful reading order:
 
 1. `architecture/00-reviewer-overview.md`
-2. `architecture/01-system-context.md`
-3. `architecture/02-service-boundaries.md`
-4. `architecture/phase1-implemented-product-flow.md`
-5. `api/API.md`
-6. `data/Database.md`
-7. `runbooks/local-dev.md`
-8. `testing/integration-smoke-checklist.md`
+2. `architecture/05-end-to-end-diagram-pack.md`
+3. `architecture/01-system-context.md`
+4. `architecture/02-service-boundaries.md`
+5. `architecture/phase1-implemented-product-flow.md`
+6. `api/API.md`
+7. `data/Database.md`
+8. `runbooks/local-dev.md`
+9. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -42,6 +43,7 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/02-service-boundaries.md`: ownership boundaries across Spring Boot, FastAPI, search, and storage
 - `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role
 - `architecture/04-integration-assumptions.md`: current assumptions about the separate FastAPI repository and deferred questions
+- `architecture/05-end-to-end-diagram-pack.md`: reviewer-friendly current-state diagram pack for topology, flow, writes, search, and state transitions
 - `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
 
 ## API And Data Documents
