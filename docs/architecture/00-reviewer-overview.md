@@ -47,6 +47,7 @@ AI Knowledge Workspace is currently a pre-AI, search-first product for recoverin
 
 ## Read This Next
 
+- [End-To-End Diagram Pack](05-end-to-end-diagram-pack.md)
 - [System Context](01-system-context.md)
 - [Service Boundaries](02-service-boundaries.md)
 - [Current Implemented Product Flow](phase1-implemented-product-flow.md)
