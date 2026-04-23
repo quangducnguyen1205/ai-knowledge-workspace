@@ -14,6 +14,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
@@ -34,6 +38,7 @@ class SearchControllerTest {
     private MockRestServiceServer mockServer;
     private MockMvc mockMvc;
     private WorkspaceService workspaceService;
+    private AssetService assetService;
 
     @BeforeEach
     void setUp() {
@@ -41,12 +46,13 @@ class SearchControllerTest {
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
         workspaceService = mock(WorkspaceService.class);
+        assetService = mock(AssetService.class);
 
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        SearchService searchService = new SearchService(builder.build(), properties, workspaceService);
+        SearchService searchService = new SearchService(builder.build(), properties, workspaceService, assetService);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)
@@ -60,6 +66,8 @@ class SearchControllerTest {
         UUID workspaceId = UUID.randomUUID();
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
                 .thenReturn(new Workspace(workspaceId, "Algorithms"));
+        when(assetService.getAsset(assetId))
+                .thenReturn(new Asset("lecture-5.mp4", "Lecture 5", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Algorithms")));
         String searchResponse = """
                 {
                   "hits": {
@@ -179,6 +187,47 @@ class SearchControllerTest {
     }
 
     @Test
+    void searchWithAssetFromDifferentWorkspaceReturnsOwnershipSafeNotFound() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        UUID otherWorkspaceId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new Workspace(workspaceId, "Algorithms"));
+        when(assetService.getAsset(assetId))
+                .thenReturn(new Asset("lecture-8.mp4", "Lecture 8", AssetStatus.SEARCHABLE, new Workspace(otherWorkspaceId, "Distributed Systems")));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "consensus")
+                        .param("workspaceId", workspaceId.toString())
+                        .param("assetId", assetId.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
+
+        mockServer.verify();
+    }
+
+    @Test
+    void searchWithUnknownOrNonOwnedAssetReturnsOwnershipSafeNotFound() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new Workspace(workspaceId, "Algorithms"));
+        when(assetService.getAsset(assetId))
+                .thenThrow(new AssetNotFoundException());
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "consensus")
+                        .param("workspaceId", workspaceId.toString())
+                        .param("assetId", assetId.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Asset not found"));
+
+        mockServer.verify();
+    }
+
+    @Test
     void searchAddsPhraseBoostLayerWithoutChangingResponseContract() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
@@ -213,6 +262,16 @@ class SearchControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_WORKSPACE_ID"))
                 .andExpect(jsonPath("$.message").value("workspaceId must be a valid UUID"));
+    }
+
+    @Test
+    void invalidAssetIdReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/search")
+                        .param("q", "dynamic programming")
+                        .param("assetId", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_PARAMETER"))
+                .andExpect(jsonPath("$.message").value("Invalid value for request parameter assetId"));
     }
 
     @Test

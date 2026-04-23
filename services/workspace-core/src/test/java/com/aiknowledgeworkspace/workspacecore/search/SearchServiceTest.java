@@ -2,12 +2,14 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
@@ -16,7 +18,6 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class SearchServiceTest {
     @Mock
     private AssetRepository assetRepository;
 
+    @Mock
+    private AssetService assetService;
+
     private MockRestServiceServer mockServer;
     private CurrentUserService currentUserService;
     private SearchService searchService;
@@ -64,7 +68,7 @@ class SearchServiceTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        searchService = new SearchService(builder.build(), properties, workspaceService);
+        searchService = new SearchService(builder.build(), properties, workspaceService, assetService);
     }
 
     @AfterEach
@@ -89,6 +93,7 @@ class SearchServiceTest {
 
         assertThat(response.workspaceIdFilter()).isEqualTo(defaultWorkspace.getId());
         assertThat(response.resultCount()).isZero();
+        verifyNoInteractions(assetService);
         mockServer.verify();
     }
 

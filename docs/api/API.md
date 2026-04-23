@@ -613,7 +613,8 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Search only considers documents inside the resolved workspace scope owned by the current user.
 - Only documents for assets already marked `SEARCHABLE` are eligible.
-- `assetId` is an exact filter when provided.
+- If `assetId` is provided, Spring first validates that the asset is owned by the current user and belongs to the resolved workspace.
+- After that validation passes, `assetId` is applied as an exact filter inside the existing Elasticsearch search query.
 - The current search baseline is still lexical search over transcript text and asset title.
 - Spring keeps the baseline `multi_match` query and adds a small phrase-style boost layer so clearer exact or phrase-like matches can rise more appropriately.
 - Search ordering is deterministic on score ties: `_score desc`, then `segmentIndex`, `assetId`, and `transcriptRowId`.
@@ -622,7 +623,9 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_SEARCH_QUERY"` if `q` is missing or blank
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `400` if `assetId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if a provided `assetId` does not exist, is not owned by the current user, or does not belong to the resolved workspace
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
 - HTTP `503` if Elasticsearch is unavailable
