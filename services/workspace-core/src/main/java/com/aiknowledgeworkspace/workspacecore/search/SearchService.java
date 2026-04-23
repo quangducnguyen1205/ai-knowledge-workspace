@@ -1,6 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,31 +31,35 @@ public class SearchService {
     private final RestClient elasticsearchRestClient;
     private final ElasticsearchProperties elasticsearchProperties;
     private final WorkspaceService workspaceService;
+    private final AssetService assetService;
 
     public SearchService(
             @Qualifier("elasticsearchRestClient") RestClient elasticsearchRestClient,
             ElasticsearchProperties elasticsearchProperties,
-            WorkspaceService workspaceService
+            WorkspaceService workspaceService,
+            AssetService assetService
     ) {
         this.elasticsearchRestClient = elasticsearchRestClient;
         this.elasticsearchProperties = elasticsearchProperties;
         this.workspaceService = workspaceService;
+        this.assetService = assetService;
     }
 
     public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
         String normalizedQuery = normalizeQuery(query);
         UUID resolvedWorkspaceId = workspaceService.resolveWorkspaceOrDefault(workspaceId).getId();
+        UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(buildSearchBody(normalizedQuery, resolvedWorkspaceId, assetId))
+                        .body(buildSearchBody(normalizedQuery, resolvedWorkspaceId, validatedAssetId))
                         .retrieve()
                         .body(JsonNode.class),
                 "search transcript rows"
         );
 
-        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, assetId, responseBody);
+        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, responseBody);
     }
 
     private String normalizeQuery(String query) {
@@ -60,6 +67,19 @@ public class SearchService {
             throw new InvalidSearchRequestException("INVALID_SEARCH_QUERY", "q query parameter is required");
         }
         return query.trim();
+    }
+
+    private UUID validateAssetScope(UUID assetId, UUID workspaceId) {
+        if (assetId == null) {
+            return null;
+        }
+
+        Asset asset = assetService.getAsset(assetId);
+        if (!workspaceId.equals(asset.getWorkspaceId())) {
+            throw new AssetNotFoundException();
+        }
+
+        return assetId;
     }
 
     private Map<String, Object> buildSearchBody(String query, UUID workspaceId, UUID assetId) {

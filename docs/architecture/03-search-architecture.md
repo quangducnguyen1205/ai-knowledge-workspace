@@ -60,6 +60,7 @@ The current implemented search path is deliberately small:
   - workspace scope
   - optional asset scope
   - `SEARCHABLE` asset status
+- When `assetId` is provided, Spring validates that the asset is owned by the current user and belongs to the resolved workspace before sending the Elasticsearch query.
 - Results are returned as transcript-row hits, not chatbot answers.
 - Tie-breaking stays deterministic when scores are equal.
 

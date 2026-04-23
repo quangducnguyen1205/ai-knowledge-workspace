@@ -203,6 +203,8 @@ Indexing and search are also product-facing.
 - If omitted `workspaceId` requires default-workspace resolution and that default-workspace state is conflicted, Spring returns an explicit integrity-style `409`.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
 - Search filters on workspace scope before returning results.
+- Search also supports one optional `assetId` filter inside that resolved workspace scope.
+- If a provided `assetId` is unknown, not owned by the current user, or belongs to a different workspace, Spring returns the same ownership-safe `404`.
 - Search only returns transcript-row documents for assets currently marked `SEARCHABLE`.
 - The current search baseline is a simple Elasticsearch text query over transcript text and asset title.
 - Search ordering is deterministic on score ties.

@@ -589,7 +589,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 ### Optional Asset Filter Check
 
 - [ ] Call `GET /api/search?q=your-query&assetId=<known-asset-id>`.
+- [ ] Confirm `assetIdFilter` matches the requested asset ID.
 - [ ] Confirm results are restricted to that asset.
+- [ ] Confirm the asset belongs to the same resolved workspace scope used for the search call.
 
 ### Optional Workspace Filter Check
 
@@ -639,6 +641,10 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
   - [ ] `code = "WORKSPACE_NOT_FOUND"`
 - [ ] Call `GET /api/search?q=test&workspaceId=<workspace-owned-by-another-user>`.
 - [ ] Expect the same ownership-safe HTTP `404`.
+- [ ] Call `GET /api/search?q=test&workspaceId=<owned-workspace-id>&assetId=<asset-from-a-different-workspace-or-another-user>`.
+- [ ] Expect HTTP `404`.
+- [ ] Expect structured error JSON with:
+  - [ ] `code = "ASSET_NOT_FOUND"`
 
 ### Elasticsearch Failure Path
 
