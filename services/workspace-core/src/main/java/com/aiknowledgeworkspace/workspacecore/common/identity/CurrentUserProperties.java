@@ -8,6 +8,7 @@ public class CurrentUserProperties {
     private String headerName = "X-Current-User-Id";
     private String sessionAttributeName = "CURRENT_USER_ID";
     private String defaultId = "local-dev-user";
+    private boolean devFallbackEnabled = true;
 
     public String getHeaderName() {
         return headerName;
@@ -31,5 +32,13 @@ public class CurrentUserProperties {
 
     public void setDefaultId(String defaultId) {
         this.defaultId = defaultId;
+    }
+
+    public boolean isDevFallbackEnabled() {
+        return devFallbackEnabled;
+    }
+
+    public void setDevFallbackEnabled(boolean devFallbackEnabled) {
+        this.devFallbackEnabled = devFallbackEnabled;
     }
 }

@@ -56,17 +56,6 @@ public class FastApiProcessingClientImpl implements FastApiProcessingClient {
     }
 
     @Override
-    public FastApiVideoReadResponse getVideo(String videoId) {
-        return execute(
-                () -> fastApiRestClient.get()
-                        .uri("/videos/{videoId}", videoId)
-                        .retrieve()
-                        .body(FastApiVideoReadResponse.class),
-                "read video"
-        );
-    }
-
-    @Override
     public List<FastApiTranscriptRowResponse> getTranscript(String videoId) {
         FastApiTranscriptRowResponse[] rows = execute(
                 () -> fastApiRestClient.get()

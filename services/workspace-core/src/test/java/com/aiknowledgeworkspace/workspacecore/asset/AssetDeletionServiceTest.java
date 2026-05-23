@@ -15,6 +15,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,11 +51,15 @@ class AssetDeletionServiceTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
+        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
+                builder.build(),
+                properties,
+                new ObjectMapper()
+        );
         assetDeletionService = new AssetDeletionService(
                 assetService,
                 assetPersistenceService,
-                builder.build(),
-                properties
+                searchIndexClient
         );
     }
 

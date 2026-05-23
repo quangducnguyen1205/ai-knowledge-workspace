@@ -304,4 +304,20 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value("INVALID_CURRENT_USER_ID"))
                 .andExpect(jsonPath("$.message").value("userId is required"));
     }
+
+    @Test
+    void createSessionReturnsUnauthorizedWhenDevFallbackIsDisabled() throws Exception {
+        currentUserProperties.setDevFallbackEnabled(false);
+
+        mockMvc.perform(post("/api/auth/session")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "study-user-1"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("Authentication is required"));
+    }
 }

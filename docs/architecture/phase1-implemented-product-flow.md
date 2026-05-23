@@ -175,7 +175,7 @@ Workspace management and asset listing are also product-facing.
 - Asset listing supports small v1 pagination through `page` and `size`, plus one optional `assetStatus` filter.
 - Pagination and filtering are applied within the resolved workspace scope.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
-- For the local/dev default user path, default-workspace asset listing can still include older local assets whose workspace association is null.
+- For the configured local/dev default user path, when dev fallback auth is enabled, default-workspace asset listing can still include older local assets whose workspace association is null.
 - That legacy path backfills returned null-workspace assets to the current user's default workspace.
 - Non-default workspace listing only returns assets already associated with that workspace.
 - Asset listing uses deterministic default ordering:

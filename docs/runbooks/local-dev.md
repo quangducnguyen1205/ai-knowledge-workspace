@@ -191,6 +191,7 @@ On `localhost`, the helper can still use convenience smoke credentials if you om
 Explicit legacy local/dev fallback example:
 
 ```bash
+CURRENT_USER_DEV_FALLBACK_ENABLED=true \
 SMOKE_USE_LEGACY_AUTH_FALLBACK=1 \
 SMOKE_LEGACY_USER_ID="smoke-dev-user" \
 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
@@ -223,6 +224,8 @@ Failure classification hints:
 - If backend smoke passes but the browser path through `http://localhost:5173` still fails, treat that first as a FE proxy/runtime integration issue rather than a backend-core bug.
 
 ## Local Verification Shortcuts
+
+Backend tests use in-process stubs and mocked external boundaries. They do not require Repo A / FastAPI, Repo FE, PostgreSQL, or Elasticsearch to be running.
 
 From the repo root:
 

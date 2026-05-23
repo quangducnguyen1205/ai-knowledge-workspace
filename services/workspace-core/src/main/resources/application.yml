@@ -29,6 +29,7 @@ current-user:
   header-name: ${CURRENT_USER_HEADER_NAME:X-Current-User-Id}
   session-attribute-name: ${CURRENT_USER_SESSION_ATTRIBUTE:CURRENT_USER_ID}
   default-id: ${CURRENT_USER_ID:local-dev-user}
+  dev-fallback-enabled: ${CURRENT_USER_DEV_FALLBACK_ENABLED:true}
 
 integration:
   fastapi:

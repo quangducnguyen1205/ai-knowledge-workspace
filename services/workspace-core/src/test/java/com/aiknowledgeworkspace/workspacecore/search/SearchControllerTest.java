@@ -23,6 +23,7 @@ import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,12 @@ class SearchControllerTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        SearchService searchService = new SearchService(builder.build(), properties, workspaceService, assetService);
+        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
+                builder.build(),
+                properties,
+                new ObjectMapper()
+        );
+        SearchService searchService = new SearchService(workspaceService, assetService, searchIndexClient);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)

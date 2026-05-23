@@ -16,8 +16,8 @@ Repo B now uses a minimal current-user identity foundation for ownership-aware w
 - `POST /api/auth/register` and `POST /api/auth/login` establish the current user in the Spring HTTP session.
 - `GET /api/me` reads the authenticated session user.
 - `POST /api/auth/logout` clears the authenticated session.
-- For local/dev support, Spring still accepts `POST /api/auth/session` and `X-Current-User-Id` as secondary fallbacks.
-- If session, auth-session fallback, and header are all absent, Spring still falls back to the configured local/dev default user for ownership-aware local workflows.
+- For local/dev support, Spring can still accept `POST /api/auth/session`, `X-Current-User-Id`, and a configured default user as secondary fallbacks.
+- Those local/dev shortcuts are controlled by `CURRENT_USER_DEV_FALLBACK_ENABLED`; the product path is register/login/session auth.
 - This slice is intentionally not a full authentication platform.
 - Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing, search, and asset-by-id flows.
 
@@ -124,6 +124,8 @@ Common failure cases:
 
 Establishes a secondary local/dev current-user session shortcut.
 
+This is a development fallback endpoint. The preferred product path is `POST /api/auth/register` or `POST /api/auth/login`.
+
 Request:
 
 - Content type: `application/json`
@@ -147,6 +149,7 @@ Common failure cases:
 
 - HTTP `400` with `code = "INVALID_CURRENT_USER_ID"` if `userId` is missing, blank after trim, or longer than the current max length
 - HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
+- HTTP `401` with `code = "AUTHENTICATION_REQUIRED"` if local/dev fallback auth is disabled
 
 ### `POST /api/workspaces`
 

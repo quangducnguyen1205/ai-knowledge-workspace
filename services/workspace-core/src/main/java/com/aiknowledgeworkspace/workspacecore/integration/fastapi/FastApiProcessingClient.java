@@ -9,7 +9,5 @@ public interface FastApiProcessingClient {
 
     FastApiTaskStatusResponse getTaskStatus(String taskId);
 
-    FastApiVideoReadResponse getVideo(String videoId);
-
     List<FastApiTranscriptRowResponse> getTranscript(String videoId);
 }

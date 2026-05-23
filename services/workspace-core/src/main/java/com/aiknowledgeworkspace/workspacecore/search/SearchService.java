@@ -2,61 +2,40 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class SearchService {
 
-    private static final int DEFAULT_RESULT_SIZE = 20;
-    private static final float TEXT_PHRASE_BOOST = 6.0f;
-    private static final float ASSET_TITLE_PHRASE_BOOST = 4.0f;
-
-    private final RestClient elasticsearchRestClient;
-    private final ElasticsearchProperties elasticsearchProperties;
     private final WorkspaceService workspaceService;
     private final AssetService assetService;
+    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
 
     public SearchService(
-            @Qualifier("elasticsearchRestClient") RestClient elasticsearchRestClient,
-            ElasticsearchProperties elasticsearchProperties,
             WorkspaceService workspaceService,
-            AssetService assetService
+            AssetService assetService,
+            TranscriptSearchIndexClient transcriptSearchIndexClient
     ) {
-        this.elasticsearchRestClient = elasticsearchRestClient;
-        this.elasticsearchProperties = elasticsearchProperties;
         this.workspaceService = workspaceService;
         this.assetService = assetService;
+        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
     }
 
     public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
         String normalizedQuery = normalizeQuery(query);
         UUID resolvedWorkspaceId = workspaceService.resolveWorkspaceOrDefault(workspaceId).getId();
         UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
-        JsonNode responseBody = execute(
-                () -> elasticsearchRestClient.post()
-                        .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(buildSearchBody(normalizedQuery, resolvedWorkspaceId, validatedAssetId))
-                        .retrieve()
-                        .body(JsonNode.class),
-                "search transcript rows"
+        JsonNode responseBody = transcriptSearchIndexClient.searchTranscriptRows(
+                normalizedQuery,
+                resolvedWorkspaceId,
+                validatedAssetId
         );
 
         return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, responseBody);
@@ -80,71 +59,6 @@ public class SearchService {
         }
 
         return assetId;
-    }
-
-    private Map<String, Object> buildSearchBody(String query, UUID workspaceId, UUID assetId) {
-        List<Map<String, Object>> filterClauses = new ArrayList<>();
-        filterClauses.add(termFilter("assetStatus.keyword", AssetStatus.SEARCHABLE.name()));
-        filterClauses.add(termFilter("workspaceId.keyword", workspaceId.toString()));
-
-        if (assetId != null) {
-            filterClauses.add(termFilter("assetId.keyword", assetId.toString()));
-        }
-
-        Map<String, Object> multiMatchQuery = new LinkedHashMap<>();
-        multiMatchQuery.put("query", query);
-        multiMatchQuery.put("fields", List.of("text^3", "assetTitle"));
-
-        Map<String, Object> boolQuery = new LinkedHashMap<>();
-        boolQuery.put("must", List.of(Map.of("multi_match", multiMatchQuery)));
-        boolQuery.put("should", buildPhraseBoostClauses(query));
-        boolQuery.put("filter", filterClauses);
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("size", DEFAULT_RESULT_SIZE);
-        body.put("query", Map.of("bool", boolQuery));
-        body.put("sort", buildSortClauses());
-        return body;
-    }
-
-    private List<Map<String, Object>> buildPhraseBoostClauses(String query) {
-        return List.of(
-                matchPhraseClause("text", query, TEXT_PHRASE_BOOST),
-                matchPhraseClause("assetTitle", query, ASSET_TITLE_PHRASE_BOOST)
-        );
-    }
-
-    private Map<String, Object> matchPhraseClause(String field, String query, float boost) {
-        Map<String, Object> phraseOptions = new LinkedHashMap<>();
-        phraseOptions.put("query", query);
-        phraseOptions.put("boost", boost);
-        return Map.of("match_phrase", Map.of(field, phraseOptions));
-    }
-
-    private List<Map<String, Object>> buildSortClauses() {
-        return List.of(
-                sortClause("_score", "desc"),
-                sortClause("segmentIndex", "asc"),
-                sortClause("assetId.keyword", "asc"),
-                sortClause("transcriptRowId.keyword", "asc", "_last")
-        );
-    }
-
-    private Map<String, Object> termFilter(String field, String value) {
-        return Map.of("term", Map.of(field, value));
-    }
-
-    private Map<String, Object> sortClause(String field, String order) {
-        Map<String, Object> options = new LinkedHashMap<>();
-        options.put("order", order);
-        return Map.of(field, options);
-    }
-
-    private Map<String, Object> sortClause(String field, String order, String missingValue) {
-        Map<String, Object> options = new LinkedHashMap<>();
-        options.put("order", order);
-        options.put("missing", missingValue);
-        return Map.of(field, options);
     }
 
     private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {
@@ -175,7 +89,6 @@ public class SearchService {
             ));
         }
 
-        // TODO: consider richer lexical or hybrid retrieval only after this small boosted-phrase baseline is proven useful.
         return new SearchResponse(query, workspaceId, assetId, results.size(), results);
     }
 
@@ -219,30 +132,4 @@ public class SearchService {
         return scoreNode.asDouble();
     }
 
-    private <T> T execute(SearchOperation<T> operation, String description) {
-        try {
-            return operation.run();
-        } catch (ResourceAccessException exception) {
-            throw new ElasticsearchConnectivityException(
-                    "Elasticsearch is unavailable while trying to " + description,
-                    exception
-            );
-        } catch (RestClientResponseException exception) {
-            throw new ElasticsearchIntegrationException(
-                    "Elasticsearch returned HTTP " + exception.getStatusCode().value()
-                            + " while trying to " + description,
-                    exception
-            );
-        } catch (RestClientException exception) {
-            throw new ElasticsearchIntegrationException(
-                    "Elasticsearch request failed while trying to " + description,
-                    exception
-            );
-        }
-    }
-
-    @FunctionalInterface
-    private interface SearchOperation<T> {
-        T run();
-    }
 }

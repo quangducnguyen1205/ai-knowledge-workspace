@@ -18,6 +18,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +69,12 @@ class SearchServiceTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        searchService = new SearchService(builder.build(), properties, workspaceService, assetService);
+        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
+                builder.build(),
+                properties,
+                new ObjectMapper()
+        );
+        searchService = new SearchService(workspaceService, assetService, searchIndexClient);
     }
 
     @AfterEach
