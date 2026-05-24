@@ -11,5 +11,4 @@ public record FastApiTaskStatusResponse(
         @JsonProperty("video_id")
         String videoId
 ) {
-    // TODO: confirm the full upstream task status schema before turning this into a stable internal contract.
 }

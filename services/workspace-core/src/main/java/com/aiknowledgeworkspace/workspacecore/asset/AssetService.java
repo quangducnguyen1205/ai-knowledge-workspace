@@ -131,9 +131,6 @@ public class AssetService {
         ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
         AssetStatus updatedAssetStatus = mapAssetStatusFromTaskStatus(updatedProcessingJobStatus);
 
-        // TODO: if status reads should reflect transcript usability automatically,
-        // TODO: check transcript presence here before moving beyond PROCESSING.
-
         return assetPersistenceService.refreshAssetStatus(
                 asset,
                 processingJob,

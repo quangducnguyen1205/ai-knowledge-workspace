@@ -25,6 +25,10 @@ public class AuthController {
             @RequestBody(required = false) CreateAuthSessionRequest request,
             HttpServletRequest httpServletRequest
     ) {
+        if (!currentUserService.isDevFallbackEnabled()) {
+            throw new AuthenticationRequiredException("Authentication is required");
+        }
+
         HttpSession session = httpServletRequest.getSession(true);
         String currentUserId = currentUserService.establishCurrentUser(
                 session,

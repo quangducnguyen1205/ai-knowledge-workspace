@@ -66,14 +66,17 @@ class TranscriptIndexingServiceTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
+        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
+                builder.build(),
+                properties,
+                new ObjectMapper()
+        );
         transcriptIndexingService = new TranscriptIndexingService(
                 processingJobRepository,
                 assetService,
                 assetPersistenceService,
-                builder.build(),
-                properties,
-                new TranscriptIndexDocumentMapper(),
-                new ObjectMapper()
+                searchIndexClient,
+                new TranscriptIndexDocumentMapper()
         );
     }
 

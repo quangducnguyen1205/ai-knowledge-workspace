@@ -14,7 +14,7 @@ For the current deployable-demo baseline, the supported verification order is:
 
 For this Phase 2 basic-auth slice, the primary product-facing current-user path is now session-based auth through register/login.
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
-If authenticated session, auth-session fallback, and header are all absent, Spring falls back to the configured local/dev default user.
+If authenticated session, auth-session fallback, and header are all absent, Spring can fall back to the configured local/dev default user when `CURRENT_USER_DEV_FALLBACK_ENABLED=true`.
 The smoke helper now follows the authenticated product path by default and only uses the older auth-session shortcut when `SMOKE_USE_LEGACY_AUTH_FALLBACK=1` is set explicitly.
 
 ## Helper Shortcut

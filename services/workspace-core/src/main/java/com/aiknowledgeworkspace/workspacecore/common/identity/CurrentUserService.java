@@ -22,7 +22,7 @@ public class CurrentUserService {
     public String getCurrentUserId() {
         ServletRequestAttributes requestAttributes = getServletRequestAttributes();
         if (requestAttributes == null) {
-            return currentUserProperties.getDefaultId();
+            return resolveDevFallbackUserId();
         }
 
         HttpServletRequest request = requestAttributes.getRequest();
@@ -31,12 +31,16 @@ public class CurrentUserService {
             return sessionUserId;
         }
 
+        if (!currentUserProperties.isDevFallbackEnabled()) {
+            throw new AuthenticationRequiredException("Authentication is required");
+        }
+
         String requestUserId = request.getHeader(currentUserProperties.getHeaderName());
         if (StringUtils.hasText(requestUserId)) {
             return requestUserId.trim();
         }
 
-        return currentUserProperties.getDefaultId();
+        return resolveDevFallbackUserId();
     }
 
     public String getAuthenticatedSessionUserId() {
@@ -61,6 +65,10 @@ public class CurrentUserService {
 
     public boolean isDefaultUser(String userId) {
         return currentUserProperties.getDefaultId().equals(userId);
+    }
+
+    public boolean isDevFallbackEnabled() {
+        return currentUserProperties.isDevFallbackEnabled();
     }
 
     public String getHeaderName() {
@@ -92,6 +100,14 @@ public class CurrentUserService {
         }
 
         return null;
+    }
+
+    private String resolveDevFallbackUserId() {
+        if (currentUserProperties.isDevFallbackEnabled()) {
+            return currentUserProperties.getDefaultId();
+        }
+
+        throw new AuthenticationRequiredException("Authentication is required");
     }
 
     private String normalizeRequestedUserId(String requestedUserId) {

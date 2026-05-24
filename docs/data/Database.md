@@ -205,7 +205,7 @@ Current role:
 - Transcript capture can move an asset to `TRANSCRIPT_READY`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
-- Asset reads and the local/dev default-user legacy listing path can backfill a missing workspace association to the current user's default workspace so older local rows stay usable.
+- Asset reads and the configured local/dev default-user legacy listing path can backfill a missing workspace association to the current user's default workspace so older local rows stay usable.
 - Asset deletion removes local transcript snapshot rows together with the linked `ProcessingJob` and `Asset`.
 
 ## Intentionally Not Persisted Yet

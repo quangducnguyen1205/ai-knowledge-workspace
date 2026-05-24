@@ -60,6 +60,36 @@ class CurrentUserServiceTest {
     }
 
     @Test
+    void rejectsHeaderAndDefaultFallbackWhenDevFallbackIsDisabled() {
+        CurrentUserProperties properties = new CurrentUserProperties();
+        properties.setDevFallbackEnabled(false);
+        CurrentUserService currentUserService = new CurrentUserService(properties);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(properties.getHeaderName(), "header-user");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        assertThatThrownBy(currentUserService::getCurrentUserId)
+                .isInstanceOf(AuthenticationRequiredException.class)
+                .hasMessage("Authentication is required");
+    }
+
+    @Test
+    void sessionUserStillWorksWhenDevFallbackIsDisabled() {
+        CurrentUserProperties properties = new CurrentUserProperties();
+        properties.setDevFallbackEnabled(false);
+        CurrentUserService currentUserService = new CurrentUserService(properties);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(properties.getSessionAttributeName(), "session-user");
+        request.setSession(session);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        assertThat(currentUserService.getCurrentUserId()).isEqualTo("session-user");
+    }
+
+    @Test
     void returnsDefaultUserIdWhenSessionAndHeaderAreMissing() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
