@@ -202,7 +202,7 @@ Current behavior:
 Common failure cases:
 
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if the current user's default workspace state is internally conflicted
-- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if Spring cannot adopt or create the reserved default workspace safely
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if Spring cannot create the reserved default workspace safely
 
 ### `GET /api/workspaces/{workspaceId}`
 
@@ -314,8 +314,6 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Pagination and optional `assetStatus` filtering are applied inside the resolved workspace scope.
 - Non-default workspace listing only returns assets already associated with that workspace.
-- For the configured local/dev default user, default-workspace listing also includes older local assets whose `workspace_id` is still null.
-- When that legacy path is used, Spring backfills those returned null-workspace assets to the current user's default workspace.
 - Ordering is deterministic:
   - `createdAt desc`
   - tie-break by `assetId desc`
@@ -329,7 +327,7 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_ASSET_STATUS"` if `assetStatus` is not one of the current product asset statuses
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
-- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
 
 ### `POST /api/assets/upload`
 
@@ -366,7 +364,7 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
-- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
 - HTTP `502` or `504` if upstream FastAPI fails
 
 All asset-by-id endpoints below are ownership-aware through the asset's workspace.
@@ -385,7 +383,7 @@ Current behavior:
 
 - This remains a simple product-owned asset read endpoint.
 - It is useful for debugging and local inspection.
-- For the configured local/dev default user, if the asset still has no workspace association, Spring backfills it to that user's default workspace before returning it.
+- Assets without a workspace association are outside the normal Project3 product model and are not exposed through this endpoint.
 
 Common failure cases:
 
@@ -630,7 +628,7 @@ Common failure cases:
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if a provided `assetId` does not exist, is not owned by the current user, or does not belong to the resolved workspace
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
-- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot adopt or create the reserved default workspace safely
+- HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 

@@ -67,12 +67,7 @@ public class AssetService {
             return asset;
         }
 
-        if (!workspaceService.canAccessLegacyNullWorkspaceAssets()) {
-            throw new AssetNotFoundException();
-        }
-
-        Workspace defaultWorkspace = workspaceService.ensureDefaultWorkspace();
-        return assetPersistenceService.updateAssetWorkspace(asset, defaultWorkspace);
+        throw new AssetNotFoundException();
     }
 
     public AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
@@ -95,7 +90,6 @@ public class AssetService {
         int endIndex = Math.min(startIndex + resolvedSize, totalElements);
 
         List<AssetSummaryResponse> items = filteredAssets.subList(startIndex, endIndex).stream()
-                .map(asset -> backfillWorkspaceIfNeeded(asset, resolvedWorkspace))
                 .map(this::toAssetSummaryResponse)
                 .toList();
 
@@ -381,18 +375,8 @@ public class AssetService {
 
     private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
         List<Asset> assets = new ArrayList<>(assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT));
-        if (workspaceService.shouldIncludeLegacyNullWorkspaceAssets(workspace)) {
-            assets.addAll(assetRepository.findByWorkspaceIsNull(ASSET_LIST_SORT));
-        }
         assets.sort(ASSET_LIST_COMPARATOR);
         return assets;
-    }
-
-    private Asset backfillWorkspaceIfNeeded(Asset asset, Workspace workspace) {
-        if (asset.getWorkspace() != null) {
-            return asset;
-        }
-        return assetPersistenceService.updateAssetWorkspace(asset, workspace);
     }
 
     private AssetSummaryResponse toAssetSummaryResponse(Asset asset) {

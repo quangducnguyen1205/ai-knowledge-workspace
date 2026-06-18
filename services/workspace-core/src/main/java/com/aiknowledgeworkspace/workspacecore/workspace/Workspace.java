@@ -18,10 +18,10 @@ public class Workspace {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(length = 255)
+    @Column(nullable = false, length = 255)
     private String ownerId;
 
-    @Column
+    @Column(nullable = false)
     private Boolean defaultWorkspace = Boolean.FALSE;
 
     @Column(nullable = false, updatable = false)

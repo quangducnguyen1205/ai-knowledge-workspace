@@ -308,11 +308,10 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Re-authenticate as a different user, then call `GET /api/assets`.
 - [ ] Confirm assets in another user's workspace do not appear.
 
-### Legacy Default-Workspace Path
+### Workspace Ownership Path
 
-- [ ] If you have older local assets with null `workspace_id`, call `GET /api/assets` without `workspaceId`.
-- [ ] Confirm those legacy assets still appear only for the configured local/dev default user.
-- [ ] Confirm those rows are backfilled to the current user's default workspace after the read path.
+- [ ] Confirm every returned asset includes a workspace-owned path for the current user.
+- [ ] If an older local database contains assets with null `workspace_id`, recreate or manually migrate that database before using the normal Project3 smoke path.
 
 ### Failure Path
 

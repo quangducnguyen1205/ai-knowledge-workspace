@@ -293,7 +293,7 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void resolveWorkspaceOrDefaultAdoptsLegacyDefaultWorkspaceForConfiguredDefaultUser() {
+    void resolveWorkspaceOrDefaultCreatesConfiguredDefaultWorkspaceForDefaultUser() {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
@@ -302,14 +302,7 @@ class WorkspaceServiceTest {
                 currentUserService
         );
         String currentUserId = "local-dev-user";
-        Workspace legacyDefaultWorkspace = workspace(
-                workspaceProperties.getDefaultId(),
-                workspaceProperties.getDefaultName(),
-                null,
-                false,
-                Instant.parse("2026-04-03T08:00:00Z")
-        );
-        Workspace adoptedWorkspace = workspace(
+        Workspace savedWorkspace = workspace(
                 workspaceProperties.getDefaultId(),
                 workspaceProperties.getDefaultName(),
                 currentUserId,
@@ -320,14 +313,17 @@ class WorkspaceServiceTest {
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
         when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
-        when(workspaceRepository.findById(workspaceProperties.getDefaultId())).thenReturn(Optional.of(legacyDefaultWorkspace));
-        when(workspaceRepository.save(legacyDefaultWorkspace)).thenReturn(adoptedWorkspace);
+        when(workspaceRepository.save(any(Workspace.class))).thenReturn(savedWorkspace);
 
         Workspace result = workspaceService.resolveWorkspaceOrDefault(null);
 
-        assertThat(result).isSameAs(adoptedWorkspace);
-        assertThat(legacyDefaultWorkspace.getOwnerId()).isEqualTo(currentUserId);
-        assertThat(legacyDefaultWorkspace.isDefaultWorkspace()).isTrue();
+        assertThat(result).isSameAs(savedWorkspace);
+
+        ArgumentCaptor<Workspace> workspaceCaptor = ArgumentCaptor.forClass(Workspace.class);
+        verify(workspaceRepository).save(workspaceCaptor.capture());
+        assertThat(workspaceCaptor.getValue().getId()).isEqualTo(workspaceProperties.getDefaultId());
+        assertThat(workspaceCaptor.getValue().getOwnerId()).isEqualTo(currentUserId);
+        assertThat(workspaceCaptor.getValue().isDefaultWorkspace()).isTrue();
     }
 
     @Test
@@ -365,28 +361,24 @@ class WorkspaceServiceTest {
     @Test
     void ensureDefaultWorkspaceRejectsConfiguredDefaultWorkspaceIdOwnedByAnotherUser() {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
+        DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor = workspace -> {
+            throw new DataIntegrityViolationException("duplicate key");
+        };
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
                 assetRepository,
                 workspaceProperties,
-                currentUserService
+                currentUserService,
+                defaultWorkspaceCreationExecutor
         );
         String currentUserId = "local-dev-user";
-        Workspace conflictingWorkspace = workspace(
-                workspaceProperties.getDefaultId(),
-                workspaceProperties.getDefaultName(),
-                "another-user",
-                true,
-                Instant.parse("2026-04-03T08:00:00Z")
-        );
 
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
         when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
-        when(workspaceRepository.findById(workspaceProperties.getDefaultId())).thenReturn(Optional.of(conflictingWorkspace));
 
         assertThatThrownBy(() -> workspaceService.ensureDefaultWorkspace(currentUserId))
                 .isInstanceOf(DefaultWorkspaceConflictException.class)
-                .hasMessage("Configured default workspace ID is already owned by another user and cannot be adopted safely");
+                .hasMessage("Default workspace could not be created safely because the reserved workspace ID is already in use");
     }
 
     @Test

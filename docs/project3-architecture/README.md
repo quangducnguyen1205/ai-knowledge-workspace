@@ -62,7 +62,7 @@ Spring Boot owns product state and product-facing behavior:
 
 - public product APIs;
 - JWT validation and authorization enforcement;
-- workspace/tenant scope;
+- user/workspace scope;
 - asset metadata;
 - processing job records and outbox;
 - transcript snapshots;
@@ -90,7 +90,7 @@ The LLM provider is replaceable infrastructure. It may be local or external, but
 
 It stores:
 
-- users, organizations, workspaces, and memberships;
+- users and individually owned workspaces;
 - assets and asset metadata;
 - processing jobs and outbox rows;
 - transcript snapshots;
@@ -112,7 +112,7 @@ The AI assistant belongs in Project3 core because the product is an AI Knowledge
 
 Spring Boot owns the product-facing assistant API:
 
-- validates JWT and workspace/tenant scope;
+- validates JWT and user/workspace scope;
 - retrieves authorized context from Product PostgreSQL and Elasticsearch;
 - constructs a controlled internal request for FastAPI;
 - calls the internal FastAPI LLM Adapter / Prompt Executor;
@@ -186,7 +186,7 @@ Spring Boot does not stream media bytes to FastAPI in the main processing path. 
 ### 3. Search
 
 1. Search API remains frontend -> Nginx -> Spring Boot -> Elasticsearch -> Spring Boot.
-2. Spring Boot enforces authorization and workspace/tenant scope before returning search results.
+2. Spring Boot enforces authorization and user/workspace scope before returning search results.
 3. Transcript context is read from Product PostgreSQL snapshots when product truth is required.
 
 Elasticsearch is derived. Product PostgreSQL remains the truth for transcript snapshots and product status.
@@ -195,7 +195,7 @@ Elasticsearch is derived. Product PostgreSQL remains the truth for transcript sn
 
 1. User asks the assistant through React/Vite.
 2. Frontend calls Spring Boot through Nginx.
-3. Spring Boot AI Assistant API / Context Orchestrator validates JWT and workspace/tenant scope.
+3. Spring Boot AI Assistant API / Context Orchestrator validates JWT and user/workspace scope.
 4. Spring Boot retrieves authorized context from Product PostgreSQL and Elasticsearch.
 5. Spring Boot calls the internal FastAPI LLM Adapter / Prompt Executor.
 6. FastAPI constructs/executes the prompt and calls the configured LLM Provider / Local Model Runtime.

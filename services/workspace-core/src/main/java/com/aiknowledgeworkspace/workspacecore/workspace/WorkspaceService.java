@@ -23,6 +23,7 @@ public class WorkspaceService {
     private final WorkspaceProperties workspaceProperties;
     private final CurrentUserService currentUserService;
     private final DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor;
+    private final WorkspaceAccessPolicy workspaceAccessPolicy;
 
     @Autowired
     public WorkspaceService(
@@ -30,13 +31,15 @@ public class WorkspaceService {
             AssetRepository assetRepository,
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService,
-            DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
+            DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor,
+            WorkspaceAccessPolicy workspaceAccessPolicy
     ) {
         this.workspaceRepository = workspaceRepository;
         this.assetRepository = assetRepository;
         this.workspaceProperties = workspaceProperties;
         this.currentUserService = currentUserService;
         this.defaultWorkspaceCreationExecutor = defaultWorkspaceCreationExecutor;
+        this.workspaceAccessPolicy = workspaceAccessPolicy;
     }
 
     public WorkspaceService(
@@ -50,7 +53,25 @@ public class WorkspaceService {
                 assetRepository,
                 workspaceProperties,
                 currentUserService,
-                workspaceRepository::save
+                workspaceRepository::save,
+                new WorkspaceAccessPolicy(currentUserService)
+        );
+    }
+
+    public WorkspaceService(
+            WorkspaceRepository workspaceRepository,
+            AssetRepository assetRepository,
+            WorkspaceProperties workspaceProperties,
+            CurrentUserService currentUserService,
+            DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
+    ) {
+        this(
+                workspaceRepository,
+                assetRepository,
+                workspaceProperties,
+                currentUserService,
+                defaultWorkspaceCreationExecutor,
+                new WorkspaceAccessPolicy(currentUserService)
         );
     }
 
@@ -110,19 +131,7 @@ public class WorkspaceService {
     }
 
     public boolean isOwnedByCurrentUser(Workspace workspace) {
-        return workspace != null
-                && StringUtils.hasText(workspace.getOwnerId())
-                && currentUserService.getCurrentUserId().equals(workspace.getOwnerId());
-    }
-
-    public boolean canAccessLegacyNullWorkspaceAssets() {
-        return currentUserService.isDefaultUser(currentUserService.getCurrentUserId());
-    }
-
-    public boolean shouldIncludeLegacyNullWorkspaceAssets(Workspace workspace) {
-        return isDefaultWorkspace(workspace)
-                && canAccessLegacyNullWorkspaceAssets()
-                && isOwnedByCurrentUser(workspace);
+        return workspaceAccessPolicy.isOwnedByCurrentUser(workspace);
     }
 
     @Transactional
@@ -144,8 +153,7 @@ public class WorkspaceService {
     @Transactional
     public Workspace ensureDefaultWorkspace(String currentUserId) {
         return findOwnedDefaultWorkspace(currentUserId)
-                .orElseGet(() -> adoptLegacyDefaultWorkspaceIfNeeded(currentUserId)
-                        .orElseGet(() -> createDefaultWorkspaceSafely(currentUserId)));
+                .orElseGet(() -> createDefaultWorkspaceSafely(currentUserId));
     }
 
     private String normalizeWorkspaceName(String name) {
@@ -168,43 +176,6 @@ public class WorkspaceService {
                 Sort.Order.asc("createdAt"),
                 Sort.Order.asc("name")
         );
-    }
-
-    // Transitional legacy-adoption path for the configured local/dev default workspace only.
-    private Optional<Workspace> adoptLegacyDefaultWorkspaceIfNeeded(String currentUserId) {
-        if (!currentUserService.isDefaultUser(currentUserId)) {
-            return Optional.empty();
-        }
-
-        return workspaceRepository.findById(workspaceProperties.getDefaultId())
-                .map(workspace -> {
-                    if (StringUtils.hasText(workspace.getOwnerId())
-                            && !currentUserId.equals(workspace.getOwnerId())) {
-                        throw new DefaultWorkspaceConflictException(
-                                "DEFAULT_WORKSPACE_ID_CONFLICT",
-                                "Configured default workspace ID is already owned by another user and cannot be adopted safely"
-                        );
-                    }
-
-                    boolean changed = false;
-
-                    if (!currentUserId.equals(workspace.getOwnerId())) {
-                        workspace.setOwnerId(currentUserId);
-                        changed = true;
-                    }
-
-                    if (!workspace.isDefaultWorkspace()) {
-                        workspace.setDefaultWorkspace(true);
-                        changed = true;
-                    }
-
-                    if (!StringUtils.hasText(workspace.getName())) {
-                        workspace.setName(workspaceProperties.getDefaultName());
-                        changed = true;
-                    }
-
-                    return changed ? workspaceRepository.save(workspace) : workspace;
-                });
     }
 
     private Optional<Workspace> findOwnedDefaultWorkspace(String currentUserId) {

@@ -15,6 +15,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -36,8 +37,8 @@ public class Asset {
     private AssetStatus status;
 
     @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "workspace_id")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "workspace_id", nullable = false)
     private Workspace workspace;
 
     @Column(nullable = false, updatable = false)
@@ -49,15 +50,11 @@ public class Asset {
     protected Asset() {
     }
 
-    public Asset(String originalFilename, String title, AssetStatus status) {
-        this(originalFilename, title, status, null);
-    }
-
     public Asset(String originalFilename, String title, AssetStatus status, Workspace workspace) {
         this.originalFilename = originalFilename;
         this.title = title;
         this.status = status;
-        this.workspace = workspace;
+        this.workspace = Objects.requireNonNull(workspace, "workspace is required");
     }
 
     @PrePersist

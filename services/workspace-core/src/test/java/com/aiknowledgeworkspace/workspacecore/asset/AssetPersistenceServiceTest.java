@@ -1,11 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
@@ -33,6 +35,41 @@ class AssetPersistenceServiceTest {
 
     @Mock
     private AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
+
+    @Test
+    void persistUploadResultCreatesAssetWithResolvedWorkspace() {
+        AssetPersistenceService assetPersistenceService = new AssetPersistenceService(
+                assetRepository,
+                processingJobRepository,
+                assetTranscriptRowSnapshotRepository
+        );
+
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
+        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
+
+        when(assetRepository.save(any(Asset.class))).thenAnswer(invocation -> {
+            Asset asset = invocation.getArgument(0);
+            ReflectionTestUtils.setField(asset, "id", assetId);
+            return asset;
+        });
+        when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AssetUploadResponse response = assetPersistenceService.persistUploadResult(
+                "lecture.mp4",
+                "Lecture",
+                AssetStatus.PROCESSING,
+                ProcessingJobStatus.PENDING,
+                workspace,
+                upstreamResponse
+        );
+
+        ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
+        verify(assetRepository).save(assetCaptor.capture());
+
+        assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
+        assertThat(response.workspaceId()).isEqualTo(workspace.getId());
+    }
 
     @Test
     void replaceTranscriptSnapshotStoresVerifiedFieldsAndReturnsRowsSortedBySegmentIndex() {

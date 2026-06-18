@@ -48,7 +48,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Spring exposes workspace-aware asset listing through `GET /api/assets`.
 - Spring falls back to the configured default workspace when upload or search omit `workspaceId`.
 - Spring returns a product-side `404` for an unknown `workspaceId` and `400` for a malformed `workspaceId`.
-- Default-workspace asset listing includes legacy assets with null workspace and backfills them.
+- Project3 Phase 1 requires every asset to belong to a workspace; old local databases should be recreated or manually migrated.
 - Spring performs on-demand task polling through the asset status read path.
 - Spring fetches transcript rows from FastAPI `GET /videos/{video_id}/transcript`.
 - Spring keeps transcript retrieval product-facing instead of exposing FastAPI directly.
@@ -83,7 +83,7 @@ The goal is to prove the product boundary and end-to-end data flow, not to build
 - Repeated indexing is safe to rerun because the same asset/transcript-row combination maps to the same Elasticsearch document ID.
 - Search ordering is deterministic on score ties.
 - Transcript context matches real upstream row IDs when they exist and only falls back to `segment-{segmentIndex}` for rows whose upstream ID is missing.
-- Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, legacy-asset default-workspace backfill, and workspace-aware asset listing.
+- Lightweight tests now cover workspace-aware upload, default-workspace fallback, invalid workspace handling, workspace-aware search filters, repeated indexing, workspace ownership checks, and workspace-aware asset listing.
 - Lightweight tests also cover transcript-context retrieval success, invalid window handling, row-not-found handling, and transcript-not-usable paths.
 - The focused Maven test run passes.
 

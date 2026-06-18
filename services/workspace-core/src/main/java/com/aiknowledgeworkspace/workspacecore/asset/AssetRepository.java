@@ -9,7 +9,5 @@ public interface AssetRepository extends JpaRepository<Asset, UUID> {
 
     List<Asset> findByWorkspace_Id(UUID workspaceId, Sort sort);
 
-    List<Asset> findByWorkspaceIsNull(Sort sort);
-
     long countByWorkspace_Id(UUID workspaceId);
 }

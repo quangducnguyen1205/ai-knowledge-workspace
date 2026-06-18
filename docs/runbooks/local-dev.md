@@ -32,11 +32,18 @@ This repository uses different host ports to avoid conflicts:
 
 - `infra/docker-compose.dev.yml`: local infrastructure for this repository
 - `.env.example`: example environment values for local development
+- `services/workspace-core/src/main/resources/db/migration`: Flyway migrations for the product schema
 
 Current environment-backed upload limit defaults:
 
 - `WORKSPACE_CORE_MAX_FILE_SIZE=200MB`
 - `WORKSPACE_CORE_MAX_REQUEST_SIZE=200MB`
+
+Current schema-management defaults:
+
+- `WORKSPACE_CORE_JPA_DDL_AUTO=validate`
+- `WORKSPACE_CORE_FLYWAY_ENABLED=true`
+- `WORKSPACE_CORE_FLYWAY_BASELINE_ON_MIGRATE=false`
 
 ## Startup Sequence
 
@@ -89,6 +96,14 @@ mvn spring-boot:run
 ```
 
 If you prefer, run the same module from your IDE with the values from `.env`.
+
+Flyway startup behavior:
+
+- On a fresh Repo B PostgreSQL database, Flyway applies the product schema migration before Hibernate validates entities.
+- On an older local database that was previously created by `hibernate.ddl-auto=update`, startup may fail because the schema is non-empty but has no Flyway history table.
+- For disposable local data, recreating the Repo B PostgreSQL volume is the preferred path; Flyway then applies the clean Project3 schema from scratch.
+- For local demo data you must keep, manually migrate rows so workspaces have `owner_id` and assets have `workspace_id`, then set `WORKSPACE_CORE_FLYWAY_BASELINE_ON_MIGRATE=true` once after confirming the schema already matches the current entities.
+- Use `WORKSPACE_CORE_JPA_DDL_AUTO=update` only as a temporary local troubleshooting fallback, not as the normal Project3 schema path.
 
 ### 5. Verify Connectivity
 
@@ -256,4 +271,5 @@ The smoke targets still enable the optional search-to-context check by default u
 - `FASTAPI_BASE_URL` is the integration boundary. Keep it explicit.
 - Redis is intentionally optional for now.
 - The current Spring Boot code uses PostgreSQL for persisted asset state, FastAPI for processing, and Elasticsearch for indexing and search.
+- PostgreSQL schema changes are expected to come through Flyway migrations.
 - Multipart upload limits are environment-configurable through `WORKSPACE_CORE_MAX_FILE_SIZE` and `WORKSPACE_CORE_MAX_REQUEST_SIZE`.

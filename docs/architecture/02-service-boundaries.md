@@ -29,6 +29,7 @@ flowchart LR
 ### Currently Owns In This Repo
 
 - Workspace model and workspace-scoped access rules
+- Explicit individual ownership policy for the current user -> workspace -> asset model
 - Asset registration and product-visible asset metadata
 - Product orchestration across services
 - Client-facing APIs
@@ -41,6 +42,7 @@ flowchart LR
 
 - A full authentication platform
 - Collaboration, sharing, roles, and broader authorization policies
+- Organization, organization-membership, tenant-SaaS, or enterprise RBAC modeling
 
 ### Does Not Own
 
@@ -86,11 +88,13 @@ flowchart LR
 ### Owns
 
 - Domain metadata for workspaces, assets, processing jobs, and related product entities
+- Flyway-managed product schema for the current individual ownership model
 
 ### Does Not Own
 
 - Primary search retrieval behavior
 - Embedding or transcript-processing concerns
+- Organization or tenant-platform state in this phase
 
 ## Redis
 
@@ -111,4 +115,4 @@ flowchart LR
 - Spring Boot is the only product entry point for clients.
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
-- Current-user entry and ownership enforcement now exist in minimal form, but broader auth/collaboration concerns remain out of scope.
+- Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.

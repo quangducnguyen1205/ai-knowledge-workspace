@@ -10,7 +10,7 @@ This document explains why each primary technology belongs in Project3, what rol
 | API boundary | Nginx | Local reverse proxy and browser-facing `/api/**` boundary. |
 | Product backend | Spring Boot modular monolith | Product APIs, authorization, product state, orchestration, indexing, search contract, and assistant API. |
 | Identity | Keycloak | OIDC login, JWT issuer, issuer/JWKS integration. |
-| Source of truth | Product PostgreSQL | Durable product state: users/orgs/workspaces, assets, jobs, outbox, transcript snapshots, assistant history/audit if retained. |
+| Source of truth | Product PostgreSQL | Durable product state: users, individually owned workspaces, assets, jobs, outbox, transcript snapshots, assistant history/audit if retained. |
 | Cache / ephemeral state | Redis | Cache, rate limits, idempotency keys, and short-lived support state. |
 | Object storage | MinIO | S3-compatible storage for raw media and optional derived artifact bytes. |
 | Cross-service async | Kafka | Durable integration events between Spring Boot and FastAPI/indexing flow. |
@@ -67,7 +67,7 @@ Use Spring Boot for:
 
 - public product APIs;
 - JWT validation with Keycloak issuer/JWKS;
-- resource ownership and workspace/tenant scope;
+- resource ownership and user/workspace scope;
 - asset lifecycle and processing-job state;
 - metadata persistence;
 - MinIO object-storage integration;
@@ -90,7 +90,7 @@ The assistant is part of Project3 core because AI Knowledge Workspace should dem
 Use Spring Boot for:
 
 - product-facing assistant endpoints;
-- JWT validation and workspace/tenant authorization;
+- JWT validation and user/workspace authorization;
 - deciding which assets/transcripts/search results can be used as context;
 - retrieving context from Product PostgreSQL and Elasticsearch;
 - calling the internal FastAPI LLM Adapter / Prompt Executor;
@@ -119,7 +119,7 @@ Product PostgreSQL is the system of record.
 Use it for:
 
 - user/profile projections if needed;
-- organizations, workspaces, and memberships;
+- users and individually owned workspaces;
 - asset metadata;
 - processing job state;
 - event outbox rows;
@@ -144,7 +144,7 @@ Use it for:
 - short-lived polling/support state;
 - optional lightweight locks with clear expiry.
 
-Do not use Redis as durable product state. Do not cache authorization-sensitive data without tenant/workspace-safe keys and expiry.
+Do not use Redis as durable product state. Do not cache authorization-sensitive data without user/workspace-safe keys and expiry.
 
 Optional note: Valkey can be mentioned later as a Redis-compatible alternative if licensing or deployment policy becomes important, but Redis remains the Project3 primary choice.
 

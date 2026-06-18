@@ -6,6 +6,19 @@ This document summarizes what Repo B currently persists in PostgreSQL.
 
 - It describes current relational persistence only.
 - It does not describe the Elasticsearch search index as primary application storage.
+- Schema creation is now Flyway-managed for normal development and application startup.
+
+## Schema Management
+
+Repo B now uses Flyway migrations under `services/workspace-core/src/main/resources/db/migration`.
+
+- `V1__create_product_schema.sql` creates the current product schema.
+- Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
+- Hibernate is no longer the default schema-creation mechanism.
+- `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
+- Existing local databases that were created before Flyway may need a one-time Flyway baseline or a recreated local database volume.
+
+This phase intentionally productionizes the individual ownership model. It does not add organizations, organization memberships, tenant SaaS modeling, or RBAC tables.
 
 ## Current Relational Model
 
@@ -74,6 +87,19 @@ flowchart LR
 
 The transcript-row documents in Elasticsearch are derived search documents, not the system of record. Ownership still flows from user -> workspace -> asset in the product core.
 
+## Current Constraints And Indexes
+
+Flyway currently defines the following persistence guardrails:
+
+- `user_accounts.email` is unique.
+- `assets.workspace_id` references `workspaces.id`.
+- `processing_jobs.asset_id` references `assets.id` and is unique, preserving the current one-job-per-asset shape.
+- `asset_transcript_rows.asset_id` references `assets.id`.
+- Asset and processing status columns use database check constraints for the current enum values.
+- Workspace, asset, and transcript lookup paths have supporting indexes for owner/default-workspace resolution, workspace-scoped asset listing, and asset transcript-row ordering.
+
+`workspaces.owner_id` and `assets.workspace_id` are required in the Project3 Flyway baseline. Older local databases created before this baseline should be recreated, or manually migrated and baselined once, before normal startup.
+
 ## `UserAccount`
 
 Table: `user_accounts`
@@ -111,6 +137,7 @@ Current role:
 - Provides one default workspace path per current user when `workspaceId` is omitted.
 - Stores ownership through `ownerId` as a product-level logical link to `UserAccount`, not as a relational foreign key.
 - Can be created explicitly through the current minimal workspace API, or lazily when the default workspace is first needed.
+- Access decisions are centralized through a small workspace access policy and still follow the individual user -> workspace -> asset model.
 
 ## `Asset`
 
@@ -205,8 +232,9 @@ Current role:
 - Transcript capture can move an asset to `TRANSCRIPT_READY`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
-- Asset reads and the configured local/dev default-user legacy listing path can backfill a missing workspace association to the current user's default workspace so older local rows stay usable.
+- Asset reads and listing require an asset to belong to a workspace owned by the current user.
 - Asset deletion removes local transcript snapshot rows together with the linked `ProcessingJob` and `Asset`.
+- Schema drift should be handled through Flyway migrations rather than Hibernate auto-update.
 
 ## Intentionally Not Persisted Yet
 

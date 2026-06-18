@@ -132,8 +132,9 @@ The current transaction boundary is simple:
 
 - Network calls to FastAPI happen outside the DB write transaction.
 - DB writes are isolated in the persistence service.
+- The product schema is created by Flyway migrations, and Hibernate validates it by default at startup.
 - The current user's default workspace can be created lazily on first use.
-- If default-workspace integrity is inconsistent, Spring fails with explicit conflict codes instead of a vague create/adopt failure.
+- If default-workspace integrity is inconsistent, Spring fails with explicit conflict codes instead of a vague create failure.
 
 ## Current Status And Transcript Policy
 
@@ -166,6 +167,7 @@ Transcript reads are also product-facing.
 Workspace management and asset listing are also product-facing.
 
 - Spring exposes a minimal workspace API through `POST /api/workspaces`, `GET /api/workspaces`, `GET /api/workspaces/{workspaceId}`, `PATCH /api/workspaces/{workspaceId}`, and `DELETE /api/workspaces/{workspaceId}`.
+- Ownership checks are centralized through a small workspace access policy while preserving the current individual user -> workspace -> asset model.
 - Workspace reads and listing stay intentionally narrow: `id`, `name`, and `createdAt`.
 - Workspace rename is title/name update only.
 - Workspace delete stays conservative: only non-default workspaces can be deleted, and only when they contain no assets.
@@ -175,9 +177,7 @@ Workspace management and asset listing are also product-facing.
 - Asset listing supports small v1 pagination through `page` and `size`, plus one optional `assetStatus` filter.
 - Pagination and filtering are applied within the resolved workspace scope.
 - A provided unknown `workspaceId` returns a product-side `404`, and a malformed `workspaceId` returns `400`.
-- For the configured local/dev default user path, when dev fallback auth is enabled, default-workspace asset listing can still include older local assets whose workspace association is null.
-- That legacy path backfills returned null-workspace assets to the current user's default workspace.
-- Non-default workspace listing only returns assets already associated with that workspace.
+- Asset listing only returns assets already associated with the resolved workspace.
 - Asset listing uses deterministic default ordering:
   - `createdAt desc`
   - tie-break by `assetId desc`
