@@ -22,7 +22,7 @@ class OutboxEventRepositoryTest {
     private OutboxEventRepository outboxEventRepository;
 
     @Test
-    void persistsPendingOutboxEventWithFlywayManagedSchema() {
+    void persistsPendingOutboxEventWithFlywayManagedSchemaThroughRelayStateMigration() {
         UUID assetId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(
                 OutboxEventFactory.ASSET_PROCESSING_REQUESTED,

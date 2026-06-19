@@ -15,6 +15,7 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V1__create_product_schema.sql` creates the base product schema.
 - `V2__add_asset_object_storage_metadata.sql` adds MinIO/S3 object-reference metadata to assets.
 - `V3__add_outbox_events.sql` adds the PostgreSQL-backed outbox table for durable event publication intent.
+- `V4__extend_outbox_relay_state.sql` extends the outbox status constraint for relay processing state.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -251,6 +252,7 @@ Current fields:
 Current status values:
 
 - `PENDING`
+- `PUBLISHING`
 - `PUBLISHED`
 - `FAILED`
 
@@ -259,7 +261,9 @@ Current role:
 - Stores durable publication intent in PostgreSQL.
 - Avoids a dual-write gap between product database changes and future Kafka publishing.
 - Currently records `asset.processing.requested` with `eventVersion = 1` when a successful upload persists an `Asset` and `ProcessingJob`.
-- Does not publish to Kafka yet; no broker producer, relay, consumer, or FastAPI event consumption is implemented in Phase 3A.
+- Provides a relay foundation that can select due pending rows, call a publisher abstraction, and update attempt/status metadata.
+- Does not publish to Kafka yet; no broker producer, scheduled relay, consumer, or FastAPI event consumption is implemented in Phase 3B.
+- The default logging publisher is a local placeholder only. If the relay is manually enabled and invoked with that publisher, rows can be marked `PUBLISHED` locally without any external broker delivery.
 - Stores JSON payload text and never stores raw media bytes or secrets.
 
 `eventVersion = 1` is a lightweight contract-version marker for the current `asset.processing.requested` payload. It describes the shape of the event payload, not the version of the database row, and gives future consumers a safe way to distinguish payload shapes as the processing request evolves.
@@ -300,7 +304,9 @@ Current role:
 - Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset`, `ProcessingJob`, and an `asset.processing.requested` version 1 `OutboxEvent` together after FastAPI acknowledges the transitional direct upload processing trigger.
 - If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
-- Kafka publishing from `outbox_events` is not implemented yet. The table is the durable foundation for the later async processing lifecycle.
+- Kafka publishing from `outbox_events` is not implemented yet. The table and relay state machine are the durable foundation for the later async processing lifecycle.
+- The Phase 3B relay is disabled by default, has no scheduler, and uses a logging publisher placeholder unless another `OutboxMessagePublisher` is configured.
+- Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -315,7 +321,8 @@ Current role:
 
 - Transcript version history
 - Transcript sync state beyond the current snapshot
-- Outbox relay/publisher offsets or Kafka publish state beyond the initial outbox row lifecycle fields
+- Kafka publisher offsets, topics, consumer state, or dead-letter routing
+- Automatic recovery for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics
 

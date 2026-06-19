@@ -29,6 +29,14 @@ workspace:
   default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
 
+outbox:
+  relay:
+    # Disabled until a real broker-backed publisher replaces the local logging placeholder.
+    enabled: ${WORKSPACE_CORE_OUTBOX_RELAY_ENABLED:false}
+    batch-size: ${WORKSPACE_CORE_OUTBOX_RELAY_BATCH_SIZE:20}
+    max-attempts: ${WORKSPACE_CORE_OUTBOX_RELAY_MAX_ATTEMPTS:5}
+    retry-delay: ${WORKSPACE_CORE_OUTBOX_RELAY_RETRY_DELAY:30s}
+
 current-user:
   header-name: ${CURRENT_USER_HEADER_NAME:X-Current-User-Id}
   session-attribute-name: ${CURRENT_USER_SESSION_ATTRIBUTE:CURRENT_USER_ID}

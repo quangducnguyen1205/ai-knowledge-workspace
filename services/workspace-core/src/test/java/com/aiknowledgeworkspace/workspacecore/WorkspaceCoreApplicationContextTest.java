@@ -14,6 +14,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 class WorkspaceCoreApplicationContextTest {
 
     @Test
-    void contextLoadsWithFlywayManagedSchemaThroughOutboxMigration() {
+    void contextLoadsWithFlywayManagedSchemaThroughOutboxRelayMigration() {
     }
 }

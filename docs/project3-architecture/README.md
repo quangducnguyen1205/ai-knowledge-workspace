@@ -183,7 +183,7 @@ The interactive assistant flow does not need Kafka by default because the user i
 
 Spring Boot does not stream media bytes to FastAPI in the main processing path. MinIO object keys and internal service credentials keep the media path explicit and scalable.
 
-Current implementation note: Phase 3A has introduced the PostgreSQL outbox row and the first `asset.processing.requested` payload contract as durable publication intent, with `event_version = 1` for this initial contract. Kafka publishing, FastAPI event consumption, and Celery handoff are not implemented yet. The existing direct FastAPI upload call remains as the temporary processing trigger until the later async processing lifecycle replaces direct byte streaming with object-key events.
+Current implementation note: Phase 3B has introduced the PostgreSQL outbox row, the first `asset.processing.requested` payload contract with `event_version = 1`, and an internal relay state-machine foundation. Kafka publishing, scheduled relay execution, FastAPI event consumption, and Celery handoff are not implemented yet. The relay currently uses a publisher abstraction so a Kafka publisher can be plugged in later. The default logging publisher is only a local placeholder; if the relay is manually invoked with it, rows can be marked `PUBLISHED` locally without broker delivery. Recovery for rows stuck in `PUBLISHING` is future work. The existing direct FastAPI upload call remains as the temporary processing trigger until the later async processing lifecycle replaces direct byte streaming with object-key events.
 
 ### 3. Search
 

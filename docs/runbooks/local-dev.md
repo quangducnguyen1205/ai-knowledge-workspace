@@ -51,6 +51,16 @@ Current object-storage defaults:
 
 Spring uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. Keep path-style access enabled for the local MinIO compose service.
 
+Current outbox-relay defaults:
+
+- `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=false`
+- `WORKSPACE_CORE_OUTBOX_RELAY_BATCH_SIZE=20`
+- `WORKSPACE_CORE_OUTBOX_RELAY_MAX_ATTEMPTS=5`
+- `WORKSPACE_CORE_OUTBOX_RELAY_RETRY_DELAY=30s`
+
+The relay foundation is disabled by default because Kafka publishing is not implemented yet.
+If it is manually enabled and invoked before a real publisher exists, the default logging publisher can mark rows `PUBLISHED` locally, but it does not deliver events to Kafka or any other broker.
+
 Current schema-management defaults:
 
 - `WORKSPACE_CORE_JPA_DDL_AUTO=validate`
@@ -61,6 +71,8 @@ Current outbox behavior:
 
 - Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL.
 - The outbox row is durable publication intent for the later Kafka lifecycle.
+- Phase 3B adds an internal relay service, status transitions, retry metadata, and a publisher abstraction, but not Kafka publishing or scheduled relay execution.
+- Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
 - Kafka publishing and FastAPI event consumption are not implemented in this phase, so no Kafka container is required for current backend tests or smoke checks.
 
 ## Startup Sequence

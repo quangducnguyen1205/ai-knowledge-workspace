@@ -12,7 +12,7 @@ For the current deployable-demo baseline, the supported verification order is:
 4. Run backend smoke against `http://localhost:8081`.
 5. Start Repo FE and verify the browser path through `http://localhost:5173`.
 
-For the current Phase 3A backend slice, the primary product-facing current-user path is session-based auth through register/login.
+For the current backend slice, the primary product-facing current-user path is session-based auth through register/login.
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
 If authenticated session, auth-session fallback, and header are all absent, Spring can fall back to the configured local/dev default user when `CURRENT_USER_DEV_FALLBACK_ENABLED=true`.
 The smoke helper now follows the authenticated product path by default and only uses the older auth-session shortcut when `SMOKE_USE_LEGACY_AUTH_FALLBACK=1` is set explicitly.
@@ -92,7 +92,8 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm Repo B Elasticsearch is up on `9201`.
 - [ ] Confirm Repo B MinIO is up on `9000`.
 - [ ] Confirm the configured MinIO bucket exists, or that the `minio-create-bucket` compose helper completed successfully.
-- [ ] Kafka is not required for the current Phase 3A smoke path because outbox rows are stored but not published yet.
+- [ ] Kafka is not required for the current Phase 3B smoke path because outbox rows and relay state are stored locally but not published to Kafka yet.
+- [ ] Do not treat the logging outbox publisher as external delivery; it is a local placeholder and scheduled relay execution is not enabled.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`

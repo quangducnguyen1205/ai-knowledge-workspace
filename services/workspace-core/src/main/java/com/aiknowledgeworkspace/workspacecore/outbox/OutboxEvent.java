@@ -80,6 +80,28 @@ public class OutboxEvent {
         this.payload = payload;
     }
 
+    public void markPublished(Instant publishedAt) {
+        status = OutboxEventStatus.PUBLISHED;
+        this.publishedAt = publishedAt;
+        nextAttemptAt = null;
+        lastError = null;
+    }
+
+    public void recordPublishFailure(String errorMessage, Instant nextAttemptAt, int maxAttempts) {
+        attemptCount = attemptCount == null ? 1 : attemptCount + 1;
+        lastError = errorMessage;
+        publishedAt = null;
+
+        if (attemptCount >= maxAttempts) {
+            status = OutboxEventStatus.FAILED;
+            this.nextAttemptAt = null;
+            return;
+        }
+
+        status = OutboxEventStatus.PENDING;
+        this.nextAttemptAt = nextAttemptAt;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
