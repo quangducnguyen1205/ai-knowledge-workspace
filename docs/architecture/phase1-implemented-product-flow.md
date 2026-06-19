@@ -55,7 +55,7 @@ sequenceDiagram
     S->>M: store raw media object
     S->>F: upload media as transitional processing trigger
     F-->>S: task and video identifiers
-    S->>P: persist Asset object reference + ProcessingJob
+    S->>P: persist Asset object reference + ProcessingJob + outbox v1 event
     loop until terminal
         U->>S: GET /api/assets/{assetId}/status
         S->>F: poll task status when needed
@@ -89,7 +89,7 @@ The implemented flow is:
 7. Spring stores the raw media bytes in MinIO/S3-compatible object storage using a key that includes the current user, workspace ID, and asset ID.
 8. Spring forwards `file` and `title` to FastAPI as the current transitional processing trigger.
 9. Spring validates the live FastAPI upload response.
-10. Spring persists a local `Workspace` reference and object-storage reference on `Asset` plus the related `ProcessingJob`.
+10. Spring persists a local `Workspace` reference and object-storage reference on `Asset` plus the related `ProcessingJob` and `asset.processing.requested` outbox event with `event_version = 1`.
 11. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
 12. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
 13. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
@@ -105,6 +105,7 @@ Spring currently persists:
 - `Workspace`
 - `Asset`
 - `ProcessingJob`
+- `OutboxEvent`
 - `AssetTranscriptRowSnapshot`
 
 `Workspace` currently stores:
@@ -122,6 +123,22 @@ Spring currently persists:
 - `processingJobStatus`
 - `rawUpstreamTaskState`
 
+`OutboxEvent` currently stores:
+
+- `eventType`
+- `eventVersion`
+- `aggregateType`
+- `aggregateId`
+- `eventKey`
+- `payload`
+- `status`
+- `attemptCount`
+- `nextAttemptAt`
+- `lastError`
+- `createdAt`
+- `updatedAt`
+- `publishedAt`
+
 `AssetTranscriptRowSnapshot` currently stores:
 
 - `assetId`
@@ -135,7 +152,8 @@ The current transaction boundary is simple:
 
 - Network calls to FastAPI happen outside the DB write transaction.
 - Raw media object writes to MinIO happen before the DB write transaction, and Spring attempts best-effort object cleanup if the later upload flow fails.
-- DB writes are isolated in the persistence service.
+- Upload DB writes are isolated in the persistence service and save `Asset`, `ProcessingJob`, and the `asset.processing.requested` version 1 outbox row together.
+- The outbox row is durable publication intent only; Kafka publishing and FastAPI event consumption are not implemented in the current flow.
 - The product schema is created by Flyway migrations, and Hibernate validates it by default at startup.
 - The current user's default workspace can be created lazily on first use.
 - If default-workspace integrity is inconsistent, Spring fails with explicit conflict codes instead of a vague create failure.

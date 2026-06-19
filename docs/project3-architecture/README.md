@@ -183,7 +183,7 @@ The interactive assistant flow does not need Kafka by default because the user i
 
 Spring Boot does not stream media bytes to FastAPI in the main processing path. MinIO object keys and internal service credentials keep the media path explicit and scalable.
 
-Current implementation note: Phase 2 has introduced Spring-owned durable raw-media storage in MinIO, but the existing direct FastAPI upload call remains as the temporary processing trigger. The Kafka/object-key processing request replaces that direct byte stream in the later async processing lifecycle phase.
+Current implementation note: Phase 3A has introduced the PostgreSQL outbox row and the first `asset.processing.requested` payload contract as durable publication intent, with `event_version = 1` for this initial contract. Kafka publishing, FastAPI event consumption, and Celery handoff are not implemented yet. The existing direct FastAPI upload call remains as the temporary processing trigger until the later async processing lifecycle replaces direct byte streaming with object-key events.
 
 ### 3. Search
 

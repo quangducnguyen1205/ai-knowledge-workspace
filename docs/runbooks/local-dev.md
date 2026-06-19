@@ -57,6 +57,12 @@ Current schema-management defaults:
 - `WORKSPACE_CORE_FLYWAY_ENABLED=true`
 - `WORKSPACE_CORE_FLYWAY_BASELINE_ON_MIGRATE=false`
 
+Current outbox behavior:
+
+- Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL.
+- The outbox row is durable publication intent for the later Kafka lifecycle.
+- Kafka publishing and FastAPI event consumption are not implemented in this phase, so no Kafka container is required for current backend tests or smoke checks.
+
 ## Startup Sequence
 
 ### 1. Start Repo A First
@@ -175,6 +181,7 @@ By default, the helper now uses the authenticated product path:
 - `GET /api/me`
 - workspace -> upload -> status -> transcript -> index -> search -> context
 - raw media storage in MinIO before the transitional FastAPI processing trigger
+- PostgreSQL outbox event creation for the future async processing request
 
 This makes the authenticated backend path the default smoke verification route instead of the older local/dev shortcut.
 
@@ -286,6 +293,6 @@ The smoke targets still enable the optional search-to-context check by default u
 - Do not try to run Repo A and Repo B inside the same Compose project for the first milestone.
 - `FASTAPI_BASE_URL` is the integration boundary. Keep it explicit.
 - Redis is intentionally optional for now.
-- The current Spring Boot code uses PostgreSQL for persisted asset state, MinIO for raw media bytes, FastAPI for the transitional processing trigger, and Elasticsearch for indexing and search.
+- The current Spring Boot code uses PostgreSQL for persisted asset state and outbox publication intent, MinIO for raw media bytes, FastAPI for the transitional processing trigger, and Elasticsearch for indexing and search.
 - PostgreSQL schema changes are expected to come through Flyway migrations.
 - Multipart upload limits are environment-configurable through `WORKSPACE_CORE_MAX_FILE_SIZE` and `WORKSPACE_CORE_MAX_REQUEST_SIZE`.

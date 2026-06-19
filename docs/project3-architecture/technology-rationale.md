@@ -165,7 +165,7 @@ The Spring adapter uses the AWS SDK v2 S3 client against MinIO's S3-compatible A
 
 For processing, Spring publishes the object key in the Kafka request event. FastAPI/Celery reads the media object from MinIO using internal service credentials. This avoids streaming large media bytes through Spring Boot into FastAPI for the normal processing path.
 
-Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL, while the existing direct FastAPI upload remains as a transitional processing trigger until the Kafka/FastAPI async lifecycle is implemented.
+Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox row for `asset.processing.requested` with `event_version = 1`, while the existing direct FastAPI upload remains as a transitional processing trigger until the Kafka/FastAPI async lifecycle is implemented.
 
 Do not expose MinIO directly to the browser until a presigned URL model and authorization story are designed.
 
@@ -190,6 +190,10 @@ Spring transaction
 -> publisher sends Kafka event
 -> cross-service consumer handles async work
 ```
+
+Current implementation note: Phase 3A implements the product state + outbox row portion only. It defines the first processing event contract as `event_version = 1` and stores durable publication intent in PostgreSQL, but it does not add a Kafka broker dependency, producer, relay, consumer, retry scheduler, or FastAPI event consumption yet.
+
+`event_version = 1` is a lightweight payload-contract version for `asset.processing.requested`, not a database-row version. It prepares the contract for future evolution, such as adding language, priority, or processing options, without introducing Schema Registry, Avro, Protobuf, or a broader event framework before the project needs one.
 
 Kafka should not replace normal product APIs.
 

@@ -7,6 +7,10 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
@@ -14,6 +18,8 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,13 +43,14 @@ class AssetPersistenceServiceTest {
     @Mock
     private AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
 
+    @Mock
+    private OutboxEventRepository outboxEventRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
     @Test
-    void persistUploadResultCreatesAssetWithResolvedWorkspace() {
-        AssetPersistenceService assetPersistenceService = new AssetPersistenceService(
-                assetRepository,
-                processingJobRepository,
-                assetTranscriptRowSnapshotRepository
-        );
+    void persistUploadResultCreatesAssetProcessingJobAndOutboxEvent() throws Exception {
+        AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
         Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
@@ -74,7 +81,11 @@ class AssetPersistenceServiceTest {
         );
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
+        ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
+        ArgumentCaptor<OutboxEvent> outboxEventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(assetRepository).save(assetCaptor.capture());
+        verify(processingJobRepository).save(processingJobCaptor.capture());
+        verify(outboxEventRepository).save(outboxEventCaptor.capture());
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -85,15 +96,40 @@ class AssetPersistenceServiceTest {
         assertThat(assetCaptor.getValue().getEtag()).isEqualTo("\"etag-1\"");
         assertThat(response.workspaceId()).isEqualTo(workspace.getId());
         assertThat(response.assetId()).isEqualTo(assetId);
+
+        assertThat(processingJobCaptor.getValue().getAssetId()).isEqualTo(assetId);
+        assertThat(processingJobCaptor.getValue().getFastapiTaskId()).isEqualTo("task-1");
+        assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isEqualTo("video-1");
+
+        OutboxEvent outboxEvent = outboxEventCaptor.getValue();
+        assertThat(outboxEvent.getEventType()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
+        assertThat(outboxEvent.getEventVersion()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION);
+        assertThat(outboxEvent.getAggregateType()).isEqualTo(OutboxEventFactory.ASSET_AGGREGATE_TYPE);
+        assertThat(outboxEvent.getAggregateId()).isEqualTo(assetId);
+        assertThat(outboxEvent.getEventKey()).isEqualTo(assetId.toString());
+        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEvent.getAttemptCount()).isZero();
+
+        JsonNode payload = objectMapper.readTree(outboxEvent.getPayload());
+        assertThat(payload.path("assetId").asText()).isEqualTo(assetId.toString());
+        assertThat(payload.path("workspaceId").asText()).isEqualTo(workspace.getId().toString());
+        assertThat(payload.path("ownerId").asText()).isEqualTo("user-1");
+        assertThat(payload.path("storageBucket").asText()).isEqualTo("workspace-media");
+        assertThat(payload.path("objectKey").asText()).isEqualTo(storedObject.objectKey());
+        assertThat(payload.path("originalFilename").asText()).isEqualTo("lecture.mp4");
+        assertThat(payload.path("contentType").asText()).isEqualTo("video/mp4");
+        assertThat(payload.path("sizeBytes").asLong()).isEqualTo(12L);
+        assertThat(payload.path("requestedAt").asText()).isNotBlank();
+
+        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxEventRepository);
+        inOrder.verify(assetRepository).save(any(Asset.class));
+        inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
+        inOrder.verify(outboxEventRepository).save(any(OutboxEvent.class));
     }
 
     @Test
     void replaceTranscriptSnapshotStoresVerifiedFieldsAndReturnsRowsSortedBySegmentIndex() {
-        AssetPersistenceService assetPersistenceService = new AssetPersistenceService(
-                assetRepository,
-                processingJobRepository,
-                assetTranscriptRowSnapshotRepository
-        );
+        AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId);
@@ -129,11 +165,7 @@ class AssetPersistenceServiceTest {
 
     @Test
     void loadTranscriptSnapshotReturnsRowsSortedBySegmentIndex() {
-        AssetPersistenceService assetPersistenceService = new AssetPersistenceService(
-                assetRepository,
-                processingJobRepository,
-                assetTranscriptRowSnapshotRepository
-        );
+        AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
         when(assetTranscriptRowSnapshotRepository.findByAssetId(assetId)).thenReturn(List.of(
@@ -150,11 +182,7 @@ class AssetPersistenceServiceTest {
 
     @Test
     void deleteAssetRecordsDeletesTranscriptRowsBeforeProcessingJobAndAsset() {
-        AssetPersistenceService assetPersistenceService = new AssetPersistenceService(
-                assetRepository,
-                processingJobRepository,
-                assetTranscriptRowSnapshotRepository
-        );
+        AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId);
@@ -175,6 +203,16 @@ class AssetPersistenceServiceTest {
         inOrder.verify(processingJobRepository).findByAssetId(assetId);
         inOrder.verify(processingJobRepository).delete(processingJob);
         inOrder.verify(assetRepository).delete(asset);
+    }
+
+    private AssetPersistenceService assetPersistenceService() {
+        return new AssetPersistenceService(
+                assetRepository,
+                processingJobRepository,
+                assetTranscriptRowSnapshotRepository,
+                outboxEventRepository,
+                new OutboxEventFactory(objectMapper)
+        );
     }
 
     private Asset asset(UUID assetId) {

@@ -355,6 +355,7 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Spring stores the uploaded raw media bytes in MinIO/S3-compatible object storage.
 - Spring persists asset metadata, including the object-storage bucket/key reference, in PostgreSQL.
+- Spring persists an `asset.processing.requested` outbox event with `event_version = 1` in PostgreSQL as durable publication intent for the later async processing lifecycle.
 - Spring still forwards `file` and `title` to FastAPI upload as the current transitional processing trigger until the async processing lifecycle replaces direct upload.
 - Spring validates the upstream response before persisting local state.
 - Spring associates the created asset with one workspace in Repo B.

@@ -35,6 +35,7 @@ flowchart LR
 - Explicit individual ownership policy for the current user -> workspace -> asset model
 - Asset registration and product-visible asset metadata
 - MinIO/S3 object-reference metadata and storage orchestration for raw uploaded media
+- PostgreSQL-backed outbox event creation for durable publication intent
 - Product orchestration across services
 - Client-facing APIs
 - Client-facing search API and result shaping
@@ -72,6 +73,7 @@ flowchart LR
 - Public product API surface
 - Long-term product search contract
 - Durable raw-media ownership or product metadata
+- Product outbox state
 
 ## Elasticsearch Search Layer
 
@@ -94,6 +96,7 @@ flowchart LR
 
 - Domain metadata for workspaces, assets, processing jobs, and related product entities
 - Object-storage references for raw media
+- Outbox rows that record durable event publication intent
 - Flyway-managed product schema for the current individual ownership model
 
 ### Does Not Own
@@ -101,6 +104,22 @@ flowchart LR
 - Primary search retrieval behavior
 - Embedding or transcript-processing concerns
 - Organization or tenant-platform state in this phase
+- Kafka broker responsibilities or external message delivery
+
+## Outbox / Future Kafka Boundary
+
+### Currently Owns
+
+- Durable `asset.processing.requested` publication intent stored in Product PostgreSQL.
+- The first processing event payload contract, versioned as `event_version = 1`, including asset/workspace IDs and MinIO object references.
+
+### Does Not Own Yet
+
+- Kafka producer or broker integration.
+- Outbox relay scheduling, retry publishing, or dead-letter routing.
+- FastAPI Kafka consumption.
+
+Phase 3A intentionally stops at the database-backed outbox contract. FastAPI direct upload remains the current transitional processing trigger until the later async processing lifecycle replaces direct byte streaming with object-key events.
 
 ## MinIO Object Storage
 
@@ -136,4 +155,5 @@ flowchart LR
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
 - MinIO stores bytes only; Spring stores and authorizes the object references in PostgreSQL.
+- PostgreSQL outbox rows are durable intent for future message publication; they are not a Kafka implementation by themselves.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.

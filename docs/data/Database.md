@@ -14,6 +14,7 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 
 - `V1__create_product_schema.sql` creates the base product schema.
 - `V2__add_asset_object_storage_metadata.sql` adds MinIO/S3 object-reference metadata to assets.
+- `V3__add_outbox_events.sql` adds the PostgreSQL-backed outbox table for durable event publication intent.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -23,12 +24,13 @@ This phase intentionally productionizes the individual ownership model. It does 
 
 ## Current Relational Model
 
-Repo B currently persists five main records:
+Repo B currently persists six main records:
 
 - `UserAccount`
 - `Workspace`
 - `Asset`
 - `ProcessingJob`
+- `OutboxEvent`
 - `AssetTranscriptRowSnapshot`
 
 ## Simplified Persistence Relationship Diagram
@@ -39,6 +41,7 @@ This diagram is intentionally simplified and asset-centric. The detailed section
 erDiagram
     WORKSPACE ||--o{ ASSET : contains
     ASSET ||--|| PROCESSING_JOB : tracks
+    ASSET ||--o{ OUTBOX_EVENT : emits
     ASSET ||--o{ ASSET_TRANSCRIPT_ROW_SNAPSHOT : snapshots
 
     WORKSPACE {
@@ -69,6 +72,18 @@ erDiagram
         string processingJobStatus
     }
 
+    OUTBOX_EVENT {
+        uuid id PK
+        string eventType
+        int eventVersion
+        string aggregateType
+        uuid aggregateId
+        string eventKey
+        string status
+        int attemptCount
+        instant createdAt
+    }
+
     ASSET_TRANSCRIPT_ROW_SNAPSHOT {
         uuid snapshotId PK
         uuid assetId FK
@@ -86,6 +101,7 @@ flowchart LR
     U["Authenticated user / UserAccount"] --> W["Owned workspace"]
     W --> A["Asset"]
     A --> J["ProcessingJob"]
+    A --> O["Outbox event"]
     A --> T["Transcript snapshot rows"]
     T --> E["Elasticsearch transcript-row documents"]
 ```
@@ -101,9 +117,12 @@ Flyway currently defines the following persistence guardrails:
 - `assets.storage_bucket` and `assets.object_key` are required, unique together, and point to raw media bytes in object storage.
 - `assets.size_bytes` must be non-negative.
 - `processing_jobs.asset_id` references `assets.id` and is unique, preserving the current one-job-per-asset shape.
+- `outbox_events.status` is constrained to the current publication lifecycle values.
+- `outbox_events.event_version` is required and must be greater than zero.
+- `outbox_events.attempt_count` must be non-negative.
 - `asset_transcript_rows.asset_id` references `assets.id`.
 - Asset and processing status columns use database check constraints for the current enum values.
-- Workspace, asset, and transcript lookup paths have supporting indexes for owner/default-workspace resolution, workspace-scoped asset listing, and asset transcript-row ordering.
+- Workspace, asset, outbox, and transcript lookup paths have supporting indexes for owner/default-workspace resolution, workspace-scoped asset listing, pending outbox relay lookup, aggregate-event lookup, and asset transcript-row ordering.
 
 `workspaces.owner_id` and `assets.workspace_id` are required in the Project3 Flyway baseline. Older local databases created before this baseline should be recreated, or manually migrated and baselined once, before normal startup.
 
@@ -208,6 +227,45 @@ Current role:
 - Retains both upstream identifiers needed for task polling and transcript fetch.
 - Keeps the raw upstream task state for debugging.
 
+## `OutboxEvent`
+
+Table: `outbox_events`
+
+Current fields:
+
+- `id` UUID primary key
+- `eventType`
+- `eventVersion`
+- `aggregateType`
+- `aggregateId`
+- `eventKey`
+- `payload`
+- `status`
+- `attemptCount`
+- `nextAttemptAt`
+- `lastError`
+- `createdAt`
+- `updatedAt`
+- `publishedAt`
+
+Current status values:
+
+- `PENDING`
+- `PUBLISHED`
+- `FAILED`
+
+Current role:
+
+- Stores durable publication intent in PostgreSQL.
+- Avoids a dual-write gap between product database changes and future Kafka publishing.
+- Currently records `asset.processing.requested` with `eventVersion = 1` when a successful upload persists an `Asset` and `ProcessingJob`.
+- Does not publish to Kafka yet; no broker producer, relay, consumer, or FastAPI event consumption is implemented in Phase 3A.
+- Stores JSON payload text and never stores raw media bytes or secrets.
+
+`eventVersion = 1` is a lightweight contract-version marker for the current `asset.processing.requested` payload. It describes the shape of the event payload, not the version of the database row, and gives future consumers a safe way to distinguish payload shapes as the processing request evolves.
+
+This is intentionally not a schema registry, Avro/Protobuf model, or full event framework. Project3 currently needs a small integer contract marker while Spring Boot still owns the product write path and Kafka publishing remains a later phase.
+
 ## `AssetTranscriptRowSnapshot`
 
 Table: `asset_transcript_rows`
@@ -239,8 +297,10 @@ Current role:
 ## Current Write Behavior
 
 - Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
-- Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset` and `ProcessingJob` together after FastAPI acknowledges the transitional direct upload processing trigger.
+- Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset`, `ProcessingJob`, and an `asset.processing.requested` version 1 `OutboxEvent` together after FastAPI acknowledges the transitional direct upload processing trigger.
 - If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
+- Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
+- Kafka publishing from `outbox_events` is not implemented yet. The table is the durable foundation for the later async processing lifecycle.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -255,6 +315,7 @@ Current role:
 
 - Transcript version history
 - Transcript sync state beyond the current snapshot
+- Outbox relay/publisher offsets or Kafka publish state beyond the initial outbox row lifecycle fields
 - Workspace sharing rules
 - Search history or query analytics
 
