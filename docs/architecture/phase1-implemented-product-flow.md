@@ -41,6 +41,7 @@ sequenceDiagram
     actor U as Learner / Client
     participant S as Spring Boot
     participant P as PostgreSQL
+    participant M as MinIO
     participant F as FastAPI
     participant E as Elasticsearch
 
@@ -51,9 +52,10 @@ sequenceDiagram
     S->>P: ensure default workspace exists
     U->>S: POST /api/assets/upload
     S->>P: resolve workspace
-    S->>F: upload media
+    S->>M: store raw media object
+    S->>F: upload media as transitional processing trigger
     F-->>S: task and video identifiers
-    S->>P: persist Asset + ProcessingJob
+    S->>P: persist Asset object reference + ProcessingJob
     loop until terminal
         U->>S: GET /api/assets/{assetId}/status
         S->>F: poll task status when needed
@@ -84,16 +86,17 @@ The implemented flow is:
 4. If that default-workspace state is internally conflicted, Spring now returns an explicit integrity-style `409` instead of a vague runtime failure.
 5. Spring receives a multipart upload from the client.
 6. Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace.
-7. Spring forwards `file` and `title` to FastAPI.
-8. Spring validates the live FastAPI upload response.
-9. Spring persists a local `Workspace` reference on `Asset` plus the related `ProcessingJob`.
-10. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
-11. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
-12. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
-13. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
-14. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
-15. Successful indexing refreshes the transcript index before returning.
-16. Spring exposes a product-owned search endpoint backed by Elasticsearch.
+7. Spring stores the raw media bytes in MinIO/S3-compatible object storage using a key that includes the current user, workspace ID, and asset ID.
+8. Spring forwards `file` and `title` to FastAPI as the current transitional processing trigger.
+9. Spring validates the live FastAPI upload response.
+10. Spring persists a local `Workspace` reference and object-storage reference on `Asset` plus the related `ProcessingJob`.
+11. Spring exposes workspace-aware asset listing plus simple per-asset reads, title update, and deletion.
+12. Spring exposes asset-centric status reads and performs on-demand polling when the local job is not terminal.
+13. Spring captures a minimal local transcript snapshot after transcript data has been validated as usable.
+14. Spring exposes transcript reads and narrow transcript-context follow-up through that local product snapshot in the normal path.
+15. Spring exposes an explicit product-side indexing trigger that writes one logical Elasticsearch document per transcript row through a bulk indexing request using the local transcript snapshot.
+16. Successful indexing refreshes the transcript index before returning.
+17. Spring exposes a product-owned search endpoint backed by Elasticsearch.
 
 ## Current Local Persistence Model
 
@@ -131,6 +134,7 @@ Spring currently persists:
 The current transaction boundary is simple:
 
 - Network calls to FastAPI happen outside the DB write transaction.
+- Raw media object writes to MinIO happen before the DB write transaction, and Spring attempts best-effort object cleanup if the later upload flow fails.
 - DB writes are isolated in the persistence service.
 - The product schema is created by Flyway migrations, and Hibernate validates it by default at startup.
 - The current user's default workspace can be created lazily on first use.

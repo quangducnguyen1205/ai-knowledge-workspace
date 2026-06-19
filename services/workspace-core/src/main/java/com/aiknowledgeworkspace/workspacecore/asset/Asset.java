@@ -6,8 +6,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -23,7 +21,6 @@ import java.util.UUID;
 public class Asset {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, length = 255)
@@ -41,6 +38,24 @@ public class Asset {
     @JoinColumn(name = "workspace_id", nullable = false)
     private Workspace workspace;
 
+    @JsonIgnore
+    @Column(name = "storage_bucket", nullable = false, length = 255)
+    private String storageBucket;
+
+    @JsonIgnore
+    @Column(name = "object_key", nullable = false, length = 1024)
+    private String objectKey;
+
+    @Column(nullable = false, length = 255)
+    private String contentType;
+
+    @Column(nullable = false)
+    private Long sizeBytes;
+
+    @JsonIgnore
+    @Column(name = "etag", length = 255)
+    private String eTag;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -57,8 +72,32 @@ public class Asset {
         this.workspace = Objects.requireNonNull(workspace, "workspace is required");
     }
 
+    public Asset(
+            UUID id,
+            String originalFilename,
+            String title,
+            AssetStatus status,
+            Workspace workspace,
+            String storageBucket,
+            String objectKey,
+            String contentType,
+            long sizeBytes,
+            String eTag
+    ) {
+        this(originalFilename, title, status, workspace);
+        this.id = id;
+        this.storageBucket = storageBucket;
+        this.objectKey = objectKey;
+        this.contentType = contentType;
+        this.sizeBytes = sizeBytes;
+        this.eTag = eTag;
+    }
+
     @PrePersist
     void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
@@ -107,6 +146,26 @@ public class Asset {
 
     public UUID getWorkspaceId() {
         return workspace != null ? workspace.getId() : null;
+    }
+
+    public String getStorageBucket() {
+        return storageBucket;
+    }
+
+    public String getObjectKey() {
+        return objectKey;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public Long getSizeBytes() {
+        return sizeBytes;
+    }
+
+    public String getEtag() {
+        return eTag;
     }
 
     public Instant getCreatedAt() {

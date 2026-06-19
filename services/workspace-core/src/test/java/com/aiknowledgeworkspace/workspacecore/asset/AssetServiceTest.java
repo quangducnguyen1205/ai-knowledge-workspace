@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -11,12 +12,18 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
+import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
+import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
@@ -30,6 +37,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
@@ -61,6 +69,12 @@ class AssetServiceTest {
     @Mock
     private WorkspaceService workspaceService;
 
+    @Mock
+    private ObjectStorageClient objectStorageClient;
+
+    private final ObjectKeyFactory objectKeyFactory = new ObjectKeyFactory();
+    private final ObjectStorageProperties objectStorageProperties = new ObjectStorageProperties();
+
     @AfterEach
     void tearDown() {
         RequestContextHolder.resetRequestAttributes();
@@ -78,13 +92,16 @@ class AssetServiceTest {
                 processingJobRepository,
                 fastApiProcessingClient,
                 assetPersistenceService,
-                workspaceService
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
         );
 
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
         UUID processingJobId = UUID.randomUUID();
-        Workspace workspace = new Workspace(workspaceId, "Algorithms");
+        Workspace workspace = new Workspace(workspaceId, "Algorithms", "user-1", false);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "lecture.mp4",
@@ -92,6 +109,7 @@ class AssetServiceTest {
                 "video-bytes".getBytes(StandardCharsets.UTF_8)
         );
         FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
+        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 11L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
                 processingJobId,
@@ -100,14 +118,17 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
                 .thenReturn(upstreamResponse);
         when(assetPersistenceService.persistUploadResult(
+                any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
                 eq(AssetStatus.PROCESSING),
                 eq(ProcessingJobStatus.PENDING),
                 eq(workspace),
+                eq(storedObject),
                 eq(upstreamResponse)
         )).thenReturn(persistedResponse);
 
@@ -115,6 +136,15 @@ class AssetServiceTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(workspaceId);
+
+        ArgumentCaptor<StoreObjectRequest> storageRequestCaptor = ArgumentCaptor.forClass(StoreObjectRequest.class);
+        verify(objectStorageClient).store(storageRequestCaptor.capture());
+        assertThat(storageRequestCaptor.getValue().bucket()).isEqualTo("workspace-media");
+        assertThat(storageRequestCaptor.getValue().objectKey())
+                .startsWith("users/user-1/workspaces/" + workspaceId + "/assets/")
+                .endsWith("/raw/lecture.mp4");
+        assertThat(storageRequestCaptor.getValue().sizeBytes()).isEqualTo(11L);
+        assertThat(storageRequestCaptor.getValue().contentType()).isEqualTo("video/mp4");
     }
 
     @Test
@@ -124,11 +154,14 @@ class AssetServiceTest {
                 processingJobRepository,
                 fastApiProcessingClient,
                 assetPersistenceService,
-                workspaceService
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
         );
 
         UUID workspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        Workspace workspace = new Workspace(workspaceId, "Default Workspace");
+        Workspace workspace = new Workspace(workspaceId, "Default Workspace", "default-user", true);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "lecture.mp4",
@@ -136,6 +169,7 @@ class AssetServiceTest {
                 "video-bytes".getBytes(StandardCharsets.UTF_8)
         );
         FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-2", "pending", "video-2");
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -144,14 +178,17 @@ class AssetServiceTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(workspace);
+        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 2")))
                 .thenReturn(upstreamResponse);
         when(assetPersistenceService.persistUploadResult(
+                any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 2"),
                 eq(AssetStatus.PROCESSING),
                 eq(ProcessingJobStatus.PENDING),
                 eq(workspace),
+                eq(storedObject),
                 eq(upstreamResponse)
         )).thenReturn(persistedResponse);
 
@@ -159,6 +196,97 @@ class AssetServiceTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(null);
+    }
+
+    @Test
+    void uploadCleansStoredObjectWhenFastApiUploadFails() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Algorithms", "user-1", false);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "lecture.mp4",
+                "video/mp4",
+                "video-bytes".getBytes(StandardCharsets.UTF_8)
+        );
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
+
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
+                .thenThrow(new FastApiIntegrationException("FastAPI failed"));
+
+        assertThatThrownBy(() -> assetService.uploadAsset(workspaceId, file, "Lecture 1"))
+                .isInstanceOf(FastApiIntegrationException.class)
+                .hasMessage("FastAPI failed");
+
+        verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
+        verify(assetPersistenceService, never()).persistUploadResult(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void uploadCleansStoredObjectWhenDatabasePersistenceFails() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Algorithms", "user-1", false);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "lecture.mp4",
+                "video/mp4",
+                "video-bytes".getBytes(StandardCharsets.UTF_8)
+        );
+        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
+        RuntimeException persistenceFailure = new RuntimeException("db down");
+
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
+                .thenReturn(upstreamResponse);
+        when(assetPersistenceService.persistUploadResult(
+                any(UUID.class),
+                eq("lecture.mp4"),
+                eq("Lecture 1"),
+                eq(AssetStatus.PROCESSING),
+                eq(ProcessingJobStatus.PENDING),
+                eq(workspace),
+                eq(storedObject),
+                eq(upstreamResponse)
+        )).thenThrow(persistenceFailure);
+
+        assertThatThrownBy(() -> assetService.uploadAsset(workspaceId, file, "Lecture 1"))
+                .isSameAs(persistenceFailure);
+
+        verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
     }
 
     @Test
@@ -983,6 +1111,22 @@ class AssetServiceTest {
                 segmentIndex,
                 text,
                 "2026-04-12T00:00:00Z"
+        );
+    }
+
+    private StoredObject storedObject(
+            UUID assetId,
+            UUID workspaceId,
+            String filename,
+            String contentType,
+            long sizeBytes
+    ) {
+        return new StoredObject(
+                "workspace-media",
+                "users/user-1/workspaces/%s/assets/%s/raw/%s".formatted(workspaceId, assetId, filename),
+                sizeBytes,
+                contentType,
+                "\"etag-1\""
         );
     }
 

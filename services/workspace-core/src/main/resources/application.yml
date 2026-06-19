@@ -45,3 +45,10 @@ integration:
     connect-timeout: ${ELASTICSEARCH_CONNECT_TIMEOUT:3s}
     read-timeout: ${ELASTICSEARCH_READ_TIMEOUT:10s}
     transcript-index-name: ${ELASTICSEARCH_TRANSCRIPT_INDEX_NAME:asset-transcript-rows}
+  object-storage:
+    endpoint: ${WORKSPACE_CORE_OBJECT_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${WORKSPACE_CORE_OBJECT_STORAGE_REGION:us-east-1}
+    bucket: ${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:workspace-media}
+    access-key: ${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:minioadmin}
+    path-style-access: ${WORKSPACE_CORE_OBJECT_STORAGE_PATH_STYLE_ACCESS:true}

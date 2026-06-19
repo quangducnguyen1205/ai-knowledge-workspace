@@ -12,7 +12,8 @@ This document summarizes what Repo B currently persists in PostgreSQL.
 
 Repo B now uses Flyway migrations under `services/workspace-core/src/main/resources/db/migration`.
 
-- `V1__create_product_schema.sql` creates the current product schema.
+- `V1__create_product_schema.sql` creates the base product schema.
+- `V2__add_asset_object_storage_metadata.sql` adds MinIO/S3 object-reference metadata to assets.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -52,6 +53,10 @@ erDiagram
         uuid workspace_id FK
         string title
         string status
+        string storageBucket
+        string objectKey
+        string contentType
+        long sizeBytes
         instant createdAt
         instant updatedAt
     }
@@ -93,6 +98,8 @@ Flyway currently defines the following persistence guardrails:
 
 - `user_accounts.email` is unique.
 - `assets.workspace_id` references `workspaces.id`.
+- `assets.storage_bucket` and `assets.object_key` are required, unique together, and point to raw media bytes in object storage.
+- `assets.size_bytes` must be non-negative.
 - `processing_jobs.asset_id` references `assets.id` and is unique, preserving the current one-job-per-asset shape.
 - `asset_transcript_rows.asset_id` references `assets.id`.
 - Asset and processing status columns use database check constraints for the current enum values.
@@ -150,6 +157,11 @@ Current fields:
 - `title`
 - `status`
 - `workspace_id` UUID foreign key to `workspaces`
+- `storageBucket`
+- `objectKey`
+- `contentType`
+- `sizeBytes`
+- `etag`
 - `createdAt`
 - `updatedAt`
 
@@ -165,6 +177,8 @@ Current role:
 - Represents the product-owned media asset record.
 - Tracks the current product-side lifecycle state.
 - Associates the asset with one workspace.
+- Stores MinIO/S3 object-reference metadata for the uploaded raw media object.
+- Does not store raw media bytes in PostgreSQL.
 
 ## `ProcessingJob`
 
@@ -225,7 +239,8 @@ Current role:
 ## Current Write Behavior
 
 - Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
-- Upload resolves a workspace first, then persists `Asset` and `ProcessingJob` together after FastAPI acknowledges the upload.
+- Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset` and `ProcessingJob` together after FastAPI acknowledges the transitional direct upload processing trigger.
+- If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -242,6 +257,20 @@ Current role:
 - Transcript sync state beyond the current snapshot
 - Workspace sharing rules
 - Search history or query analytics
+
+## Note On Object Storage
+
+MinIO stores raw uploaded media bytes only. PostgreSQL remains the product system of record for ownership, asset metadata, object keys, processing job state, transcript snapshots, and authorization decisions.
+
+Current raw media object keys use this convention:
+
+```text
+users/{safeUserId}/workspaces/{workspaceId}/assets/{assetId}/raw/{safeFilename}
+```
+
+The user and filename components are sanitized before use. The key includes the workspace ID and asset ID so storage objects can be traced back to product metadata without making MinIO the source of truth.
+
+Because this is a personal Docker-first project, older local PostgreSQL volumes that contain assets without object metadata should usually be recreated after this phase instead of migrated through compatibility code.
 
 ## Note On Elasticsearch
 

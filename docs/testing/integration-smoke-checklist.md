@@ -78,6 +78,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Only treat FE proxy checks as the next layer after backend smoke passes.
 - [ ] If backend smoke fails before upload, classify it first as environment, auth-session setup, or Spring runtime issue.
 - [ ] If upload or non-terminal status refresh fails with `FASTAPI_CONNECTIVITY_ERROR`, classify it first as an upstream FastAPI readiness/integration issue.
+- [ ] If upload fails with `OBJECT_STORAGE_ERROR`, classify it first as a Repo B MinIO readiness or bucket configuration issue.
 - [ ] If backend smoke passes but browser verification through `http://localhost:5173` fails, classify that first as FE proxy/runtime integration, not immediately as a backend product bug.
 
 ## 1. Environment Readiness
@@ -89,6 +90,8 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm Repo B PostgreSQL is up.
 - [ ] Confirm Repo B PostgreSQL is using the intended host port `5434`.
 - [ ] Confirm Repo B Elasticsearch is up on `9201`.
+- [ ] Confirm Repo B MinIO is up on `9000`.
+- [ ] Confirm the configured MinIO bucket exists, or that the `minio-create-bucket` compose helper completed successfully.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`
@@ -517,6 +520,10 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Verify upstream HTTP failure or malformed upstream behavior returns HTTP `502`.
 - [ ] Verify upstream integration failure returns JSON:
   - [ ] `code = "FASTAPI_INTEGRATION_ERROR"`
+  - [ ] non-empty `message`
+- [ ] Verify object-storage failure during upload returns HTTP `502`.
+- [ ] Verify object-storage failure returns JSON:
+  - [ ] `code = "OBJECT_STORAGE_ERROR"`
   - [ ] non-empty `message`
 
 ### Suggested Runnable Cases

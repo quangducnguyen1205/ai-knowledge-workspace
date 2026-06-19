@@ -17,6 +17,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import java.time.Instant;
 import java.util.List;
@@ -77,6 +78,25 @@ class AssetControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    @Test
+    void uploadReturnsStructuredBadGatewayWhenObjectStorageFails() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "lecture.mp4",
+                "video/mp4",
+                "video-bytes".getBytes()
+        );
+        when(assetService.uploadAsset(null, file, "Lecture 1"))
+                .thenThrow(new ObjectStorageException("Object storage upload failed", new RuntimeException("minio")));
+
+        mockMvc.perform(multipart("/api/assets/upload")
+                        .file(file)
+                        .param("title", "Lecture 1"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("OBJECT_STORAGE_ERROR"))
+                .andExpect(jsonPath("$.message").value("Object storage upload failed"));
     }
 
     @Test

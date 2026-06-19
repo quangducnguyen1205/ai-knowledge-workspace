@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +17,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +41,9 @@ class AssetDeletionServiceTest {
     @Mock
     private AssetPersistenceService assetPersistenceService;
 
+    @Mock
+    private ObjectStorageClient objectStorageClient;
+
     private MockRestServiceServer mockServer;
     private AssetDeletionService assetDeletionService;
 
@@ -59,20 +65,22 @@ class AssetDeletionServiceTest {
         assetDeletionService = new AssetDeletionService(
                 assetService,
                 assetPersistenceService,
-                searchIndexClient
+                searchIndexClient,
+                objectStorageClient
         );
     }
 
     @Test
     void deletingProcessingAssetRemovesLocalRecordsWithoutElasticsearchCleanup() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, AssetStatus.PROCESSING);
+        Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
+        verify(objectStorageClient).delete("workspace-media", "objects/raw.mp4");
         mockServer.verify();
     }
 
@@ -170,6 +178,22 @@ class AssetDeletionServiceTest {
     }
 
     @Test
+    void deletingAssetStillRemovesLocalRecordsWhenObjectCleanupFails() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        doThrow(new ObjectStorageException("delete failed", new RuntimeException("minio down")))
+                .when(objectStorageClient)
+                .delete("workspace-media", "objects/raw.mp4");
+
+        assetDeletionService.deleteAsset(assetId);
+
+        verify(assetPersistenceService).deleteAssetRecords(asset);
+        verify(objectStorageClient).delete("workspace-media", "objects/raw.mp4");
+    }
+
+    @Test
     void deletingMissingAssetReturnsNotFound() {
         UUID assetId = UUID.randomUUID();
         when(assetService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
@@ -200,6 +224,13 @@ class AssetDeletionServiceTest {
     private Asset asset(UUID assetId, AssetStatus status) {
         Asset asset = new Asset("lecture.mp4", "Lecture", status, new Workspace(UUID.randomUUID(), "Workspace"));
         ReflectionTestUtils.setField(asset, "id", assetId);
+        return asset;
+    }
+
+    private Asset asset(UUID assetId, AssetStatus status, String storageBucket, String objectKey) {
+        Asset asset = asset(assetId, status);
+        ReflectionTestUtils.setField(asset, "storageBucket", storageBucket);
+        ReflectionTestUtils.setField(asset, "objectKey", objectKey);
         return asset;
     }
 }

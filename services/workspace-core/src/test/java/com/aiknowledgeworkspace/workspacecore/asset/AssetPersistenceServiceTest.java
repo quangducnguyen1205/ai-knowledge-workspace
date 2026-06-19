@@ -12,6 +12,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscr
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.List;
 import java.util.Optional;
@@ -47,20 +48,28 @@ class AssetPersistenceServiceTest {
         UUID assetId = UUID.randomUUID();
         Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
         FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
+        StoredObject storedObject = new StoredObject(
+                "workspace-media",
+                "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
+                12L,
+                "video/mp4",
+                "\"etag-1\""
+        );
 
         when(assetRepository.save(any(Asset.class))).thenAnswer(invocation -> {
             Asset asset = invocation.getArgument(0);
-            ReflectionTestUtils.setField(asset, "id", assetId);
             return asset;
         });
         when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         AssetUploadResponse response = assetPersistenceService.persistUploadResult(
+                assetId,
                 "lecture.mp4",
                 "Lecture",
                 AssetStatus.PROCESSING,
                 ProcessingJobStatus.PENDING,
                 workspace,
+                storedObject,
                 upstreamResponse
         );
 
@@ -68,7 +77,14 @@ class AssetPersistenceServiceTest {
         verify(assetRepository).save(assetCaptor.capture());
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
+        assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
+        assertThat(assetCaptor.getValue().getStorageBucket()).isEqualTo("workspace-media");
+        assertThat(assetCaptor.getValue().getObjectKey()).isEqualTo(storedObject.objectKey());
+        assertThat(assetCaptor.getValue().getContentType()).isEqualTo("video/mp4");
+        assertThat(assetCaptor.getValue().getSizeBytes()).isEqualTo(12L);
+        assertThat(assetCaptor.getValue().getEtag()).isEqualTo("\"etag-1\"");
         assertThat(response.workspaceId()).isEqualTo(workspace.getId());
+        assertThat(response.assetId()).isEqualTo(assetId);
     }
 
     @Test

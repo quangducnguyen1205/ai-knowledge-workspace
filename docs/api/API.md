@@ -352,10 +352,13 @@ Response:
 
 Current behavior:
 
-- Spring forwards `file` and `title` to FastAPI upload.
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
+- Spring stores the uploaded raw media bytes in MinIO/S3-compatible object storage.
+- Spring persists asset metadata, including the object-storage bucket/key reference, in PostgreSQL.
+- Spring still forwards `file` and `title` to FastAPI upload as the current transitional processing trigger until the async processing lifecycle replaces direct upload.
 - Spring validates the upstream response before persisting local state.
 - Spring associates the created asset with one workspace in Repo B.
+- If object storage succeeds but FastAPI upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave an asset row behind.
 - Raw FastAPI IDs are stored internally but not returned to the client.
 
 Common failure cases:
@@ -365,6 +368,7 @@ Common failure cases:
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if a provided `workspaceId` does not exist or is not owned by the current user
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
+- HTTP `502` with `code = "OBJECT_STORAGE_ERROR"` if MinIO/S3-compatible object storage fails
 - HTTP `502` or `504` if upstream FastAPI fails
 
 All asset-by-id endpoints below are ownership-aware through the asset's workspace.

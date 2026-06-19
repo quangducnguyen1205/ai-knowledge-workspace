@@ -8,13 +8,23 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApi
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
+import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
+import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -23,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class AssetService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AssetService.class);
     private static final int DEFAULT_ASSET_LIST_PAGE = 0;
     private static final int DEFAULT_ASSET_LIST_SIZE = 20;
     private static final int MAX_ASSET_LIST_SIZE = 100;
@@ -41,6 +52,30 @@ public class AssetService {
     private final FastApiProcessingClient fastApiProcessingClient;
     private final AssetPersistenceService assetPersistenceService;
     private final WorkspaceService workspaceService;
+    private final ObjectStorageClient objectStorageClient;
+    private final ObjectKeyFactory objectKeyFactory;
+    private final ObjectStorageProperties objectStorageProperties;
+
+    @Autowired
+    public AssetService(
+            AssetRepository assetRepository,
+            ProcessingJobRepository processingJobRepository,
+            FastApiProcessingClient fastApiProcessingClient,
+            AssetPersistenceService assetPersistenceService,
+            WorkspaceService workspaceService,
+            ObjectStorageClient objectStorageClient,
+            ObjectKeyFactory objectKeyFactory,
+            ObjectStorageProperties objectStorageProperties
+    ) {
+        this.assetRepository = assetRepository;
+        this.processingJobRepository = processingJobRepository;
+        this.fastApiProcessingClient = fastApiProcessingClient;
+        this.assetPersistenceService = assetPersistenceService;
+        this.workspaceService = workspaceService;
+        this.objectStorageClient = objectStorageClient;
+        this.objectKeyFactory = objectKeyFactory;
+        this.objectStorageProperties = objectStorageProperties;
+    }
 
     public AssetService(
             AssetRepository assetRepository,
@@ -49,11 +84,25 @@ public class AssetService {
             AssetPersistenceService assetPersistenceService,
             WorkspaceService workspaceService
     ) {
-        this.assetRepository = assetRepository;
-        this.processingJobRepository = processingJobRepository;
-        this.fastApiProcessingClient = fastApiProcessingClient;
-        this.assetPersistenceService = assetPersistenceService;
-        this.workspaceService = workspaceService;
+        this(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                new ObjectStorageClient() {
+                    @Override
+                    public StoredObject store(StoreObjectRequest request) {
+                        throw new IllegalStateException("Object storage client is not configured");
+                    }
+
+                    @Override
+                    public void delete(String bucket, String objectKey) {
+                    }
+                },
+                new ObjectKeyFactory(),
+                new ObjectStorageProperties()
+        );
     }
 
     public Asset getAsset(UUID assetId) {
@@ -201,29 +250,77 @@ public class AssetService {
         String originalFilename = resolveOriginalFilename(file);
         String title = resolveTitle(requestedTitle, originalFilename);
         Workspace workspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
-
-        FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
-                file.getResource(),
-                originalFilename,
-                title
+        UUID assetId = UUID.randomUUID();
+        String objectKey = objectKeyFactory.rawMediaKey(
+                workspace.getOwnerId(),
+                workspace.getId(),
+                assetId,
+                originalFilename
         );
+        StoredObject storedObject = storeUploadedObject(file, objectKey);
 
-        validateUpstreamUploadResponse(upstreamResponse);
+        try {
+            FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
+                    file.getResource(),
+                    originalFilename,
+                    title
+            );
 
-        ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
-        AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
-                ? AssetStatus.FAILED
-                : AssetStatus.PROCESSING;
-        return assetPersistenceService.persistUploadResult(
-                originalFilename,
-                title,
-                initialAssetStatus,
-                initialProcessingStatus,
-                workspace,
-                upstreamResponse
-        );
+            validateUpstreamUploadResponse(upstreamResponse);
+
+            ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
+            AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
+                    ? AssetStatus.FAILED
+                    : AssetStatus.PROCESSING;
+            return assetPersistenceService.persistUploadResult(
+                    assetId,
+                    originalFilename,
+                    title,
+                    initialAssetStatus,
+                    initialProcessingStatus,
+                    workspace,
+                    storedObject,
+                    upstreamResponse
+            );
+        } catch (RuntimeException exception) {
+            cleanupStoredObjectBestEffort(storedObject);
+            throw exception;
+        }
     }
 
+    private StoredObject storeUploadedObject(MultipartFile file, String objectKey) {
+        try (InputStream inputStream = file.getInputStream()) {
+            return objectStorageClient.store(new StoreObjectRequest(
+                    objectStorageProperties.getBucket(),
+                    objectKey,
+                    inputStream,
+                    file.getSize(),
+                    resolveContentType(file)
+            ));
+        } catch (IOException exception) {
+            throw new InvalidUploadRequestException("Uploaded file could not be read");
+        }
+    }
+
+    private String resolveContentType(MultipartFile file) {
+        if (StringUtils.hasText(file.getContentType())) {
+            return file.getContentType();
+        }
+        return "application/octet-stream";
+    }
+
+    private void cleanupStoredObjectBestEffort(StoredObject storedObject) {
+        try {
+            objectStorageClient.delete(storedObject.bucket(), storedObject.objectKey());
+        } catch (RuntimeException cleanupException) {
+            LOGGER.warn(
+                    "Failed to clean up uploaded object {}/{} after upload flow failure",
+                    storedObject.bucket(),
+                    storedObject.objectKey(),
+                    cleanupException
+            );
+        }
+    }
 
     private void validateUpstreamUploadResponse(FastApiUploadResponse upstreamResponse) {
         if (upstreamResponse == null) {

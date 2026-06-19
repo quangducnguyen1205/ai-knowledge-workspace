@@ -161,7 +161,11 @@ Use it for:
 
 PostgreSQL stores metadata and permissions. MinIO stores object bytes. Spring mediates product access.
 
+The Spring adapter uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. This keeps the Java boundary portable to other S3-compatible stores without using MinIO-specific product APIs.
+
 For processing, Spring publishes the object key in the Kafka request event. FastAPI/Celery reads the media object from MinIO using internal service credentials. This avoids streaming large media bytes through Spring Boot into FastAPI for the normal processing path.
+
+Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL, while the existing direct FastAPI upload remains as a transitional processing trigger until the Kafka/FastAPI async lifecycle is implemented.
 
 Do not expose MinIO directly to the browser until a presigned URL model and authorization story are designed.
 

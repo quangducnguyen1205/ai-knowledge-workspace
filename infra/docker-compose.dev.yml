@@ -30,6 +30,34 @@ services:
     volumes:
       - workspace_core_elasticsearch_data:/usr/share/elasticsearch/data
 
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    ports:
+      - "${WORKSPACE_CORE_OBJECT_STORAGE_PORT:-9000}:9000"
+      - "${WORKSPACE_CORE_OBJECT_STORAGE_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - workspace_core_minio_data:/data
+
+  minio-create-bucket:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+      WORKSPACE_CORE_OBJECT_STORAGE_BUCKET: ${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:-workspace-media}
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set local http://minio:9000 \"${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}\" \"${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}\"; do
+        sleep 2;
+      done;
+      /usr/bin/mc mb --ignore-existing local/\"${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:-workspace-media}\";
+      "
+
   # Redis is optional for the first milestone.
   # Uncomment this service only when workspace-core actually needs it.
   #
@@ -43,4 +71,5 @@ services:
 volumes:
   workspace_core_postgres_data:
   workspace_core_elasticsearch_data:
+  workspace_core_minio_data:
   # workspace_core_redis_data:

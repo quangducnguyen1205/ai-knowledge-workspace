@@ -5,6 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscr
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
 import java.util.List;
@@ -32,14 +33,27 @@ public class AssetPersistenceService {
 
     @Transactional
     public AssetUploadResponse persistUploadResult(
+            UUID assetId,
             String originalFilename,
             String title,
             AssetStatus initialAssetStatus,
             ProcessingJobStatus initialProcessingStatus,
             Workspace workspace,
+            StoredObject storedObject,
             FastApiUploadResponse upstreamResponse
     ) {
-        Asset asset = assetRepository.save(new Asset(originalFilename, title, initialAssetStatus, workspace));
+        Asset asset = assetRepository.save(new Asset(
+                assetId,
+                originalFilename,
+                title,
+                initialAssetStatus,
+                workspace,
+                storedObject.bucket(),
+                storedObject.objectKey(),
+                storedObject.contentType(),
+                storedObject.sizeBytes(),
+                storedObject.eTag()
+        ));
 
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),

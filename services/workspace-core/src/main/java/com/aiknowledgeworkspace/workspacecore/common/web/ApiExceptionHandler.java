@@ -19,6 +19,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnect
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.InvalidSearchRequestException;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
 import com.aiknowledgeworkspace.workspacecore.workspace.DefaultWorkspaceConflictException;
 import com.aiknowledgeworkspace.workspacecore.workspace.InvalidWorkspaceNameException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceDeleteConflictException;
@@ -61,6 +62,12 @@ public class ApiExceptionHandler {
     ) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ObjectStorageException.class)
+    public ResponseEntity<ApiErrorResponse> handleObjectStorage(ObjectStorageException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ApiErrorResponse("OBJECT_STORAGE_ERROR", exception.getMessage()));
     }
 
     @ExceptionHandler(WorkspaceNotFoundException.class)

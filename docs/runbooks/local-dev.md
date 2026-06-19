@@ -7,7 +7,7 @@ This repository runs as the new product core for AI Knowledge Workspace. The leg
 For the current minimal usable web product, the canonical supported run mode is a Docker-first demo topology with one supported local Spring Boot process:
 
 - Repo A / FastAPI through its own existing Docker Compose path
-- Repo B PostgreSQL + Elasticsearch through Repo B Docker Compose
+- Repo B PostgreSQL + Elasticsearch + MinIO through Repo B Docker Compose
 - Repo B Spring Boot (`workspace-core`) on the host
 - Repo FE frontend through its own Docker Compose path
 
@@ -26,6 +26,8 @@ This repository uses different host ports to avoid conflicts:
 - workspace-core: `8081`
 - workspace-core PostgreSQL: `5434`
 - workspace-core Elasticsearch: `9201`
+- workspace-core MinIO API: `9000`
+- workspace-core MinIO console: `9001`
 - optional workspace-core Redis: `6380`
 
 ## Files
@@ -38,6 +40,16 @@ Current environment-backed upload limit defaults:
 
 - `WORKSPACE_CORE_MAX_FILE_SIZE=200MB`
 - `WORKSPACE_CORE_MAX_REQUEST_SIZE=200MB`
+
+Current object-storage defaults:
+
+- `WORKSPACE_CORE_OBJECT_STORAGE_ENDPOINT=http://localhost:9000`
+- `WORKSPACE_CORE_OBJECT_STORAGE_BUCKET=workspace-media`
+- `WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY=minioadmin`
+- `WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY=minioadmin`
+- `WORKSPACE_CORE_OBJECT_STORAGE_PATH_STYLE_ACCESS=true`
+
+Spring uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. Keep path-style access enabled for the local MinIO compose service.
 
 Current schema-management defaults:
 
@@ -81,7 +93,10 @@ Basic checks:
 docker compose --env-file .env -f infra/docker-compose.dev.yml ps
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec postgres pg_isready -U workspace_core -d workspace_core
 curl http://localhost:9201/_cluster/health
+curl http://localhost:9000/minio/health/live
 ```
+
+The compose file also runs a short-lived `minio-create-bucket` helper that creates the configured raw-media bucket if it does not already exist.
 
 ### 4. Start Spring Boot Second
 
@@ -101,8 +116,8 @@ Flyway startup behavior:
 
 - On a fresh Repo B PostgreSQL database, Flyway applies the product schema migration before Hibernate validates entities.
 - On an older local database that was previously created by `hibernate.ddl-auto=update`, startup may fail because the schema is non-empty but has no Flyway history table.
-- For disposable local data, recreating the Repo B PostgreSQL volume is the preferred path; Flyway then applies the clean Project3 schema from scratch.
-- For local demo data you must keep, manually migrate rows so workspaces have `owner_id` and assets have `workspace_id`, then set `WORKSPACE_CORE_FLYWAY_BASELINE_ON_MIGRATE=true` once after confirming the schema already matches the current entities.
+- For disposable local data, recreating the Repo B PostgreSQL and MinIO volumes is the preferred path; Flyway then applies the clean Project3 schema from scratch and MinIO starts with a clean media bucket.
+- For local demo data you must keep, manually migrate rows so workspaces have `owner_id`, assets have `workspace_id`, and assets have object-storage metadata, then set `WORKSPACE_CORE_FLYWAY_BASELINE_ON_MIGRATE=true` once after confirming the schema already matches the current entities.
 - Use `WORKSPACE_CORE_JPA_DDL_AUTO=update` only as a temporary local troubleshooting fallback, not as the normal Project3 schema path.
 
 ### 5. Verify Connectivity
@@ -148,7 +163,7 @@ The frontend proxies `/api` requests to the host Spring backend at `http://local
 
 ## Thin Slice Smoke Helper
 
-Once Repo A, PostgreSQL, Elasticsearch, and Spring Boot are all running, you can exercise the current happy path with:
+Once Repo A, PostgreSQL, Elasticsearch, MinIO, and Spring Boot are all running, you can exercise the current happy path with:
 
 ```bash
 ./infra/scripts/smoke-thin-slice.sh /absolute/path/to/lecture-video.mp4
@@ -159,6 +174,7 @@ By default, the helper now uses the authenticated product path:
 - `POST /api/auth/register` or `POST /api/auth/login`
 - `GET /api/me`
 - workspace -> upload -> status -> transcript -> index -> search -> context
+- raw media storage in MinIO before the transitional FastAPI processing trigger
 
 This makes the authenticated backend path the default smoke verification route instead of the older local/dev shortcut.
 
@@ -240,7 +256,7 @@ Failure classification hints:
 
 ## Local Verification Shortcuts
 
-Backend tests use in-process stubs and mocked external boundaries. They do not require Repo A / FastAPI, Repo FE, PostgreSQL, or Elasticsearch to be running.
+Backend tests use in-process stubs and mocked external boundaries. They do not require Repo A / FastAPI, Repo FE, PostgreSQL, Elasticsearch, or MinIO to be running.
 
 From the repo root:
 
@@ -270,6 +286,6 @@ The smoke targets still enable the optional search-to-context check by default u
 - Do not try to run Repo A and Repo B inside the same Compose project for the first milestone.
 - `FASTAPI_BASE_URL` is the integration boundary. Keep it explicit.
 - Redis is intentionally optional for now.
-- The current Spring Boot code uses PostgreSQL for persisted asset state, FastAPI for processing, and Elasticsearch for indexing and search.
+- The current Spring Boot code uses PostgreSQL for persisted asset state, MinIO for raw media bytes, FastAPI for the transitional processing trigger, and Elasticsearch for indexing and search.
 - PostgreSQL schema changes are expected to come through Flyway migrations.
 - Multipart upload limits are environment-configurable through `WORKSPACE_CORE_MAX_FILE_SIZE` and `WORKSPACE_CORE_MAX_REQUEST_SIZE`.
