@@ -259,11 +259,13 @@ Current status values:
 Current role:
 
 - Stores durable publication intent in PostgreSQL.
-- Avoids a dual-write gap between product database changes and future Kafka publishing.
+- Avoids a dual-write gap between product database changes and opt-in Kafka publishing.
 - Currently records `asset.processing.requested` with `eventVersion = 1` when a successful upload persists an `Asset` and `ProcessingJob`.
 - Provides a relay foundation that can select due pending rows, call a publisher abstraction, and update attempt/status metadata.
-- Does not publish to Kafka yet; no broker producer, scheduled relay, consumer, or FastAPI event consumption is implemented in Phase 3B.
-- The default logging publisher is a local placeholder only. If the relay is manually enabled and invoked with that publisher, rows can be marked `PUBLISHED` locally without any external broker delivery.
+- Can publish to the local Kafka topic `asset.processing.requested.v1` when `WORKSPACE_CORE_KAFKA_ENABLED=true` and the relay is explicitly invoked.
+- Does not schedule relay execution, consume from Kafka, route dead-letter topics, or trigger FastAPI Kafka consumption yet.
+- Kafka is event transport only; PostgreSQL remains the durable outbox and product source of truth.
+- Delivery remains at-least-once because a relay process can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future consumers must be idempotent.
 - Stores JSON payload text and never stores raw media bytes or secrets.
 
 `eventVersion = 1` is a lightweight contract-version marker for the current `asset.processing.requested` payload. It describes the shape of the event payload, not the version of the database row, and gives future consumers a safe way to distinguish payload shapes as the processing request evolves.
@@ -304,8 +306,8 @@ Current role:
 - Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset`, `ProcessingJob`, and an `asset.processing.requested` version 1 `OutboxEvent` together after FastAPI acknowledges the transitional direct upload processing trigger.
 - If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
-- Kafka publishing from `outbox_events` is not implemented yet. The table and relay state machine are the durable foundation for the later async processing lifecycle.
-- The Phase 3B relay is disabled by default, has no scheduler, and uses a logging publisher placeholder unless another `OutboxMessagePublisher` is configured.
+- Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
+- The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
 - Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
@@ -321,7 +323,7 @@ Current role:
 
 - Transcript version history
 - Transcript sync state beyond the current snapshot
-- Kafka publisher offsets, topics, consumer state, or dead-letter routing
+- Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
 - Automatic recovery for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics

@@ -28,10 +28,16 @@ server:
 workspace:
   default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
+  kafka:
+    enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
+    bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    processing-requested-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:asset.processing.requested.v1}
+    send-timeout: ${WORKSPACE_CORE_KAFKA_SEND_TIMEOUT:10s}
+    logging-placeholder-enabled: ${WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED:false}
 
 outbox:
   relay:
-    # Disabled until a real broker-backed publisher replaces the local logging placeholder.
+    # Disabled by default; Phase 3C adds Kafka publishing but no scheduler.
     enabled: ${WORKSPACE_CORE_OUTBOX_RELAY_ENABLED:false}
     batch-size: ${WORKSPACE_CORE_OUTBOX_RELAY_BATCH_SIZE:20}
     max-attempts: ${WORKSPACE_CORE_OUTBOX_RELAY_MAX_ATTEMPTS:5}

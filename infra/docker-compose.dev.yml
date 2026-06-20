@@ -58,6 +58,52 @@ services:
       /usr/bin/mc mb --ignore-existing local/\"${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:-workspace-media}\";
       "
 
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.0.2}
+    user: "0:0"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${WORKSPACE_CORE_KAFKA_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+    ports:
+      - "${WORKSPACE_CORE_KAFKA_PORT:-9092}:9092"
+    volumes:
+      - workspace_core_kafka_data:/tmp/kraft-combined-logs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list >/dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-create-topics:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.0.2}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}
+    entrypoint: >
+      /bin/sh -c "
+      if ! /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}\" >/dev/null 2>&1; then
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}\" --partitions 1 --replication-factor 1;
+      fi;
+      "
+
   # Redis is optional for the first milestone.
   # Uncomment this service only when workspace-core actually needs it.
   #
@@ -72,4 +118,5 @@ volumes:
   workspace_core_postgres_data:
   workspace_core_elasticsearch_data:
   workspace_core_minio_data:
+  workspace_core_kafka_data:
   # workspace_core_redis_data:

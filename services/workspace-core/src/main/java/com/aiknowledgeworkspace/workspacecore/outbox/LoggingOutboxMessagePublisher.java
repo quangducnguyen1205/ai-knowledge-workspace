@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Local placeholder publisher for Phase 3B. It performs no external broker delivery.
+ * Explicit opt-in local placeholder. It performs no external broker delivery.
  */
 public class LoggingOutboxMessagePublisher implements OutboxMessagePublisher {
 

@@ -13,7 +13,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import org.springframework.util.ClassUtils;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-outbox-relay;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -113,12 +112,6 @@ class OutboxRelayServiceTest {
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
-    }
-
-    @Test
-    void relayFoundationDoesNotRequireKafkaOnClasspath() {
-        assertThat(ClassUtils.isPresent("org.springframework.kafka.core.KafkaTemplate", getClass().getClassLoader()))
-                .isFalse();
     }
 
     @Test

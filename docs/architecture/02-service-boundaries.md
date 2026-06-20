@@ -2,7 +2,7 @@
 
 ## Boundary Summary
 
-The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store, and MinIO stores raw media bytes behind Spring.
+The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store, MinIO stores raw media bytes behind Spring, and Kafka is local event transport for opt-in outbox publishing.
 
 ## Current Boundary Diagram
 
@@ -12,18 +12,21 @@ flowchart LR
     S --> P["PostgreSQL"]
     S --> E["Elasticsearch"]
     S --> M["MinIO"]
+    S --> K["Kafka"]
     S --> F["FastAPI Processing Service"]
 
     S:::product
     P:::storage
     E:::search
     M:::object
+    K:::event
     F:::processing
 
     classDef product fill:#e8f3ff,stroke:#2b6cb0,stroke-width:1px
     classDef storage fill:#edf7ed,stroke:#2f855a,stroke-width:1px
     classDef search fill:#fff7e6,stroke:#b7791f,stroke-width:1px
     classDef object fill:#f0f9ff,stroke:#0369a1,stroke-width:1px
+    classDef event fill:#f7f0ff,stroke:#6b46c1,stroke-width:1px
     classDef processing fill:#fff0f0,stroke:#c53030,stroke-width:1px
 ```
 
@@ -36,7 +39,7 @@ flowchart LR
 - Asset registration and product-visible asset metadata
 - MinIO/S3 object-reference metadata and storage orchestration for raw uploaded media
 - PostgreSQL-backed outbox event creation for durable publication intent
-- Outbox relay state-machine foundation and publisher abstraction
+- Outbox relay state-machine foundation and Spring Kafka publisher adapter
 - Product orchestration across services
 - Client-facing APIs
 - Client-facing search API and result shaping
@@ -114,18 +117,18 @@ flowchart LR
 - Durable `asset.processing.requested` publication intent stored in Product PostgreSQL.
 - The first processing event payload contract, versioned as `event_version = 1`, including asset/workspace IDs and MinIO object references.
 - Relay state transitions for due outbox rows: pending, publishing, published, retryable failure, and terminal failure.
-- A small publisher abstraction with a logging placeholder so Kafka can be plugged in later.
-- Local placeholder handling only; the logging publisher is not external delivery.
+- A small publisher abstraction with an opt-in Spring Kafka implementation.
+- A Kafka event envelope containing event metadata and the existing JSON payload, without raw media bytes or secrets.
+- At-least-once publication semantics from outbox relay to Kafka.
 
 ### Does Not Own Yet
 
-- Kafka producer or broker integration.
-- Scheduled relay execution or broker-backed message delivery.
+- Scheduled relay execution.
 - Dead-letter topic/queue routing.
 - Recovery of rows stuck in `PUBLISHING` after process interruption.
 - FastAPI Kafka consumption.
 
-Phase 3B intentionally stops at the internal relay foundation. It can exercise outbox status and retry metadata through the `OutboxMessagePublisher` boundary, but it does not publish to Kafka. If manually invoked with the default logging publisher, the relay may mark rows `PUBLISHED` locally without delivering them to a broker. FastAPI direct upload remains the current transitional processing trigger until the later async processing lifecycle replaces direct byte streaming with object-key events.
+Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter. Kafka remains transport, not product truth: `outbox_events` in PostgreSQL is still the durable publication intent. The relay remains disabled by default and has no scheduler. FastAPI direct upload remains the current transitional processing trigger because FastAPI Kafka consumption is not implemented yet. Future consumers must be idempotent because the current delivery model is at-least-once.
 
 ## MinIO Object Storage
 
@@ -161,5 +164,6 @@ Phase 3B intentionally stops at the internal relay foundation. It can exercise o
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
 - MinIO stores bytes only; Spring stores and authorizes the object references in PostgreSQL.
-- PostgreSQL outbox rows are durable intent for future message publication; they are not a Kafka implementation by themselves.
+- PostgreSQL outbox rows are durable publication intent; the Kafka publisher adapter is transport on top of that intent.
+- Kafka transports events; it does not own product state, authorization, asset metadata, or transcript snapshots.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.

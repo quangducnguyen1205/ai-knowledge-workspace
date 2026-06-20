@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -8,8 +8,11 @@ import org.springframework.context.annotation.Configuration;
 class OutboxPublisherConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(OutboxMessagePublisher.class)
-    OutboxMessagePublisher outboxMessagePublisher() {
-        return new LoggingOutboxMessagePublisher();
+    @ConditionalOnProperty(prefix = "workspace.kafka", name = "enabled", havingValue = "false", matchIfMissing = true)
+    OutboxMessagePublisher outboxMessagePublisher(WorkspaceKafkaProperties properties) {
+        if (properties.isLoggingPlaceholderEnabled()) {
+            return new LoggingOutboxMessagePublisher();
+        }
+        return new FailingOutboxMessagePublisher();
     }
 }

@@ -92,8 +92,12 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm Repo B Elasticsearch is up on `9201`.
 - [ ] Confirm Repo B MinIO is up on `9000`.
 - [ ] Confirm the configured MinIO bucket exists, or that the `minio-create-bucket` compose helper completed successfully.
-- [ ] Kafka is not required for the current Phase 3B smoke path because outbox rows and relay state are stored locally but not published to Kafka yet.
-- [ ] Do not treat the logging outbox publisher as external delivery; it is a local placeholder and scheduled relay execution is not enabled.
+- [ ] Confirm Repo B Kafka is up on `9092` if you are validating local Kafka infrastructure.
+- [ ] Confirm the `kafka-create-topics` compose helper created `asset.processing.requested.v1`.
+- [ ] Confirm `asset.processing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
+- [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
+- [ ] Kafka is not required for the normal upload smoke path because direct FastAPI upload remains the transitional processing trigger.
+- [ ] Kafka publishing requires `WORKSPACE_CORE_KAFKA_ENABLED=true`, an explicit relay invocation, and idempotent future consumers; scheduled relay execution is not enabled.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`

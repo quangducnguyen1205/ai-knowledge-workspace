@@ -7,7 +7,7 @@ This repository runs as the new product core for AI Knowledge Workspace. The leg
 For the current minimal usable web product, the canonical supported run mode is a Docker-first demo topology with one supported local Spring Boot process:
 
 - Repo A / FastAPI through its own existing Docker Compose path
-- Repo B PostgreSQL + Elasticsearch + MinIO through Repo B Docker Compose
+- Repo B PostgreSQL + Elasticsearch + MinIO + Kafka through Repo B Docker Compose
 - Repo B Spring Boot (`workspace-core`) on the host
 - Repo FE frontend through its own Docker Compose path
 
@@ -28,6 +28,7 @@ This repository uses different host ports to avoid conflicts:
 - workspace-core Elasticsearch: `9201`
 - workspace-core MinIO API: `9000`
 - workspace-core MinIO console: `9001`
+- workspace-core Kafka: `9092`
 - optional workspace-core Redis: `6380`
 
 ## Files
@@ -51,6 +52,18 @@ Current object-storage defaults:
 
 Spring uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. Keep path-style access enabled for the local MinIO compose service.
 
+Current Kafka defaults:
+
+- `KAFKA_IMAGE=apache/kafka:4.0.2`
+- `WORKSPACE_CORE_KAFKA_PORT=9092`
+- `WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
+- `WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC=asset.processing.requested.v1`
+- `WORKSPACE_CORE_KAFKA_SEND_TIMEOUT=10s`
+- `WORKSPACE_CORE_KAFKA_ENABLED=false`
+- `WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED=false`
+
+Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1`. The topic uses one partition and replication factor one for local development.
+
 Current outbox-relay defaults:
 
 - `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=false`
@@ -58,8 +71,7 @@ Current outbox-relay defaults:
 - `WORKSPACE_CORE_OUTBOX_RELAY_MAX_ATTEMPTS=5`
 - `WORKSPACE_CORE_OUTBOX_RELAY_RETRY_DELAY=30s`
 
-The relay foundation is disabled by default because Kafka publishing is not implemented yet.
-If it is manually enabled and invoked before a real publisher exists, the default logging publisher can mark rows `PUBLISHED` locally, but it does not deliver events to Kafka or any other broker.
+The relay foundation is disabled by default. Phase 3C adds a Kafka publisher adapter, but no scheduler. Manual relay publishing requires both `WORKSPACE_CORE_KAFKA_ENABLED=true` and `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, plus an explicit caller of the relay service.
 
 Current schema-management defaults:
 
@@ -70,10 +82,12 @@ Current schema-management defaults:
 Current outbox behavior:
 
 - Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL.
-- The outbox row is durable publication intent for the later Kafka lifecycle.
-- Phase 3B adds an internal relay service, status transitions, retry metadata, and a publisher abstraction, but not Kafka publishing or scheduled relay execution.
+- The outbox row is durable publication intent for the Kafka processing lifecycle.
+- Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
+- Kafka publishing exists only when explicitly enabled; scheduled relay execution is not implemented.
 - Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
-- Kafka publishing and FastAPI event consumption are not implemented in this phase, so no Kafka container is required for current backend tests or smoke checks.
+- FastAPI event consumption is not implemented yet, so direct FastAPI upload remains the transitional processing trigger.
+- Delivery is at-least-once; future consumers must be idempotent.
 
 ## Startup Sequence
 
@@ -112,9 +126,33 @@ docker compose --env-file .env -f infra/docker-compose.dev.yml ps
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec postgres pg_isready -U workspace_core -d workspace_core
 curl http://localhost:9201/_cluster/health
 curl http://localhost:9000/minio/health/live
+docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.processing.requested.v1
+```
+
+Optional Kafka-only CLI smoke, independent of the product outbox table:
+
+```bash
+printf "phase3c-smoke-key:phase3c-smoke-value\n" | \
+  docker compose --env-file .env -f infra/docker-compose.dev.yml exec -T kafka \
+    /opt/kafka/bin/kafka-console-producer.sh \
+    --bootstrap-server kafka:29092 \
+    --topic asset.processing.requested.v1 \
+    --property parse.key=true \
+    --property key.separator=:
+
+docker compose --env-file .env -f infra/docker-compose.dev.yml exec -T kafka \
+  /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:29092 \
+  --topic asset.processing.requested.v1 \
+  --from-beginning \
+  --timeout-ms 10000 \
+  --property print.key=true \
+  --property key.separator=:
 ```
 
 The compose file also runs a short-lived `minio-create-bucket` helper that creates the configured raw-media bucket if it does not already exist.
+It also runs `kafka-create-topics`, which creates `asset.processing.requested.v1` if it does not already exist.
 
 ### 4. Start Spring Boot Second
 

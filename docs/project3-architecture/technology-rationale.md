@@ -165,7 +165,7 @@ The Spring adapter uses the AWS SDK v2 S3 client against MinIO's S3-compatible A
 
 For processing, Spring publishes the object key in the Kafka request event. FastAPI/Celery reads the media object from MinIO using internal service credentials. This avoids streaming large media bytes through Spring Boot into FastAPI for the normal processing path.
 
-Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox row for `asset.processing.requested` with `event_version = 1`. Phase 3B adds an internal outbox relay state-machine foundation, while the existing direct FastAPI upload remains as a transitional processing trigger until the Kafka/FastAPI async lifecycle is implemented.
+Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox row for `asset.processing.requested` with `event_version = 1`. Phase 3B adds an internal outbox relay state-machine foundation. Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter, while the existing direct FastAPI upload remains as a transitional processing trigger until the Kafka/FastAPI async lifecycle is implemented.
 
 Do not expose MinIO directly to the browser until a presigned URL model and authorization story are designed.
 
@@ -191,9 +191,9 @@ Spring transaction
 -> cross-service consumer handles async work
 ```
 
-Current implementation note: Phase 3B implements the product state + outbox row portion and a small relay foundation. It defines the first processing event contract as `event_version = 1`, stores durable publication intent in PostgreSQL, and can move due outbox rows through attempt/status metadata via an `OutboxMessagePublisher` abstraction. It does not add a Kafka broker dependency, Kafka producer, scheduled relay execution, consumer, dead-letter routing, stuck-`PUBLISHING` recovery, or FastAPI event consumption yet.
+Current implementation note: Phase 3C implements local Kafka infrastructure and a Spring Kafka publisher adapter for the existing outbox relay boundary. Kafka publishing is selected only when `WORKSPACE_CORE_KAFKA_ENABLED=true`; the relay remains disabled by default and has no scheduler. The publisher sends a JSON event envelope to `asset.processing.requested.v1` with event metadata plus the existing payload JSON. It does not add FastAPI Kafka consumption, a scheduler, dead-letter routing, stuck-`PUBLISHING` recovery, Kafka transactions, Schema Registry, Avro, or Protobuf.
 
-The default logging publisher is intentionally a local placeholder. If someone manually enables and invokes the relay before a real broker publisher exists, the relay can mark rows `PUBLISHED` inside PostgreSQL, but that is not Kafka delivery and should not be treated as cross-service publication.
+Producer configuration uses string key/value serialization, `acks=all`, idempotent producer mode, and an explicit send timeout as a practical local foundation. This is not end-to-end exactly-once delivery. The system remains at-least-once because a relay can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future FastAPI/Spring consumers must therefore be idempotent.
 
 `event_version = 1` is a lightweight payload-contract version for `asset.processing.requested`, not a database-row version. It prepares the contract for future evolution, such as adding language, priority, or processing options, without introducing Schema Registry, Avro, Protobuf, or a broader event framework before the project needs one.
 
