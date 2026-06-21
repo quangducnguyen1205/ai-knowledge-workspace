@@ -4,8 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -18,7 +16,6 @@ import java.util.UUID;
 public class OutboxEvent {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, length = 255)
@@ -72,6 +69,19 @@ public class OutboxEvent {
             String eventKey,
             String payload
     ) {
+        this(null, eventType, eventVersion, aggregateType, aggregateId, eventKey, payload);
+    }
+
+    public OutboxEvent(
+            UUID id,
+            String eventType,
+            int eventVersion,
+            String aggregateType,
+            UUID aggregateId,
+            String eventKey,
+            String payload
+    ) {
+        this.id = id;
         this.eventType = eventType;
         this.eventVersion = eventVersion;
         this.aggregateType = aggregateType;
@@ -104,6 +114,9 @@ public class OutboxEvent {
 
     @PrePersist
     void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;

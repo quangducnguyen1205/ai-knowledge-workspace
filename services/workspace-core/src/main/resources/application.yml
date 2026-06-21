@@ -32,6 +32,7 @@ workspace:
     enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
     bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     processing-requested-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:asset.processing.requested.v1}
+    processing-result-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:asset.processing.result.v1}
     send-timeout: ${WORKSPACE_CORE_KAFKA_SEND_TIMEOUT:10s}
     logging-placeholder-enabled: ${WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED:false}
 

@@ -102,6 +102,8 @@ class AssetPersistenceServiceTest {
         assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isEqualTo("video-1");
 
         OutboxEvent outboxEvent = outboxEventCaptor.getValue();
+        assertThat(outboxEvent.getId()).isNotNull();
+        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isEqualTo(outboxEvent.getId());
         assertThat(outboxEvent.getEventType()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
         assertThat(outboxEvent.getEventVersion()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION);
         assertThat(outboxEvent.getAggregateType()).isEqualTo(OutboxEventFactory.ASSET_AGGREGATE_TYPE);

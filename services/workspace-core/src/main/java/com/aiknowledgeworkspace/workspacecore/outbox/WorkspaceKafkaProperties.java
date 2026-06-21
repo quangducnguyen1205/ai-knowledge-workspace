@@ -9,6 +9,7 @@ public class WorkspaceKafkaProperties {
     private boolean enabled = false;
     private String bootstrapServers = "localhost:9092";
     private String processingRequestedTopic = "asset.processing.requested.v1";
+    private String processingResultTopic = "asset.processing.result.v1";
     private Duration sendTimeout = Duration.ofSeconds(10);
     private boolean loggingPlaceholderEnabled = false;
 
@@ -34,6 +35,14 @@ public class WorkspaceKafkaProperties {
 
     public void setProcessingRequestedTopic(String processingRequestedTopic) {
         this.processingRequestedTopic = processingRequestedTopic;
+    }
+
+    public String getProcessingResultTopic() {
+        return processingResultTopic;
+    }
+
+    public void setProcessingResultTopic(String processingResultTopic) {
+        this.processingResultTopic = processingResultTopic;
     }
 
     public Duration getSendTimeout() {

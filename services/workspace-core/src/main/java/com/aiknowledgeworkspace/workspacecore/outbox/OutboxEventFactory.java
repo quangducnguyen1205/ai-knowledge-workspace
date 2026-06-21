@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -35,6 +36,7 @@ public class OutboxEventFactory {
         );
 
         return new OutboxEvent(
+                UUID.randomUUID(),
                 ASSET_PROCESSING_REQUESTED,
                 ASSET_PROCESSING_REQUESTED_VERSION,
                 ASSET_AGGREGATE_TYPE,

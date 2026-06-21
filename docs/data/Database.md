@@ -16,6 +16,7 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V2__add_asset_object_storage_metadata.sql` adds MinIO/S3 object-reference metadata to assets.
 - `V3__add_outbox_events.sql` adds the PostgreSQL-backed outbox table for durable event publication intent.
 - `V4__extend_outbox_relay_state.sql` extends the outbox status constraint for relay processing state.
+- `V5__add_consumed_processing_result_events.sql` adds Spring-side idempotency records for FastAPI processing result events.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -25,13 +26,14 @@ This phase intentionally productionizes the individual ownership model. It does 
 
 ## Current Relational Model
 
-Repo B currently persists six main records:
+Repo B currently persists seven main records:
 
 - `UserAccount`
 - `Workspace`
 - `Asset`
 - `ProcessingJob`
 - `OutboxEvent`
+- `ConsumedProcessingResultEvent`
 - `AssetTranscriptRowSnapshot`
 
 ## Simplified Persistence Relationship Diagram
@@ -43,6 +45,7 @@ erDiagram
     WORKSPACE ||--o{ ASSET : contains
     ASSET ||--|| PROCESSING_JOB : tracks
     ASSET ||--o{ OUTBOX_EVENT : emits
+    ASSET ||--o{ CONSUMED_PROCESSING_RESULT_EVENT : consumes
     ASSET ||--o{ ASSET_TRANSCRIPT_ROW_SNAPSHOT : snapshots
 
     WORKSPACE {
@@ -70,6 +73,7 @@ erDiagram
         uuid assetId FK
         string fastapiTaskId
         string fastapiVideoId
+        uuid processingRequestEventId
         string processingJobStatus
     }
 
@@ -83,6 +87,16 @@ erDiagram
         string status
         int attemptCount
         instant createdAt
+    }
+
+    CONSUMED_PROCESSING_RESULT_EVENT {
+        uuid eventId PK
+        string eventType
+        uuid aggregateId
+        uuid causationEventId
+        string status
+        instant receivedAt
+        instant processedAt
     }
 
     ASSET_TRANSCRIPT_ROW_SNAPSHOT {
@@ -121,6 +135,8 @@ Flyway currently defines the following persistence guardrails:
 - `outbox_events.status` is constrained to the current publication lifecycle values.
 - `outbox_events.event_version` is required and must be greater than zero.
 - `outbox_events.attempt_count` must be non-negative.
+- `consumed_processing_result_events.event_id` is the durable idempotency key for consumed FastAPI result events.
+- `consumed_processing_result_events.status` is constrained to the current receive/apply/failure lifecycle values.
 - `asset_transcript_rows.asset_id` references `assets.id`.
 - Asset and processing status columns use database check constraints for the current enum values.
 - Workspace, asset, outbox, and transcript lookup paths have supporting indexes for owner/default-workspace resolution, workspace-scoped asset listing, pending outbox relay lookup, aggregate-event lookup, and asset transcript-row ordering.
@@ -210,6 +226,7 @@ Current fields:
 - `assetId` UUID
 - `fastapiTaskId`
 - `fastapiVideoId`
+- `processingRequestEventId` nullable UUID
 - `processingJobStatus`
 - `rawUpstreamTaskState`
 - `createdAt`
@@ -224,8 +241,10 @@ Current status values:
 
 Current role:
 
-- Tracks the Spring-side view of one upstream FastAPI processing task.
-- Retains both upstream identifiers needed for task polling and transcript fetch.
+- Tracks the Spring-side view of one upstream FastAPI processing task and its durable Kafka request correlation when present.
+- `fastapiTaskId` is the transitional direct-upload/FastAPI task identifier returned by the current direct upload call.
+- `processingRequestEventId` is the original Spring `asset.processing.requested` outbox event ID used to correlate later `asset.processing.result.v1` events.
+- Retains upstream identifiers needed for transitional task polling and transcript fetch.
 - Keeps the raw upstream task state for debugging.
 
 ## `OutboxEvent`
@@ -272,6 +291,37 @@ Current role:
 
 This is intentionally not a schema registry, Avro/Protobuf model, or full event framework. Project3 currently needs a small integer contract marker while Spring Boot still owns the product write path and Kafka publishing remains a later phase.
 
+## `ConsumedProcessingResultEvent`
+
+Table: `consumed_processing_result_events`
+
+Current fields:
+
+- `eventId` UUID primary key
+- `eventType`
+- `aggregateId`
+- `causationEventId`
+- `receivedAt`
+- `processedAt`
+- `status`
+- `errorDetail`
+- `createdAt`
+- `updatedAt`
+
+Current status values:
+
+- `RECEIVED`
+- `APPLIED`
+- `FAILED`
+
+Current role:
+
+- Stores Spring-side durable idempotency state for FastAPI processing result events from `asset.processing.result.v1`.
+- Dedupe is keyed by the result event's `eventId`, not by an in-memory cache.
+- Supports `transcript.ready` v1 and `asset.processing.failed` v1 result events for the `ASSET` aggregate.
+- Records retryable handler failures without marking product state ready when transcript artifacts cannot be fetched or validated.
+- Does not implement a Kafka listener, retry topic, dead-letter route, or scheduled consumer yet.
+
 ## `AssetTranscriptRowSnapshot`
 
 Table: `asset_transcript_rows`
@@ -304,11 +354,16 @@ Current role:
 
 - Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
 - Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset`, `ProcessingJob`, and an `asset.processing.requested` version 1 `OutboxEvent` together after FastAPI acknowledges the transitional direct upload processing trigger.
+- New upload jobs store `ProcessingJob.processingRequestEventId` as exactly the same UUID as the outgoing `asset.processing.requested` outbox event ID; older/direct-upload-only jobs may leave it null.
 - If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
 - The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
 - Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
+- Phase 3D-D-A adds a manual Spring result-event handler for future consumption from `asset.processing.result.v1`; no automatic `@KafkaListener` is wired yet.
+- `transcript.ready` handling validates the result event, requires `payload.processingRequestId == causationEventId`, loads the `ProcessingJob` by asset ID plus `processingRequestEventId`, fetches transcript artifact rows from FastAPI by `processingRequestId`, validates the complete artifact set, replaces the Spring-owned transcript snapshot, marks the processing job `SUCCEEDED`, and marks the asset `TRANSCRIPT_READY`.
+- `asset.processing.failed` handling validates the same request/result correlation, marks the processing job and asset `FAILED`, and stores only bounded safe error state.
+- Duplicate result events with the same `eventId` are ignored after the first successful application.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -324,6 +379,7 @@ Current role:
 - Transcript version history
 - Transcript sync state beyond the current snapshot
 - Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
+- Automatic Kafka listener offsets for processing result events
 - Automatic recovery for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics

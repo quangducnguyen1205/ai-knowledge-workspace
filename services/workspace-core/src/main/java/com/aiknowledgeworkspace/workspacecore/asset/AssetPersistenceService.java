@@ -64,6 +64,12 @@ public class AssetPersistenceService {
                 storedObject.eTag()
         ));
 
+        OutboxEvent processingRequestedEvent = outboxEventFactory.assetProcessingRequested(
+                asset,
+                workspace,
+                storedObject
+        );
+
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),
                 upstreamResponse.taskId(),
@@ -71,13 +77,9 @@ public class AssetPersistenceService {
                 initialProcessingStatus,
                 upstreamResponse.status()
         );
+        processingJob.setProcessingRequestEventId(processingRequestedEvent.getId());
         processingJob = processingJobRepository.save(processingJob);
 
-        OutboxEvent processingRequestedEvent = outboxEventFactory.assetProcessingRequested(
-                asset,
-                workspace,
-                storedObject
-        );
         outboxEventRepository.save(processingRequestedEvent);
 
         return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());

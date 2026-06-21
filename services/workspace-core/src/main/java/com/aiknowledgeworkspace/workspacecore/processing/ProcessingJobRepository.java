@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ProcessingJobRepository extends JpaRepository<ProcessingJob, UUID> {
 
     Optional<ProcessingJob> findByAssetId(UUID assetId);
+
+    Optional<ProcessingJob> findByAssetIdAndProcessingRequestEventId(UUID assetId, UUID processingRequestEventId);
 }

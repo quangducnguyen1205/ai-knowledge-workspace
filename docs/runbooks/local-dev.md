@@ -58,11 +58,12 @@ Current Kafka defaults:
 - `WORKSPACE_CORE_KAFKA_PORT=9092`
 - `WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
 - `WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC=asset.processing.requested.v1`
+- `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC=asset.processing.result.v1`
 - `WORKSPACE_CORE_KAFKA_SEND_TIMEOUT=10s`
 - `WORKSPACE_CORE_KAFKA_ENABLED=false`
 - `WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED=false`
 
-Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1`. The topic uses one partition and replication factor one for local development.
+Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1` and `asset.processing.result.v1`. Each topic uses one partition and replication factor one for local development.
 
 Current outbox-relay defaults:
 
@@ -87,6 +88,10 @@ Current outbox behavior:
 - Kafka publishing exists only when explicitly enabled; scheduled relay execution is not implemented.
 - Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
 - FastAPI event consumption is not implemented yet, so direct FastAPI upload remains the transitional processing trigger.
+- Transition warning: the Spring request outbox relay remains disabled/manual; enabling it for normal uploads before removing the direct FastAPI upload trigger can cause duplicate processing. The Kafka request path is not the default product processing path yet.
+- Phase 3D-D-A adds Spring's manual result-event handler and `consumed_processing_result_events` idempotency table, but no automatic Kafka listener.
+- `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
+- In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
 - Delivery is at-least-once; future consumers must be idempotent.
 
 ## Startup Sequence
@@ -128,6 +133,7 @@ curl http://localhost:9201/_cluster/health
 curl http://localhost:9000/minio/health/live
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.processing.requested.v1
+docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.processing.result.v1
 ```
 
 Optional Kafka-only CLI smoke, independent of the product outbox table:
@@ -152,7 +158,7 @@ docker compose --env-file .env -f infra/docker-compose.dev.yml exec -T kafka \
 ```
 
 The compose file also runs a short-lived `minio-create-bucket` helper that creates the configured raw-media bucket if it does not already exist.
-It also runs `kafka-create-topics`, which creates `asset.processing.requested.v1` if it does not already exist.
+It also runs `kafka-create-topics`, which creates `asset.processing.requested.v1` and `asset.processing.result.v1` if they do not already exist.
 
 ### 4. Start Spring Boot Second
 

@@ -2,8 +2,21 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +33,28 @@ class OutboxEventRepositoryTest {
 
     @Autowired
     private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private ProcessingJobRepository processingJobRepository;
+
+    @Autowired
+    private AssetRepository assetRepository;
+
+    @Autowired
+    private WorkspaceRepository workspaceRepository;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    @BeforeEach
+    void setUp() {
+        processingJobRepository.deleteAll();
+        assetRepository.deleteAll();
+        workspaceRepository.deleteAll();
+        outboxEventRepository.deleteAll();
+    }
 
     @Test
     void persistsPendingOutboxEventWithFlywayManagedSchemaThroughRelayStateMigration() {
@@ -49,5 +84,85 @@ class OutboxEventRepositoryTest {
         );
         assertThat(aggregateEvents).hasSize(1);
         assertThat(aggregateEvents.get(0).getEventType()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
+    }
+
+    @Test
+    void preservesPreassignedOutboxEventIdForProcessingJobCorrelationAndKafkaEnvelope() throws Exception {
+        UUID preassignedEventId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = workspaceRepository.save(new Workspace(
+                UUID.randomUUID(),
+                "Algorithms",
+                "user-1",
+                false
+        ));
+        assetRepository.save(new Asset(
+                assetId,
+                "lecture.mp4",
+                "Lecture",
+                AssetStatus.PROCESSING,
+                workspace,
+                "workspace-media",
+                "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
+                "video/mp4",
+                123L,
+                "\"etag-1\""
+        ));
+
+        OutboxEvent event = new OutboxEvent(
+                preassignedEventId,
+                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
+                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
+                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                """
+                        {
+                          "assetId": "%s",
+                          "storageBucket": "workspace-media",
+                          "objectKey": "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4",
+                          "contentType": "video/mp4",
+                          "sizeBytes": 123
+                        }
+                        """.formatted(assetId, workspace.getId(), assetId)
+        );
+
+        outboxEventRepository.saveAndFlush(event);
+        entityManager.clear();
+
+        OutboxEvent reloadedEvent = outboxEventRepository.findById(preassignedEventId).orElseThrow();
+        assertThat(reloadedEvent.getId()).isEqualTo(preassignedEventId);
+
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                "direct-upload-task-1",
+                "video-1",
+                ProcessingJobStatus.PENDING,
+                "pending"
+        );
+        processingJob.setProcessingRequestEventId(preassignedEventId);
+        ProcessingJob savedProcessingJob = processingJobRepository.saveAndFlush(processingJob);
+        UUID processingJobId = savedProcessingJob.getId();
+        entityManager.clear();
+
+        assertThat(processingJobRepository.findByAssetIdAndProcessingRequestEventId(assetId, preassignedEventId))
+                .map(ProcessingJob::getId)
+                .contains(processingJobId);
+
+        KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(
+                kafkaProperties(),
+                objectMapper,
+                (topic, key, value) -> CompletableFuture.completedFuture(null)
+        );
+        String envelope = publisher.buildEnvelope(reloadedEvent);
+        JsonNode envelopeJson = objectMapper.readTree(envelope);
+
+        assertThat(envelopeJson.path("eventId").asText()).isEqualTo(preassignedEventId.toString());
+    }
+
+    private WorkspaceKafkaProperties kafkaProperties() {
+        WorkspaceKafkaProperties properties = new WorkspaceKafkaProperties();
+        properties.setProcessingRequestedTopic("asset.processing.requested.v1");
+        return properties;
     }
 }

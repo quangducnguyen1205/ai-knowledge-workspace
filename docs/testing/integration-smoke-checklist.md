@@ -93,11 +93,14 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm Repo B MinIO is up on `9000`.
 - [ ] Confirm the configured MinIO bucket exists, or that the `minio-create-bucket` compose helper completed successfully.
 - [ ] Confirm Repo B Kafka is up on `9092` if you are validating local Kafka infrastructure.
-- [ ] Confirm the `kafka-create-topics` compose helper created `asset.processing.requested.v1`.
+- [ ] Confirm the `kafka-create-topics` compose helper created `asset.processing.requested.v1` and `asset.processing.result.v1`.
 - [ ] Confirm `asset.processing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
+- [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
 - [ ] Kafka is not required for the normal upload smoke path because direct FastAPI upload remains the transitional processing trigger.
 - [ ] Kafka publishing requires `WORKSPACE_CORE_KAFKA_ENABLED=true`, an explicit relay invocation, and idempotent future consumers; scheduled relay execution is not enabled.
+- [ ] Spring result-event handling is manual/foundation-only in Phase 3D-D-A; no automatic Kafka listener, retry topic, or DLQ is enabled.
+- [ ] For manual result-event handling, confirm `payload.processingRequestId` equals `causationEventId` and matches `ProcessingJob.processingRequestEventId`; do not use `fastapiTaskId` for Kafka result correlation.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`

@@ -191,7 +191,7 @@ Spring transaction
 -> cross-service consumer handles async work
 ```
 
-Current implementation note: Phase 3C implements local Kafka infrastructure and a Spring Kafka publisher adapter for the existing outbox relay boundary. Kafka publishing is selected only when `WORKSPACE_CORE_KAFKA_ENABLED=true`; the relay remains disabled by default and has no scheduler. The publisher sends a JSON event envelope to `asset.processing.requested.v1` with event metadata plus the existing payload JSON. It does not add FastAPI Kafka consumption, a scheduler, dead-letter routing, stuck-`PUBLISHING` recovery, Kafka transactions, Schema Registry, Avro, or Protobuf.
+Current implementation note: Phase 3D-D-A keeps the Phase 3C Kafka publisher foundation and adds Spring-side handling foundations for FastAPI result events. Kafka publishing is selected only when `WORKSPACE_CORE_KAFKA_ENABLED=true`; the relay remains disabled by default and has no scheduler. The publisher sends a JSON event envelope to `asset.processing.requested.v1` with event metadata plus the existing payload JSON. Spring can now manually parse and validate `asset.processing.result.v1` envelopes for `transcript.ready` v1 and `asset.processing.failed` v1, persist consumed-event idempotency by `eventId`, and apply product state only after validation. It does not add an automatic Kafka listener, FastAPI repository changes, a scheduler, dead-letter routing, stuck-`PUBLISHING` recovery, Kafka transactions, Schema Registry, Avro, or Protobuf.
 
 Producer configuration uses string key/value serialization, `acks=all`, idempotent producer mode, and an explicit send timeout as a practical local foundation. This is not end-to-end exactly-once delivery. The system remains at-least-once because a relay can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future FastAPI/Spring consumers must therefore be idempotent.
 
@@ -228,6 +228,8 @@ Kafka and Celery are not interchangeable:
 - Celery is FastAPI's internal task queue and execution model.
 
 Spring owns final product transcript snapshots and assistant authorization. FastAPI owns processing and prompt-execution mechanics.
+
+For `transcript.ready`, the result payload is intentionally metadata-only. `processingRequestId` and `causationEventId` both refer to the original Spring `asset.processing.requested` event ID, which Spring stores as `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. Spring must retrieve transcript artifact rows from FastAPI by `processingRequestId`, validate order, uniqueness, text usability, and bounded field sizes, then replace the product transcript snapshot atomically. Until FastAPI exposes the required internal artifact endpoint, this remains a Spring-side client contract and handler foundation rather than a fully live result-consumption path.
 
 Do not make FastAPI the public product backend, auth service, workspace owner, product database writer, assistant API owner, or search API.
 

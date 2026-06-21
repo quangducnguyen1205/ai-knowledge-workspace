@@ -37,6 +37,9 @@ public class ProcessingJob {
     @Column(length = 64)
     private String rawUpstreamTaskState;
 
+    @Column
+    private UUID processingRequestEventId;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -114,6 +117,14 @@ public class ProcessingJob {
 
     public void setRawUpstreamTaskState(String rawUpstreamTaskState) {
         this.rawUpstreamTaskState = rawUpstreamTaskState;
+    }
+
+    public UUID getProcessingRequestEventId() {
+        return processingRequestEventId;
+    }
+
+    public void setProcessingRequestEventId(UUID processingRequestEventId) {
+        this.processingRequestEventId = processingRequestEventId;
     }
 
     public Instant getCreatedAt() {

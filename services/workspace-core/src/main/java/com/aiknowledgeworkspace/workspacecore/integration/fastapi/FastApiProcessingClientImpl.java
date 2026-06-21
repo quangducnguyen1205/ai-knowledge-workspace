@@ -72,6 +72,23 @@ public class FastApiProcessingClientImpl implements FastApiProcessingClient {
         return List.of(rows);
     }
 
+    @Override
+    public List<FastApiTranscriptRowResponse> getTranscriptArtifactRows(String processingRequestId) {
+        FastApiTranscriptRowResponse[] rows = execute(
+                () -> fastApiRestClient.get()
+                        .uri("/internal/processing-requests/{processingRequestId}/transcript-rows", processingRequestId)
+                        .retrieve()
+                        .body(FastApiTranscriptRowResponse[].class),
+                "read transcript artifact rows"
+        );
+
+        if (rows == null) {
+            return List.of();
+        }
+
+        return List.of(rows);
+    }
+
     private <T> T execute(Supplier<T> operation, String description) {
         try {
             return operation.get();

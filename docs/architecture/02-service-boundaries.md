@@ -2,7 +2,7 @@
 
 ## Boundary Summary
 
-The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store, MinIO stores raw media bytes behind Spring, and Kafka is local event transport for opt-in outbox publishing.
+The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store, MinIO stores raw media bytes behind Spring, and Kafka is local event transport for opt-in outbox publishing plus future processing-result consumption.
 
 ## Current Boundary Diagram
 
@@ -40,6 +40,7 @@ flowchart LR
 - MinIO/S3 object-reference metadata and storage orchestration for raw uploaded media
 - PostgreSQL-backed outbox event creation for durable publication intent
 - Outbox relay state-machine foundation and Spring Kafka publisher adapter
+- Manual processing-result event handler and durable consumed-event idempotency records
 - Product orchestration across services
 - Client-facing APIs
 - Client-facing search API and result shaping
@@ -66,6 +67,7 @@ flowchart LR
 - Media ingestion for the current transitional processing trigger
 - Transcription
 - Processing status and processing result payloads
+- Processing artifact rows until Spring retrieves and validates them into a product transcript snapshot
 - Any internal AI/media-processing details still used on that side
 
 ### Does Not Own
@@ -101,6 +103,7 @@ flowchart LR
 - Domain metadata for workspaces, assets, processing jobs, and related product entities
 - Object-storage references for raw media
 - Outbox rows that record durable event publication intent
+- Consumed processing-result event records used for Spring-side idempotency
 - Flyway-managed product schema for the current individual ownership model
 
 ### Does Not Own
@@ -120,15 +123,20 @@ flowchart LR
 - A small publisher abstraction with an opt-in Spring Kafka implementation.
 - A Kafka event envelope containing event metadata and the existing JSON payload, without raw media bytes or secrets.
 - At-least-once publication semantics from outbox relay to Kafka.
+- A manual Spring handler foundation for future `asset.processing.result.v1` consumption.
+- Result-event validation for `transcript.ready` v1 and `asset.processing.failed` v1.
+- PostgreSQL-backed idempotency for consumed result events by `eventId`.
+- Request/result correlation through `ProcessingJob.processingRequestEventId`, which stores the original `asset.processing.requested` event ID.
 
 ### Does Not Own Yet
 
 - Scheduled relay execution.
+- Automatic Kafka listener execution.
 - Dead-letter topic/queue routing.
 - Recovery of rows stuck in `PUBLISHING` after process interruption.
-- FastAPI Kafka consumption.
+- Kafka retry-topic framework.
 
-Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter. Kafka remains transport, not product truth: `outbox_events` in PostgreSQL is still the durable publication intent. The relay remains disabled by default and has no scheduler. FastAPI direct upload remains the current transitional processing trigger because FastAPI Kafka consumption is not implemented yet. Future consumers must be idempotent because the current delivery model is at-least-once.
+Phase 3D-D-A keeps Kafka as transport, not product truth. Spring can now parse and manually handle FastAPI result envelopes from `asset.processing.result.v1`, but no `@KafkaListener`, retry topic, or DLQ is wired. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state is updated only after Spring validates the result and, for `transcript.ready`, retrieves and persists a complete transcript snapshot. Result events correlate to product state with the original `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring loads the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. FastAPI direct upload remains the current transitional processing trigger until the later async lifecycle is fully wired.
 
 ## MinIO Object Storage
 
@@ -165,5 +173,6 @@ Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter. K
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
 - MinIO stores bytes only; Spring stores and authorizes the object references in PostgreSQL.
 - PostgreSQL outbox rows are durable publication intent; the Kafka publisher adapter is transport on top of that intent.
+- PostgreSQL consumed-result rows are durable Spring-side idempotency state; Kafka offsets are not product state.
 - Kafka transports events; it does not own product state, authorization, asset metadata, or transcript snapshots.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.
