@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,7 +50,7 @@ class AssetPersistenceServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Test
-    void persistUploadResultCreatesAssetProcessingJobAndOutboxEvent() throws Exception {
+    void persistDirectUploadResultCreatesAssetAndProcessingJobWithoutOutboxEvent() {
         AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
@@ -69,7 +70,7 @@ class AssetPersistenceServiceTest {
         });
         when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        AssetUploadResponse response = assetPersistenceService.persistUploadResult(
+        AssetUploadResponse response = assetPersistenceService.persistDirectUploadResult(
                 assetId,
                 "lecture.mp4",
                 "Lecture",
@@ -82,10 +83,9 @@ class AssetPersistenceServiceTest {
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
         ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
-        ArgumentCaptor<OutboxEvent> outboxEventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(assetRepository).save(assetCaptor.capture());
         verify(processingJobRepository).save(processingJobCaptor.capture());
-        verify(outboxEventRepository).save(outboxEventCaptor.capture());
+        verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -100,6 +100,62 @@ class AssetPersistenceServiceTest {
         assertThat(processingJobCaptor.getValue().getAssetId()).isEqualTo(assetId);
         assertThat(processingJobCaptor.getValue().getFastapiTaskId()).isEqualTo("task-1");
         assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isEqualTo("video-1");
+        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isNull();
+
+        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxEventRepository);
+        inOrder.verify(assetRepository).save(any(Asset.class));
+        inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
+        inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void persistKafkaRequestUploadCreatesAssetProcessingJobAndOutboxEvent() throws Exception {
+        AssetPersistenceService assetPersistenceService = assetPersistenceService();
+
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
+        StoredObject storedObject = new StoredObject(
+                "workspace-media",
+                "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
+                12L,
+                "video/mp4",
+                "\"etag-1\""
+        );
+
+        when(assetRepository.save(any(Asset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AssetUploadResponse response = assetPersistenceService.persistKafkaRequestUpload(
+                assetId,
+                "lecture.mp4",
+                "Lecture",
+                workspace,
+                storedObject
+        );
+
+        ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
+        ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
+        ArgumentCaptor<OutboxEvent> outboxEventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(assetRepository).save(assetCaptor.capture());
+        verify(processingJobRepository).save(processingJobCaptor.capture());
+        verify(outboxEventRepository).save(outboxEventCaptor.capture());
+
+        assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
+        assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
+        assertThat(assetCaptor.getValue().getStatus()).isEqualTo(AssetStatus.PROCESSING);
+        assertThat(assetCaptor.getValue().getStorageBucket()).isEqualTo("workspace-media");
+        assertThat(assetCaptor.getValue().getObjectKey()).isEqualTo(storedObject.objectKey());
+        assertThat(assetCaptor.getValue().getContentType()).isEqualTo("video/mp4");
+        assertThat(assetCaptor.getValue().getSizeBytes()).isEqualTo(12L);
+        assertThat(assetCaptor.getValue().getEtag()).isEqualTo("\"etag-1\"");
+        assertThat(response.workspaceId()).isEqualTo(workspace.getId());
+        assertThat(response.assetId()).isEqualTo(assetId);
+
+        assertThat(processingJobCaptor.getValue().getAssetId()).isEqualTo(assetId);
+        assertThat(processingJobCaptor.getValue().getFastapiTaskId()).isNull();
+        assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isNull();
+        assertThat(processingJobCaptor.getValue().getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
+        assertThat(processingJobCaptor.getValue().getRawUpstreamTaskState()).isEqualTo("kafka_request_pending");
 
         OutboxEvent outboxEvent = outboxEventCaptor.getValue();
         assertThat(outboxEvent.getId()).isNotNull();

@@ -355,9 +355,9 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Spring stores the uploaded raw media bytes in MinIO/S3-compatible object storage.
 - Spring persists asset metadata, including the object-storage bucket/key reference, in PostgreSQL.
-- Spring persists an `asset.processing.requested` outbox event with `event_version = 1` in PostgreSQL as durable publication intent for the later async processing lifecycle.
-- Spring still forwards `file` and `title` to FastAPI upload as the current transitional processing trigger until the async processing lifecycle replaces direct upload.
-- Spring validates the upstream response before persisting local state.
+- Default `direct_upload` mode keeps the current product behavior: Spring forwards `file` and `title` to FastAPI upload, validates the upstream response before persisting local state, stores FastAPI task/video IDs internally, does not create a Kafka request outbox event, and leaves `ProcessingJob.processingRequestEventId` null.
+- Explicit local/manual `kafka_request` mode skips FastAPI direct upload and instead persists one `asset.processing.requested` outbox event with `event_version = 1`; the created `ProcessingJob.processingRequestEventId` equals that outbox event ID and FastAPI direct-upload IDs remain null.
+- The two request paths are mutually exclusive for a single upload to prevent duplicate processing before cutover.
 - Spring associates the created asset with one workspace in Repo B.
 - If object storage succeeds but FastAPI upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave an asset row behind.
 - Raw FastAPI IDs are stored internally but not returned to the client.

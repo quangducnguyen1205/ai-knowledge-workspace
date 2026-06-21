@@ -24,10 +24,10 @@ public class ProcessingJob {
     @Column(nullable = false)
     private UUID assetId;
 
-    @Column(nullable = false, length = 128)
+    @Column(length = 128)
     private String fastapiTaskId;
 
-    @Column(nullable = false, length = 128)
+    @Column(length = 128)
     private String fastapiVideoId;
 
     @Enumerated(EnumType.STRING)

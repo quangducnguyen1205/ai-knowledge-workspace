@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscr
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
@@ -55,6 +56,7 @@ public class AssetService {
     private final ObjectStorageClient objectStorageClient;
     private final ObjectKeyFactory objectKeyFactory;
     private final ObjectStorageProperties objectStorageProperties;
+    private final ProcessingProperties processingProperties;
 
     @Autowired
     public AssetService(
@@ -65,7 +67,8 @@ public class AssetService {
             WorkspaceService workspaceService,
             ObjectStorageClient objectStorageClient,
             ObjectKeyFactory objectKeyFactory,
-            ObjectStorageProperties objectStorageProperties
+            ObjectStorageProperties objectStorageProperties,
+            ProcessingProperties processingProperties
     ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
@@ -75,6 +78,30 @@ public class AssetService {
         this.objectStorageClient = objectStorageClient;
         this.objectKeyFactory = objectKeyFactory;
         this.objectStorageProperties = objectStorageProperties;
+        this.processingProperties = processingProperties;
+    }
+
+    public AssetService(
+            AssetRepository assetRepository,
+            ProcessingJobRepository processingJobRepository,
+            FastApiProcessingClient fastApiProcessingClient,
+            AssetPersistenceService assetPersistenceService,
+            WorkspaceService workspaceService,
+            ObjectStorageClient objectStorageClient,
+            ObjectKeyFactory objectKeyFactory,
+            ObjectStorageProperties objectStorageProperties
+    ) {
+        this(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties,
+                new ProcessingProperties()
+        );
     }
 
     public AssetService(
@@ -101,7 +128,8 @@ public class AssetService {
                     }
                 },
                 new ObjectKeyFactory(),
-                new ObjectStorageProperties()
+                new ObjectStorageProperties(),
+                new ProcessingProperties()
         );
     }
 
@@ -160,6 +188,15 @@ public class AssetService {
                 .orElseThrow(ProcessingJobNotFoundException::new);
 
         if (isTerminal(processingJob.getProcessingJobStatus())) {
+            return new AssetStatusResponse(
+                    asset.getId(),
+                    processingJob.getId(),
+                    asset.getStatus(),
+                    processingJob.getProcessingJobStatus()
+            );
+        }
+
+        if (!StringUtils.hasText(processingJob.getFastapiTaskId())) {
             return new AssetStatusResponse(
                     asset.getId(),
                     processingJob.getId(),
@@ -260,32 +297,59 @@ public class AssetService {
         StoredObject storedObject = storeUploadedObject(file, objectKey);
 
         try {
-            FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
-                    file.getResource(),
-                    originalFilename,
-                    title
-            );
-
-            validateUpstreamUploadResponse(upstreamResponse);
-
-            ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
-            AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
-                    ? AssetStatus.FAILED
-                    : AssetStatus.PROCESSING;
-            return assetPersistenceService.persistUploadResult(
-                    assetId,
-                    originalFilename,
-                    title,
-                    initialAssetStatus,
-                    initialProcessingStatus,
-                    workspace,
-                    storedObject,
-                    upstreamResponse
-            );
+            return switch (processingProperties.getTriggerMode()) {
+                case DIRECT_UPLOAD -> persistDirectUpload(
+                        file,
+                        assetId,
+                        originalFilename,
+                        title,
+                        workspace,
+                        storedObject
+                );
+                case KAFKA_REQUEST -> assetPersistenceService.persistKafkaRequestUpload(
+                        assetId,
+                        originalFilename,
+                        title,
+                        workspace,
+                        storedObject
+                );
+            };
         } catch (RuntimeException exception) {
             cleanupStoredObjectBestEffort(storedObject);
             throw exception;
         }
+    }
+
+    private AssetUploadResponse persistDirectUpload(
+            MultipartFile file,
+            UUID assetId,
+            String originalFilename,
+            String title,
+            Workspace workspace,
+            StoredObject storedObject
+    ) {
+        FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
+                file.getResource(),
+                originalFilename,
+                title
+        );
+
+        validateUpstreamUploadResponse(upstreamResponse);
+
+        ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
+        AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
+                ? AssetStatus.FAILED
+                : AssetStatus.PROCESSING;
+        return assetPersistenceService.persistDirectUploadResult(
+                assetId,
+                originalFilename,
+                title,
+                initialAssetStatus,
+                initialProcessingStatus,
+                workspace,
+                storedObject,
+                upstreamResponse
+        );
     }
 
     private StoredObject storeUploadedObject(MultipartFile file, String objectKey) {

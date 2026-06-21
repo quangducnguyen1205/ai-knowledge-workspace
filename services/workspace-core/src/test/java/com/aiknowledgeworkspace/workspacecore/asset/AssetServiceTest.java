@@ -16,9 +16,11 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegra
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
@@ -121,7 +123,7 @@ class AssetServiceTest {
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
                 .thenReturn(upstreamResponse);
-        when(assetPersistenceService.persistUploadResult(
+        when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
@@ -136,6 +138,14 @@ class AssetServiceTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(workspaceId);
+        verify(fastApiProcessingClient).uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1"));
+        verify(assetPersistenceService, never()).persistKafkaRequestUpload(
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
 
         ArgumentCaptor<StoreObjectRequest> storageRequestCaptor = ArgumentCaptor.forClass(StoreObjectRequest.class);
         verify(objectStorageClient).store(storageRequestCaptor.capture());
@@ -181,7 +191,7 @@ class AssetServiceTest {
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 2")))
                 .thenReturn(upstreamResponse);
-        when(assetPersistenceService.persistUploadResult(
+        when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 2"),
@@ -196,6 +206,75 @@ class AssetServiceTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(null);
+    }
+
+    @Test
+    void uploadInKafkaRequestModeDoesNotCallFastApiDirectUploadAndPersistsOutboxIntent() {
+        ProcessingProperties processingProperties = new ProcessingProperties();
+        processingProperties.setTriggerMode(ProcessingTriggerMode.KAFKA_REQUEST);
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties,
+                processingProperties
+        );
+
+        UUID workspaceId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        UUID processingJobId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Algorithms", "user-1", false);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "lecture.mp4",
+                "video/mp4",
+                "video-bytes".getBytes(StandardCharsets.UTF_8)
+        );
+        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 11L);
+        AssetUploadResponse persistedResponse = new AssetUploadResponse(
+                assetId,
+                processingJobId,
+                AssetStatus.PROCESSING,
+                workspaceId
+        );
+
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(assetPersistenceService.persistKafkaRequestUpload(
+                any(UUID.class),
+                eq("lecture.mp4"),
+                eq("Lecture 1"),
+                eq(workspace),
+                eq(storedObject)
+        )).thenReturn(persistedResponse);
+
+        AssetUploadResponse response = assetService.uploadAsset(workspaceId, file, "Lecture 1");
+
+        assertThat(response.assetId()).isEqualTo(assetId);
+        assertThat(response.processingJobId()).isEqualTo(processingJobId);
+        assertThat(response.assetStatus()).isEqualTo(AssetStatus.PROCESSING);
+        verifyNoInteractions(fastApiProcessingClient);
+        verify(assetPersistenceService, never()).persistDirectUploadResult(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+        verify(assetPersistenceService).persistKafkaRequestUpload(
+                any(UUID.class),
+                eq("lecture.mp4"),
+                eq("Lecture 1"),
+                eq(workspace),
+                eq(storedObject)
+        );
     }
 
     @Test
@@ -231,7 +310,7 @@ class AssetServiceTest {
                 .hasMessage("FastAPI failed");
 
         verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
-        verify(assetPersistenceService, never()).persistUploadResult(
+        verify(assetPersistenceService, never()).persistDirectUploadResult(
                 any(),
                 any(),
                 any(),
@@ -272,7 +351,7 @@ class AssetServiceTest {
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
                 .thenReturn(upstreamResponse);
-        when(assetPersistenceService.persistUploadResult(
+        when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
@@ -331,6 +410,38 @@ class AssetServiceTest {
 
         assertThat(result).isSameAs(ownedAsset);
         verify(assetPersistenceService, never()).updateAssetWorkspace(any(), any());
+    }
+
+    @Test
+    void getAssetStatusReturnsLocalStateWhenNoDirectFastApiTaskExists() {
+        AssetService assetService = new AssetService(
+                assetRepository,
+                processingJobRepository,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService
+        );
+
+        UUID assetId = UUID.randomUUID();
+        Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
+        Asset asset = asset(assetId, "lecture.mp4", "Lecture", AssetStatus.PROCESSING, workspace, null);
+        ProcessingJob processingJob = new ProcessingJob(
+                assetId,
+                null,
+                null,
+                ProcessingJobStatus.PENDING,
+                "kafka_request_pending"
+        );
+
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+
+        AssetStatusResponse response = assetService.getAssetStatus(assetId);
+
+        assertThat(response.assetId()).isEqualTo(assetId);
+        assertThat(response.assetStatus()).isEqualTo(AssetStatus.PROCESSING);
+        assertThat(response.processingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
+        verifyNoInteractions(fastApiProcessingClient);
     }
 
     @Test

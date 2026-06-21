@@ -127,6 +127,7 @@ flowchart LR
 - Result-event validation for `transcript.ready` v1 and `asset.processing.failed` v1.
 - PostgreSQL-backed idempotency for consumed result events by `eventId`.
 - Request/result correlation through `ProcessingJob.processingRequestEventId`, which stores the original `asset.processing.requested` event ID.
+- Explicit processing trigger modes. `direct_upload` is the default product path and does not create a Kafka request outbox row; `kafka_request` is a local/manual transition mode that persists the request outbox row and does not call FastAPI direct upload.
 
 ### Does Not Own Yet
 
@@ -136,7 +137,7 @@ flowchart LR
 - Recovery of rows stuck in `PUBLISHING` after process interruption.
 - Kafka retry-topic framework.
 
-Phase 3D-D-A keeps Kafka as transport, not product truth. Spring can now parse and manually handle FastAPI result envelopes from `asset.processing.result.v1`, but no `@KafkaListener`, retry topic, or DLQ is wired. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state is updated only after Spring validates the result and, for `transcript.ready`, retrieves and persists a complete transcript snapshot. Result events correlate to product state with the original `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring loads the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. FastAPI direct upload remains the current transitional processing trigger until the later async lifecycle is fully wired.
+Phase 3D-F keeps Kafka as transport, not product truth. Spring can now parse and manually handle FastAPI result envelopes from `asset.processing.result.v1`, but no `@KafkaListener`, retry topic, or DLQ is wired. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state is updated only after Spring validates the result and, for `transcript.ready`, retrieves and persists a complete transcript snapshot. Result events correlate to product state with the original `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring loads the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. FastAPI direct upload remains the default product trigger in `direct_upload` mode. `kafka_request` is an explicit local/manual transition mode; it is mutually exclusive with direct upload for each upload and must be used before manually relaying request outbox rows to avoid duplicate processing.
 
 ## MinIO Object Storage
 

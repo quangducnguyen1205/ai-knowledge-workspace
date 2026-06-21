@@ -353,12 +353,14 @@ Current role:
 ## Current Write Behavior
 
 - Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
-- Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then persists `Asset`, `ProcessingJob`, and an `asset.processing.requested` version 1 `OutboxEvent` together after FastAPI acknowledges the transitional direct upload processing trigger.
-- New upload jobs store `ProcessingJob.processingRequestEventId` as exactly the same UUID as the outgoing `asset.processing.requested` outbox event ID; older/direct-upload-only jobs may leave it null.
-- If object storage succeeds but FastAPI or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
+- Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then follows exactly one configured processing trigger mode.
+- `workspace.processing.trigger-mode=direct_upload` is the default product path. Spring calls the transitional FastAPI direct upload endpoint, persists `Asset` and `ProcessingJob`, stores the FastAPI task/video IDs, does not create an `asset.processing.requested` outbox row, and leaves `ProcessingJob.processingRequestEventId` null.
+- `workspace.processing.trigger-mode=kafka_request` is an explicit local/manual transition mode. Spring does not call FastAPI direct upload; it persists `Asset`, `ProcessingJob`, and one `asset.processing.requested` version 1 `OutboxEvent` in one transaction, with `ProcessingJob.processingRequestEventId` set to the same UUID as the outbox event ID. `fastapiTaskId` and `fastapiVideoId` remain null because no direct FastAPI task exists.
+- If object storage succeeds but FastAPI direct upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
 - The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
+- Request relays must not be enabled for ordinary `direct_upload` uploads. The explicit `kafka_request` trigger mode exists to prevent duplicate processing before cutover.
 - Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
 - Phase 3D-D-A adds a manual Spring result-event handler for future consumption from `asset.processing.result.v1`; no automatic `@KafkaListener` is wired yet.
 - `transcript.ready` handling validates the result event, requires `payload.processingRequestId == causationEventId`, loads the `ProcessingJob` by asset ID plus `processingRequestEventId`, fetches transcript artifact rows from FastAPI by `processingRequestId`, validates the complete artifact set, replaces the Spring-owned transcript snapshot, marks the processing job `SUCCEEDED`, and marks the asset `TRANSCRIPT_READY`.

@@ -52,6 +52,10 @@ Current object-storage defaults:
 
 Spring uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. Keep path-style access enabled for the local MinIO compose service.
 
+Current processing trigger default:
+
+- `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`
+
 Current Kafka defaults:
 
 - `KAFKA_IMAGE=apache/kafka:4.0.2`
@@ -82,14 +86,14 @@ Current schema-management defaults:
 
 Current outbox behavior:
 
-- Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL.
+- `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` is the default product behavior. Upload persistence writes `Asset` and `ProcessingJob`, stores the FastAPI direct-upload task/video IDs, does not create an `asset.processing.requested` outbox row, and leaves `ProcessingJob.processingRequestEventId` null.
+- `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request` is an explicit local/manual transition mode. Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL, skips FastAPI direct upload, stores the outbox event ID on `ProcessingJob.processingRequestEventId`, and leaves FastAPI direct-upload IDs null.
 - The outbox row is durable publication intent for the Kafka processing lifecycle.
 - Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
 - Kafka publishing exists only when explicitly enabled; scheduled relay execution is not implemented.
 - Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
-- FastAPI event consumption is not implemented yet, so direct FastAPI upload remains the transitional processing trigger.
-- Transition warning: the Spring request outbox relay remains disabled/manual; enabling it for normal uploads before removing the direct FastAPI upload trigger can cause duplicate processing. The Kafka request path is not the default product processing path yet.
-- Phase 3D-D-A adds Spring's manual result-event handler and `consumed_processing_result_events` idempotency table, but no automatic Kafka listener.
+- Transition warning: the Spring request outbox relay remains disabled/manual. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for manual request-path validation so the same asset is not processed twice.
+- Phase 3D-F keeps Spring's manual result-event handler and `consumed_processing_result_events` idempotency table, but no automatic Kafka listener.
 - `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
 - In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
 - Delivery is at-least-once; future consumers must be idempotent.

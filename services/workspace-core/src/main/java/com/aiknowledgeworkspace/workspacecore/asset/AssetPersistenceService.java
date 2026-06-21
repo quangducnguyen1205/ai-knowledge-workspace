@@ -41,7 +41,7 @@ public class AssetPersistenceService {
     }
 
     @Transactional
-    public AssetUploadResponse persistUploadResult(
+    public AssetUploadResponse persistDirectUploadResult(
             UUID assetId,
             String originalFilename,
             String title,
@@ -64,6 +64,39 @@ public class AssetPersistenceService {
                 storedObject.eTag()
         ));
 
+        ProcessingJob processingJob = new ProcessingJob(
+                asset.getId(),
+                upstreamResponse.taskId(),
+                upstreamResponse.videoId(),
+                initialProcessingStatus,
+                upstreamResponse.status()
+        );
+        processingJob = processingJobRepository.save(processingJob);
+
+        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());
+    }
+
+    @Transactional
+    public AssetUploadResponse persistKafkaRequestUpload(
+            UUID assetId,
+            String originalFilename,
+            String title,
+            Workspace workspace,
+            StoredObject storedObject
+    ) {
+        Asset asset = assetRepository.save(new Asset(
+                assetId,
+                originalFilename,
+                title,
+                AssetStatus.PROCESSING,
+                workspace,
+                storedObject.bucket(),
+                storedObject.objectKey(),
+                storedObject.contentType(),
+                storedObject.sizeBytes(),
+                storedObject.eTag()
+        ));
+
         OutboxEvent processingRequestedEvent = outboxEventFactory.assetProcessingRequested(
                 asset,
                 workspace,
@@ -72,10 +105,10 @@ public class AssetPersistenceService {
 
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),
-                upstreamResponse.taskId(),
-                upstreamResponse.videoId(),
-                initialProcessingStatus,
-                upstreamResponse.status()
+                null,
+                null,
+                ProcessingJobStatus.PENDING,
+                "kafka_request_pending"
         );
         processingJob.setProcessingRequestEventId(processingRequestedEvent.getId());
         processingJob = processingJobRepository.save(processingJob);

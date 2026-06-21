@@ -28,6 +28,8 @@ server:
 workspace:
   default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
+  processing:
+    trigger-mode: ${WORKSPACE_CORE_PROCESSING_TRIGGER_MODE:direct_upload}
   kafka:
     enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
     bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}

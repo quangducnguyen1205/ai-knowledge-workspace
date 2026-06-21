@@ -97,8 +97,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm `asset.processing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
-- [ ] Kafka is not required for the normal upload smoke path because direct FastAPI upload remains the transitional processing trigger.
-- [ ] Kafka publishing requires `WORKSPACE_CORE_KAFKA_ENABLED=true`, an explicit relay invocation, and idempotent future consumers; scheduled relay execution is not enabled.
+- [ ] Kafka is not required for the normal upload smoke path because `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` remains the default product trigger.
+- [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, and an explicit relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads.
+- [ ] Kafka publishing requires idempotent future consumers; scheduled relay execution is not enabled.
 - [ ] Spring result-event handling is manual/foundation-only in Phase 3D-D-A; no automatic Kafka listener, retry topic, or DLQ is enabled.
 - [ ] For manual result-event handling, confirm `payload.processingRequestId` equals `causationEventId` and matches `ProcessingJob.processingRequestEventId`; do not use `fastapiTaskId` for Kafka result correlation.
 - [ ] Start Spring Boot for `services/workspace-core`.

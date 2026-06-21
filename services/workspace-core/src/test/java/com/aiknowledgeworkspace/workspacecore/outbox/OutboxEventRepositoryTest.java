@@ -135,10 +135,10 @@ class OutboxEventRepositoryTest {
 
         ProcessingJob processingJob = new ProcessingJob(
                 assetId,
-                "direct-upload-task-1",
-                "video-1",
+                null,
+                null,
                 ProcessingJobStatus.PENDING,
-                "pending"
+                "kafka_request_pending"
         );
         processingJob.setProcessingRequestEventId(preassignedEventId);
         ProcessingJob savedProcessingJob = processingJobRepository.saveAndFlush(processingJob);
@@ -148,6 +148,9 @@ class OutboxEventRepositoryTest {
         assertThat(processingJobRepository.findByAssetIdAndProcessingRequestEventId(assetId, preassignedEventId))
                 .map(ProcessingJob::getId)
                 .contains(processingJobId);
+        ProcessingJob reloadedProcessingJob = processingJobRepository.findById(processingJobId).orElseThrow();
+        assertThat(reloadedProcessingJob.getFastapiTaskId()).isNull();
+        assertThat(reloadedProcessingJob.getFastapiVideoId()).isNull();
 
         KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(
                 kafkaProperties(),
