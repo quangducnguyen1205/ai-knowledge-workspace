@@ -56,6 +56,14 @@ Current processing trigger default:
 
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`
 
+Manual processing smoke controls:
+
+- `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=none`
+- `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=`
+- `WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE=`
+
+Supported one-shot smoke commands are `relay_request_outbox_once` and `handle_result_file_once`. They are disabled by default, run once, then close the Spring application context. They do not add an HTTP endpoint, scheduler, or Kafka listener. `relay_request_outbox_once` requires `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID` and relays only that selected `asset.processing.requested` outbox event, never all due rows.
+
 Current Kafka defaults:
 
 - `KAFKA_IMAGE=apache/kafka:4.0.2`
@@ -90,12 +98,13 @@ Current outbox behavior:
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request` is an explicit local/manual transition mode. Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL, skips FastAPI direct upload, stores the outbox event ID on `ProcessingJob.processingRequestEventId`, and leaves FastAPI direct-upload IDs null.
 - The outbox row is durable publication intent for the Kafka processing lifecycle.
 - Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
-- Kafka publishing exists only when explicitly enabled; scheduled relay execution is not implemented.
+- Kafka publishing exists only when explicitly enabled. Scheduled relay execution is not implemented; for local smoke, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once` plus `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` can invoke the relay for exactly one selected request event.
 - Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
-- Transition warning: the Spring request outbox relay remains disabled/manual. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for manual request-path validation so the same asset is not processed twice.
+- Transition warning: the Spring request outbox relay remains disabled/manual. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for manual request-path validation so the same asset is not processed twice. The smoke command is scoped by event ID so it will not relay arbitrary due outbox rows.
 - Phase 3D-F keeps Spring's manual result-event handler and `consumed_processing_result_events` idempotency table, but no automatic Kafka listener.
 - `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
 - In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
+- For local smoke, capture one result envelope to a temporary file and run `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with `WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE` pointing at that file. This calls the existing manual handler once; it does not install an automatic listener.
 - Delivery is at-least-once; future consumers must be idempotent.
 
 ## Startup Sequence

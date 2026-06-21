@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -112,6 +113,114 @@ class OutboxRelayServiceTest {
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
+    }
+
+    @Test
+    void scopedRelayPublishesOnlySelectedDueRequestEvent() {
+        OutboxEvent selectedEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent unrelatedDueEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+
+        OutboxEventStatus status = outboxRelayService.relayEventByIdOnce(selectedEvent.getId());
+
+        assertThat(status).isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(selectedEvent.getId());
+
+        OutboxEvent savedSelectedEvent = outboxEventRepository.findById(selectedEvent.getId()).orElseThrow();
+        OutboxEvent savedUnrelatedEvent = outboxEventRepository.findById(unrelatedDueEvent.getId()).orElseThrow();
+        assertThat(savedSelectedEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(savedUnrelatedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(savedUnrelatedEvent.getPublishedAt()).isNull();
+    }
+
+    @Test
+    void scopedRelayRejectsMissingEvent() {
+        UUID missingEventId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(missingEventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Outbox event was not found")
+                .hasMessageContaining(missingEventId.toString());
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
+    void scopedRelayRejectsNonRequestEventType() {
+        UUID assetId = UUID.randomUUID();
+        OutboxEvent event = outboxEventRepository.saveAndFlush(new OutboxEvent(
+                "transcript.ready",
+                1,
+                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                "{\"assetId\":\"%s\"}".formatted(assetId)
+        ));
+
+        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(event.getId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("only supports asset.processing.requested");
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
+    void scopedRelayRejectsAlreadyPublishedEvent() {
+        OutboxEvent event = newOutboxEvent();
+        event.markPublished(Instant.now());
+        event = outboxEventRepository.saveAndFlush(event);
+        UUID eventId = event.getId();
+
+        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already published");
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
+    void scopedRelayRejectsFailedEvent() {
+        OutboxEvent event = newOutboxEvent();
+        event.recordPublishFailure("terminal failure", Instant.now().minusSeconds(5), 1);
+        event = outboxEventRepository.saveAndFlush(event);
+        UUID eventId = event.getId();
+
+        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not eligible")
+                .hasMessageContaining("FAILED");
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
+    void scopedRelayRejectsPendingEventScheduledForFutureRetry() {
+        OutboxEvent event = newOutboxEvent();
+        event.recordPublishFailure("wait before retry", Instant.now().plusSeconds(3600), 5);
+        event = outboxEventRepository.saveAndFlush(event);
+        UUID eventId = event.getId();
+
+        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not due for relay");
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
+    void scopedRelayPreservesRetryBehaviorWhenPublisherFails() {
+        fakeOutboxMessagePublisher.failWith("publisher unavailable");
+        OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
+
+        OutboxEventStatus status = outboxRelayService.relayEventByIdOnce(event.getId());
+
+        assertThat(status).isEqualTo(OutboxEventStatus.PENDING);
+
+        OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
+        assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
+        assertThat(savedEvent.getLastError()).isEqualTo("publisher unavailable");
+        assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
+        assertThat(savedEvent.getPublishedAt()).isNull();
     }
 
     @Test

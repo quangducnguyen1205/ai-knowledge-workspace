@@ -98,9 +98,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
 - [ ] Kafka is not required for the normal upload smoke path because `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` remains the default product trigger.
-- [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, and an explicit relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads.
+- [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once`, and `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` for an explicit scoped one-shot relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads; the smoke command relays only the selected event ID and will not publish arbitrary due outbox rows.
 - [ ] Kafka publishing requires idempotent future consumers; scheduled relay execution is not enabled.
-- [ ] Spring result-event handling is manual/foundation-only in Phase 3D-D-A; no automatic Kafka listener, retry topic, or DLQ is enabled.
+- [ ] Spring result-event handling is manual/foundation-only; use `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with a temporary result-envelope file for a one-shot local smoke. No automatic Kafka listener, retry topic, or DLQ is enabled.
 - [ ] For manual result-event handling, confirm `payload.processingRequestId` equals `causationEventId` and matches `ProcessingJob.processingRequestEventId`; do not use `fastapiTaskId` for Kafka result correlation.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:

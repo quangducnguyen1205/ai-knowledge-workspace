@@ -30,6 +30,10 @@ workspace:
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
   processing:
     trigger-mode: ${WORKSPACE_CORE_PROCESSING_TRIGGER_MODE:direct_upload}
+    smoke:
+      command: ${WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND:none}
+      result-event-file: ${WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE:}
+      request-outbox-event-id: ${WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID:}
   kafka:
     enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
     bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}

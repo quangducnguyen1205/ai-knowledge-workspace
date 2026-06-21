@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -60,6 +61,23 @@ public class OutboxRelayService {
         return processedCount;
     }
 
+    @Transactional
+    public OutboxEventStatus relayEventByIdOnce(UUID eventId) {
+        if (!outboxRelayProperties.isEnabled()) {
+            throw new IllegalStateException("Outbox relay is disabled");
+        }
+
+        OutboxEvent event = outboxEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + eventId));
+        validateSelectedRequestEvent(event, Instant.now(clock));
+
+        if (!relayEvent(event)) {
+            throw new IllegalStateException("Outbox event could not be claimed for publishing: " + eventId);
+        }
+
+        return outboxEventRepository.findById(eventId).orElseThrow().getStatus();
+    }
+
     private boolean relayEvent(OutboxEvent event) {
         int claimedCount = outboxEventRepository.markPublishing(
                 event.getId(),
@@ -85,6 +103,27 @@ public class OutboxRelayService {
 
         outboxEventRepository.save(claimedEvent);
         return true;
+    }
+
+    private void validateSelectedRequestEvent(OutboxEvent event, Instant now) {
+        if (!OutboxEventFactory.ASSET_PROCESSING_REQUESTED.equals(event.getEventType())) {
+            throw new IllegalStateException(
+                    "Manual smoke relay only supports asset.processing.requested events: " + event.getId()
+            );
+        }
+        if (event.getStatus() == OutboxEventStatus.PUBLISHED) {
+            throw new IllegalStateException("Outbox event is already published: " + event.getId());
+        }
+        if (event.getStatus() != OutboxEventStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Outbox event is not eligible for relay: " + event.getId() + " status=" + event.getStatus()
+            );
+        }
+        if (event.getNextAttemptAt() != null && event.getNextAttemptAt().isAfter(now)) {
+            throw new IllegalStateException(
+                    "Outbox event is not due for relay until " + event.getNextAttemptAt() + ": " + event.getId()
+            );
+        }
     }
 
     private int resolvedBatchSize() {

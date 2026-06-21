@@ -128,6 +128,7 @@ flowchart LR
 - PostgreSQL-backed idempotency for consumed result events by `eventId`.
 - Request/result correlation through `ProcessingJob.processingRequestEventId`, which stores the original `asset.processing.requested` event ID.
 - Explicit processing trigger modes. `direct_upload` is the default product path and does not create a Kafka request outbox row; `kafka_request` is a local/manual transition mode that persists the request outbox row and does not call FastAPI direct upload.
+- Disabled-by-default one-shot smoke commands for scoped request relay and result-file handling. The request-relay smoke command requires an explicit `asset.processing.requested` outbox event ID and relays only that selected event. These commands close the Spring application after one run and do not expose a public endpoint, scheduler, or Kafka listener.
 
 ### Does Not Own Yet
 
