@@ -10,6 +10,9 @@ public class WorkspaceKafkaProperties {
     private String bootstrapServers = "localhost:9092";
     private String processingRequestedTopic = "asset.processing.requested.v1";
     private String processingResultTopic = "asset.processing.result.v1";
+    private boolean processingResultListenerEnabled = false;
+    private String processingResultConsumerGroup = "workspace-processing-result-v1";
+    private String processingResultAutoOffsetReset = "latest";
     private Duration sendTimeout = Duration.ofSeconds(10);
     private boolean loggingPlaceholderEnabled = false;
 
@@ -43,6 +46,30 @@ public class WorkspaceKafkaProperties {
 
     public void setProcessingResultTopic(String processingResultTopic) {
         this.processingResultTopic = processingResultTopic;
+    }
+
+    public boolean isProcessingResultListenerEnabled() {
+        return processingResultListenerEnabled;
+    }
+
+    public void setProcessingResultListenerEnabled(boolean processingResultListenerEnabled) {
+        this.processingResultListenerEnabled = processingResultListenerEnabled;
+    }
+
+    public String getProcessingResultConsumerGroup() {
+        return processingResultConsumerGroup;
+    }
+
+    public void setProcessingResultConsumerGroup(String processingResultConsumerGroup) {
+        this.processingResultConsumerGroup = processingResultConsumerGroup;
+    }
+
+    public String getProcessingResultAutoOffsetReset() {
+        return processingResultAutoOffsetReset;
+    }
+
+    public void setProcessingResultAutoOffsetReset(String processingResultAutoOffsetReset) {
+        this.processingResultAutoOffsetReset = processingResultAutoOffsetReset;
     }
 
     public Duration getSendTimeout() {

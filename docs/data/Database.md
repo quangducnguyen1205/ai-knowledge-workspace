@@ -320,7 +320,7 @@ Current role:
 - Dedupe is keyed by the result event's `eventId`, not by an in-memory cache.
 - Supports `transcript.ready` v1 and `asset.processing.failed` v1 result events for the `ASSET` aggregate.
 - Records retryable handler failures without marking product state ready when transcript artifacts cannot be fetched or validated.
-- Does not implement a Kafka listener, retry topic, dead-letter route, or scheduled consumer yet.
+- Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, or scheduled consumer.
 
 ## `AssetTranscriptRowSnapshot`
 
@@ -362,10 +362,11 @@ Current role:
 - The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
 - Request relays must not be enabled for ordinary `direct_upload` uploads. The explicit `kafka_request` trigger mode exists to prevent duplicate processing before cutover.
 - Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
-- Phase 3D-D-A adds a manual Spring result-event handler for future consumption from `asset.processing.result.v1`; no automatic `@KafkaListener` is wired yet.
+- Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. It uses `MANUAL_IMMEDIATE` acknowledgements, consumer group `workspace-processing-result-v1`, and `latest` offset reset by default. Enable it only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, and start it before publishing result events in controlled local runs.
 - `transcript.ready` handling validates the result event, requires `payload.processingRequestId == causationEventId`, loads the `ProcessingJob` by asset ID plus `processingRequestEventId`, fetches transcript artifact rows from FastAPI by `processingRequestId`, validates the complete artifact set, replaces the Spring-owned transcript snapshot, marks the processing job `SUCCEEDED`, and marks the asset `TRANSCRIPT_READY`.
 - `asset.processing.failed` handling validates the same request/result correlation, marks the processing job and asset `FAILED`, and stores only bounded safe error state.
 - Duplicate result events with the same `eventId` are ignored after the first successful application.
+- Listener offset acknowledgement is intentionally conservative: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged immediately on the consumer thread; unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. The delivery model remains at-least-once overall.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -381,7 +382,7 @@ Current role:
 - Transcript version history
 - Transcript sync state beyond the current snapshot
 - Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
-- Automatic Kafka listener offsets for processing result events
+- Kafka listener offsets as product state
 - Automatic recovery for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics

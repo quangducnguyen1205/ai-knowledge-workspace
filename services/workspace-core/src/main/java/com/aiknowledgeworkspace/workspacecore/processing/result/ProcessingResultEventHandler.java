@@ -5,6 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
@@ -76,7 +77,7 @@ public class ProcessingResultEventHandler {
             consumedEvent.markApplied();
             consumedEventRepository.save(consumedEvent);
             return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), true);
-        } catch (RuntimeException exception) {
+        } catch (ProcessingResultEventApplyException | FastApiIntegrationException exception) {
             String safeError = safeErrorDetail(exception);
             LOGGER.warn(
                     "Processing result event {} could not be applied safely: {}",

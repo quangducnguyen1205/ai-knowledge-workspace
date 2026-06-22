@@ -101,10 +101,12 @@ Current outbox behavior:
 - Kafka publishing exists only when explicitly enabled. Scheduled relay execution is not implemented; for local smoke, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once` plus `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` can invoke the relay for exactly one selected request event.
 - Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
 - Transition warning: the Spring request outbox relay remains disabled/manual. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for manual request-path validation so the same asset is not processed twice. The smoke command is scoped by event ID so it will not relay arbitrary due outbox rows.
-- Phase 3D-F keeps Spring's manual result-event handler and `consumed_processing_result_events` idempotency table, but no automatic Kafka listener.
+- Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`.
+- The result listener defaults to consumer group `workspace-processing-result-v1` and `latest` offset reset. Start the listener before publishing result events in a local controlled run; it will not silently replay historical topic data for a new group by default.
 - `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
 - In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
 - For local smoke, capture one result envelope to a temporary file and run `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with `WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE` pointing at that file. This calls the existing manual handler once; it does not install an automatic listener.
+- Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged with `MANUAL_IMMEDIATE`, so the commit happens immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. This reduces unnecessary redelivery of earlier successfully handled records from the same poll, but delivery remains at-least-once. There is still no retry topic, DLQ, or automated failed-event recovery.
 - Delivery is at-least-once; future consumers must be idempotent.
 
 ## Startup Sequence

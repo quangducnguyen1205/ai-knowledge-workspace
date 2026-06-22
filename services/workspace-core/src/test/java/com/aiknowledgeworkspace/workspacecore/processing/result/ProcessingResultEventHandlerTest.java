@@ -13,6 +13,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
@@ -153,6 +154,51 @@ class ProcessingResultEventHandlerTest {
         assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
         assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
                 .contains("text");
+    }
+
+    @Test
+    void unexpectedRuntimeFailureIsNotConvertedIntoDurableFailedEvent() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new IllegalStateException("database unavailable"));
+
+        assertThatThrownBy(() -> processingResultEventHandler.handle(
+                transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("database unavailable");
+
+        assertThat(consumedEventRepository.findById(eventId)).isEmpty();
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+        assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
+                .isEqualTo(ProcessingJobStatus.RUNNING);
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+    }
+
+    @Test
+    void fastApiArtifactRetrievalFailureRecordsDurableFailedEvent() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new FastApiIntegrationException("FastAPI returned HTTP 503 while trying to read transcript artifact rows"));
+
+        ProcessingResultHandleResult result = processingResultEventHandler.handle(
+                transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
+        );
+
+        assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(result.applied()).isFalse();
+        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+                .contains("FastAPI returned HTTP 503");
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+        assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
+                .isEqualTo(ProcessingJobStatus.RUNNING);
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
     }
 
     @Test
