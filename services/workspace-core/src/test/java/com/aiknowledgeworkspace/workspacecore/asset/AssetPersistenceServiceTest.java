@@ -17,6 +17,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscr
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -46,6 +47,9 @@ class AssetPersistenceServiceTest {
 
     @Mock
     private OutboxEventRepository outboxEventRepository;
+
+    @Mock
+    private AssetSearchIndexRequestService assetSearchIndexRequestService;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -205,6 +209,7 @@ class AssetPersistenceServiceTest {
         ArgumentCaptor<List<AssetTranscriptRowSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
         verify(assetTranscriptRowSnapshotRepository).deleteByAssetId(assetId);
         verify(assetTranscriptRowSnapshotRepository).saveAll(snapshotsCaptor.capture());
+        verify(assetSearchIndexRequestService).requestIndexingIfEnabled(asset, savedRows);
 
         assertThat(savedRows).extracting(AssetTranscriptRowSnapshot::getSegmentIndex)
                 .containsExactly(1, 2);
@@ -269,7 +274,8 @@ class AssetPersistenceServiceTest {
                 processingJobRepository,
                 assetTranscriptRowSnapshotRepository,
                 outboxEventRepository,
-                new OutboxEventFactory(objectMapper)
+                new OutboxEventFactory(objectMapper),
+                assetSearchIndexRequestService
         );
     }
 

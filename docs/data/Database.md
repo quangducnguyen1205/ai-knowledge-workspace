@@ -19,6 +19,8 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V5__add_consumed_processing_result_events.sql` adds Spring-side idempotency records for FastAPI processing result events.
 - `V6__allow_kafka_request_processing_jobs.sql` allows direct-upload task identifiers to be nullable for explicit `kafka_request` uploads.
 - `V7__add_recoverable_processing_result_event_json.sql` adds bounded, metadata-only retained result envelopes for explicit manual recovery of durable failed result events.
+- `V8__add_asset_search_index_jobs.sql` adds PostgreSQL-owned derived search indexing jobs.
+- `V9__harden_asset_search_index_jobs.sql` adds the active-fingerprint key used to prevent duplicate active indexing jobs for the same asset and snapshot fingerprint.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -28,7 +30,7 @@ This phase intentionally productionizes the individual ownership model. It does 
 
 ## Current Relational Model
 
-Repo B currently persists seven main records:
+Repo B currently persists eight main records:
 
 - `UserAccount`
 - `Workspace`
@@ -36,6 +38,7 @@ Repo B currently persists seven main records:
 - `ProcessingJob`
 - `OutboxEvent`
 - `ConsumedProcessingResultEvent`
+- `AssetSearchIndexJob`
 - `AssetTranscriptRowSnapshot`
 
 ## Simplified Persistence Relationship Diagram
@@ -48,6 +51,7 @@ erDiagram
     ASSET ||--|| PROCESSING_JOB : tracks
     ASSET ||--o{ OUTBOX_EVENT : emits
     ASSET ||--o{ CONSUMED_PROCESSING_RESULT_EVENT : consumes
+    ASSET ||--o{ ASSET_SEARCH_INDEX_JOB : indexes
     ASSET ||--o{ ASSET_TRANSCRIPT_ROW_SNAPSHOT : snapshots
 
     WORKSPACE {
@@ -102,6 +106,17 @@ erDiagram
         instant processedAt
     }
 
+    ASSET_SEARCH_INDEX_JOB {
+        uuid id PK
+        uuid assetId FK
+        string snapshotFingerprint
+        uuid requestOutboxEventId
+        string status
+        int attemptCount
+        instant createdAt
+        instant updatedAt
+    }
+
     ASSET_TRANSCRIPT_ROW_SNAPSHOT {
         uuid snapshotId PK
         uuid assetId FK
@@ -140,6 +155,10 @@ Flyway currently defines the following persistence guardrails:
 - `outbox_events.attempt_count` must be non-negative.
 - `consumed_processing_result_events.event_id` is the durable idempotency key for consumed FastAPI result events.
 - `consumed_processing_result_events.status` is constrained to the current receive/apply/failure lifecycle values.
+- `asset_search_index_jobs.asset_id` references `assets.id`.
+- `asset_search_index_jobs.status` is constrained to the current indexing lifecycle values.
+- `asset_search_index_jobs.attempt_count` must be non-negative.
+- `asset_search_index_jobs` has a unique `(asset_id, active_fingerprint_key)` index. The key is populated only while a job is active (`PENDING` or `INDEXING`), so PostgreSQL rejects duplicate active jobs for the same asset/fingerprint while preserving terminal job history.
 - `asset_transcript_rows.asset_id` references `assets.id`.
 - Asset and processing status columns use database check constraints for the current enum values.
 - Workspace, asset, outbox, and transcript lookup paths have supporting indexes for owner/default-workspace resolution, workspace-scoped asset listing, pending outbox relay lookup, aggregate-event lookup, and asset transcript-row ordering.
@@ -289,10 +308,13 @@ Current role:
 - Kafka is event transport only; PostgreSQL remains the durable outbox and product source of truth.
 - Delivery remains at-least-once because a relay process can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future consumers must be idempotent.
 - Stores JSON payload text and never stores raw media bytes or secrets.
+- Also records metadata-only `asset.indexing.requested` with `eventVersion = 1` when automatic derived search indexing request creation is explicitly enabled.
 
 `eventVersion = 1` is a lightweight contract-version marker for the current `asset.processing.requested` payload. It describes the shape of the event payload, not the version of the database row, and gives future consumers a safe way to distinguish payload shapes as the processing request evolves.
 
 This is intentionally not a schema registry, Avro/Protobuf model, or full event framework. Project3 currently needs a small integer contract marker while Spring Boot still owns the product write path and Kafka publishing remains a later phase.
+
+`asset.indexing.requested` uses the same lightweight event-versioning approach. Its version 1 payload contains bounded metadata only: asset ID, indexing job ID, and the deterministic transcript snapshot fingerprint. It does not contain transcript text, raw media bytes, object keys, credentials, stack traces, or unbounded data.
 
 ## `ConsumedProcessingResultEvent`
 
@@ -327,6 +349,43 @@ Current role:
 - Retains a bounded, allow-listed, metadata-only copy of the original result envelope only for durable `FAILED` rows so an operator can retry that exact event later.
 - Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, automated failed-event recovery, broad failed-row scan, or scheduled consumer.
 - Supports an explicit manual recovery command for one selected `FAILED` result event ID. Recovery reuses the existing handler boundary, can move the same consumed event to `APPLIED` on success, keeps it `FAILED` on another known durable apply failure, and rethrows unexpected runtime or infrastructure failures.
+
+## `AssetSearchIndexJob`
+
+Table: `asset_search_index_jobs`
+
+Current fields:
+
+- `id` UUID primary key
+- `assetId` UUID
+- `snapshotFingerprint`
+- `activeFingerprintKey` nullable
+- `requestOutboxEventId` nullable UUID
+- `status`
+- `attemptCount`
+- `lastError`
+- `createdAt`
+- `updatedAt`
+- `indexedAt`
+
+Current status values:
+
+- `PENDING`
+- `INDEXING`
+- `INDEXED`
+- `FAILED`
+- `SUPERSEDED`
+
+Current role:
+
+- Stores Spring-owned durable intent and state for writing derived transcript search documents to Elasticsearch.
+- Uses the product-owned PostgreSQL transcript snapshot as canonical input.
+- Stores a deterministic snapshot fingerprint so duplicate events for the same snapshot are idempotent and stale events for older snapshots can become safe no-ops.
+- Uses a nullable active fingerprint key and a database unique index to prevent duplicate active `PENDING`/`INDEXING` jobs for the same asset and snapshot fingerprint under concurrent request creation.
+- Links to the `asset.indexing.requested` outbox event when automatic indexing request creation is enabled.
+- Captures bounded safe error detail for known durable indexing failures.
+- Does not store transcript text, raw media bytes, object keys, credentials, or Elasticsearch document payloads.
+- Does not implement operator reindex, workspace rebuild, reconcile workflows, retry topics, DLQ, or scheduled indexing relay yet.
 
 ## `AssetTranscriptRowSnapshot`
 
@@ -377,6 +436,14 @@ Current role:
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
 - Transcript capture can move an asset to `TRANSCRIPT_READY`.
+- Automatic search indexing request creation is controlled by `workspace.search.indexing.auto-request-enabled`, which is disabled by default in this phase.
+- When automatic indexing request creation is enabled, a successful transcript snapshot replacement can persist the stable snapshot rows, the current `AssetSearchIndexJob`, and one `asset.indexing.requested` outbox event in the same product transaction.
+- The deterministic snapshot fingerprint changes when row text, segment index, row count, or row order changes. Database-generated transcript row IDs are not part of the semantic fingerprint input.
+- A newer transcript snapshot supersedes prior active indexing jobs for older fingerprints.
+- A stale or superseded indexing event cannot mark an asset `SEARCHABLE` for a newer snapshot. The indexing executor rechecks the current PostgreSQL transcript fingerprint after Elasticsearch writes and before the final product-state transition.
+- An already `INDEXED` job for the current snapshot fingerprint makes explicit indexing idempotent: the request is treated as a successful no-op, Elasticsearch is not called again, and a `SEARCHABLE` asset remains `SEARCHABLE`.
+- A redelivered `INDEXING` job can retry safely. Elasticsearch infrastructure failures leave the job retryable instead of turning it into durable `FAILED`; deterministic domain failures such as an empty usable snapshot can still be recorded as `FAILED`.
+- The indexing listener is disabled by default. When enabled in a controlled local run, it consumes `asset.indexing.requested.v1`, loads canonical transcript rows from PostgreSQL, writes derived documents to Elasticsearch, and marks the asset `SEARCHABLE` only after a successful Elasticsearch write.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
 - Asset reads and listing require an asset to belong to a workspace owned by the current user.
@@ -389,6 +456,7 @@ Current role:
 - Transcript sync state beyond the current snapshot
 - Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
 - Kafka listener offsets as product state
+- Operator-triggered reindex, workspace-wide rebuild, or Elasticsearch reconcile state
 - Automatic recovery, broad scans, or scheduled stale-row repair for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics
@@ -409,4 +477,6 @@ Because this is a personal Docker-first project, older local PostgreSQL volumes 
 
 ## Note On Elasticsearch
 
-Elasticsearch is already used for search indexing and retrieval, but those transcript-row documents are not part of the primary relational schema described here. The current transcript-row search documents include `workspaceId` so Spring can enforce workspace-scoped search in the product API.
+Elasticsearch is already used for search indexing and retrieval, but those transcript-row documents are not part of the primary relational schema described here. The current transcript-row search documents include `workspaceId` and `assetId`, but Spring still gates search through PostgreSQL product state.
+
+Workspace-scoped search resolves currently `SEARCHABLE` asset IDs from PostgreSQL and applies a bounded Elasticsearch terms filter. Asset-scoped search returns no hits when the selected asset is not currently `SEARCHABLE` in PostgreSQL, even if stale Elasticsearch documents still exist. This keeps Elasticsearch derived and prevents stale index metadata from becoming product authority. The current bounded terms-filter approach is intentionally small-scale; larger workspace rebuild/reconcile/search-scale work remains future work.

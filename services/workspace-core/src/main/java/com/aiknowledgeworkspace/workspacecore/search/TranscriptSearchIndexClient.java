@@ -41,12 +41,12 @@ public class TranscriptSearchIndexClient {
         this.objectMapper = objectMapper;
     }
 
-    public JsonNode searchTranscriptRows(String query, UUID workspaceId, UUID assetId) {
+    public JsonNode searchTranscriptRows(String query, UUID workspaceId, UUID assetId, List<UUID> eligibleAssetIds) {
         return execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(buildSearchBody(query, workspaceId, assetId))
+                        .body(buildSearchBody(query, workspaceId, assetId, eligibleAssetIds))
                         .retrieve()
                         .body(JsonNode.class),
                 "search transcript rows"
@@ -119,13 +119,23 @@ public class TranscriptSearchIndexClient {
         validateTitleSyncResponse(assetId, responseBody);
     }
 
-    private Map<String, Object> buildSearchBody(String query, UUID workspaceId, UUID assetId) {
+    private Map<String, Object> buildSearchBody(
+            String query,
+            UUID workspaceId,
+            UUID assetId,
+            List<UUID> eligibleAssetIds
+    ) {
         List<Map<String, Object>> filterClauses = new ArrayList<>();
         filterClauses.add(termFilter("assetStatus.keyword", AssetStatus.SEARCHABLE.name()));
         filterClauses.add(termFilter("workspaceId.keyword", workspaceId.toString()));
 
         if (assetId != null) {
             filterClauses.add(termFilter("assetId.keyword", assetId.toString()));
+        } else {
+            filterClauses.add(termsFilter(
+                    "assetId.keyword",
+                    eligibleAssetIds.stream().map(UUID::toString).toList()
+            ));
         }
 
         Map<String, Object> multiMatchQuery = new LinkedHashMap<>();
@@ -169,6 +179,10 @@ public class TranscriptSearchIndexClient {
 
     private Map<String, Object> termFilter(String field, String value) {
         return Map.of("term", Map.of(field, value));
+    }
+
+    private Map<String, Object> termsFilter(String field, List<String> values) {
+        return Map.of("terms", Map.of(field, values));
     }
 
     private Map<String, Object> sortClause(String field, String order) {

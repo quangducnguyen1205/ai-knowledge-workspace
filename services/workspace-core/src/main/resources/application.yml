@@ -39,14 +39,24 @@ workspace:
       result-event-id: ${WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID:}
       outbox-event-id: ${WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID:}
       minimum-publishing-age: ${WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE:5m}
+  search:
+    indexing:
+      auto-request-enabled: ${WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED:false}
+    smoke:
+      command: ${WORKSPACE_CORE_SEARCH_SMOKE_COMMAND:none}
+      indexing-outbox-event-id: ${WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID:}
   kafka:
     enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
     bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     processing-requested-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:asset.processing.requested.v1}
     processing-result-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:asset.processing.result.v1}
+    indexing-requested-topic: ${WORKSPACE_CORE_KAFKA_INDEXING_REQUESTED_TOPIC:asset.indexing.requested.v1}
     processing-result-listener-enabled: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED:false}
     processing-result-consumer-group: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_CONSUMER_GROUP:workspace-processing-result-v1}
     processing-result-auto-offset-reset: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_AUTO_OFFSET_RESET:latest}
+    indexing-listener-enabled: ${WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED:false}
+    indexing-consumer-group: ${WORKSPACE_CORE_KAFKA_INDEXING_CONSUMER_GROUP:workspace-search-indexer-v1}
+    indexing-auto-offset-reset: ${WORKSPACE_CORE_KAFKA_INDEXING_AUTO_OFFSET_RESET:latest}
     send-timeout: ${WORKSPACE_CORE_KAFKA_SEND_TIMEOUT:10s}
     logging-placeholder-enabled: ${WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED:false}
 

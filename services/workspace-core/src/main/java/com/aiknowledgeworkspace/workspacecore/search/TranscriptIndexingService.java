@@ -7,6 +7,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import java.util.List;
@@ -19,21 +20,30 @@ public class TranscriptIndexingService {
     private final ProcessingJobRepository processingJobRepository;
     private final AssetService assetService;
     private final AssetPersistenceService assetPersistenceService;
-    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
-    private final TranscriptIndexDocumentMapper transcriptIndexDocumentMapper;
+    private final TranscriptSnapshotFingerprintService fingerprintService;
+    private final AssetSearchIndexRequestService searchIndexRequestService;
+    private final AssetSearchIndexJobRepository searchIndexJobRepository;
+    private final AssetSearchIndexingExecutor searchIndexingExecutor;
+    private final AssetIndexingEventParser indexingEventParser;
 
     public TranscriptIndexingService(
             ProcessingJobRepository processingJobRepository,
             AssetService assetService,
             AssetPersistenceService assetPersistenceService,
-            TranscriptSearchIndexClient transcriptSearchIndexClient,
-            TranscriptIndexDocumentMapper transcriptIndexDocumentMapper
+            TranscriptSnapshotFingerprintService fingerprintService,
+            AssetSearchIndexRequestService searchIndexRequestService,
+            AssetSearchIndexJobRepository searchIndexJobRepository,
+            AssetSearchIndexingExecutor searchIndexingExecutor,
+            AssetIndexingEventParser indexingEventParser
     ) {
         this.processingJobRepository = processingJobRepository;
         this.assetService = assetService;
         this.assetPersistenceService = assetPersistenceService;
-        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
-        this.transcriptIndexDocumentMapper = transcriptIndexDocumentMapper;
+        this.fingerprintService = fingerprintService;
+        this.searchIndexRequestService = searchIndexRequestService;
+        this.searchIndexJobRepository = searchIndexJobRepository;
+        this.searchIndexingExecutor = searchIndexingExecutor;
+        this.indexingEventParser = indexingEventParser;
     }
 
     public AssetIndexResponse indexAssetTranscript(UUID assetId) {
@@ -42,37 +52,58 @@ public class TranscriptIndexingService {
                 .orElseThrow(ProcessingJobNotFoundException::new);
 
         List<AssetTranscriptRowSnapshot> transcriptRows = assetService.loadUsableTranscriptSnapshot(asset, processingJob);
-
-        AssetStatus fallbackStatus = asset.getStatus() == AssetStatus.SEARCHABLE
-                ? AssetStatus.SEARCHABLE
-                : AssetStatus.TRANSCRIPT_READY;
+        String snapshotFingerprint = fingerprintService.fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = searchIndexRequestService.createExplicitJob(asset.getId(), snapshotFingerprint);
 
         try {
-            transcriptSearchIndexClient.indexTranscriptRows(toIndexOperations(asset, transcriptRows));
-            transcriptSearchIndexClient.refreshTranscriptIndex();
+            AssetSearchIndexExecutionResult result = searchIndexingExecutor.indexJob(indexingJob.getId());
+            if (result.status() != AssetSearchIndexJobStatus.INDEXED) {
+                throw new ElasticsearchIntegrationException("Asset transcript indexing did not complete: " + result.status());
+            }
         } catch (ElasticsearchIntegrationException exception) {
-            assetPersistenceService.updateAssetStatus(asset, fallbackStatus);
+            assetPersistenceService.updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
             throw exception;
         }
-
-        assetPersistenceService.updateAssetStatus(asset, AssetStatus.SEARCHABLE);
 
         return new AssetIndexResponse(asset.getId(), AssetStatus.SEARCHABLE, transcriptRows.size());
     }
 
-    private List<TranscriptSearchIndexClient.TranscriptIndexOperation> toIndexOperations(
-            Asset asset,
-            List<AssetTranscriptRowSnapshot> transcriptRows
-    ) {
-        return transcriptRows.stream()
-                .map(transcriptRow -> new TranscriptSearchIndexClient.TranscriptIndexOperation(
-                        transcriptIndexDocumentMapper.toDocumentId(asset, transcriptRow),
-                        transcriptIndexDocumentMapper.toDocument(
-                                asset,
-                                transcriptRow,
-                                AssetStatus.SEARCHABLE
-                        )
-                ))
-                .toList();
+    public AssetIndexingHandleResult handleIndexingEvent(String rawEventJson) {
+        AssetIndexingEventEnvelope event = indexingEventParser.parse(rawEventJson);
+        AssetIndexingRequestedPayload payload = event.payload();
+        AssetSearchIndexJob indexingJob = searchIndexJobRepository.findById(payload.indexingJobId())
+                .orElseThrow(() -> new AssetIndexingEventRejectedException(
+                        "Asset search index job was not found: " + payload.indexingJobId()
+                ));
+
+        validateEventMatchesJob(event, indexingJob);
+
+        AssetSearchIndexExecutionResult result = searchIndexingExecutor.indexJob(indexingJob.getId());
+        return new AssetIndexingHandleResult(
+                event.eventId(),
+                indexingJob.getId(),
+                result.status(),
+                result.indexedDocumentCount()
+        );
+    }
+
+    private void validateEventMatchesJob(AssetIndexingEventEnvelope event, AssetSearchIndexJob indexingJob) {
+        AssetIndexingRequestedPayload payload = event.payload();
+        if (!indexingJob.getAssetId().equals(event.aggregateId())) {
+            throw new AssetIndexingEventRejectedException("Indexing event aggregateId did not match job assetId");
+        }
+        if (!indexingJob.getAssetId().equals(payload.assetId())) {
+            throw new AssetIndexingEventRejectedException("Indexing event payload assetId did not match job assetId");
+        }
+        if (!indexingJob.getId().equals(payload.indexingJobId())) {
+            throw new AssetIndexingEventRejectedException("Indexing event payload indexingJobId did not match job");
+        }
+        if (!indexingJob.getSnapshotFingerprint().equals(payload.snapshotFingerprint())) {
+            throw new AssetIndexingEventRejectedException("Indexing event snapshot fingerprint did not match job");
+        }
+        if (indexingJob.getRequestOutboxEventId() != null
+                && !indexingJob.getRequestOutboxEventId().equals(event.eventId())) {
+            throw new AssetIndexingEventRejectedException("Indexing event ID did not match job request outbox event ID");
+        }
     }
 }

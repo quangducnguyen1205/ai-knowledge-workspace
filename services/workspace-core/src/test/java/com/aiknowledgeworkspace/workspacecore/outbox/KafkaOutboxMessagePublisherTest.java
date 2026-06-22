@@ -46,11 +46,55 @@ class KafkaOutboxMessagePublisherTest {
         assertThat(envelope.path("eventVersion").asInt()).isEqualTo(1);
         assertThat(envelope.path("aggregateType").asText()).isEqualTo(OutboxEventFactory.ASSET_AGGREGATE_TYPE);
         assertThat(envelope.path("aggregateId").asText()).isEqualTo(event.getAggregateId().toString());
+        assertThat(envelope.path("eventKey").asText()).isEqualTo("asset-key");
         assertThat(envelope.path("occurredAt").asText()).isEqualTo(event.getCreatedAt().toString());
         assertThat(envelope.path("payload").path("assetId").asText()).isEqualTo(event.getAggregateId().toString());
         assertThat(envelope.path("payload").path("objectKey").asText())
                 .isEqualTo("users/user-1/workspaces/workspace-1/assets/asset-1/raw/lecture.mp4");
         assertThat(envelope.toString()).doesNotContain("rawBytes", "secret", "password");
+    }
+
+    @Test
+    void publishesIndexingEventToConfiguredIndexingTopic() throws Exception {
+        KafkaOutboxMessagePublisher.KafkaSender kafkaSender = mock(KafkaOutboxMessagePublisher.KafkaSender.class);
+        when(kafkaSender.send(eq("asset.indexing.requested.v1"), eq("asset-key"), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        WorkspaceKafkaProperties properties = kafkaProperties();
+        properties.setIndexingRequestedTopic("asset.indexing.requested.v1");
+        KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(
+                properties,
+                objectMapper,
+                kafkaSender
+        );
+        UUID assetId = UUID.randomUUID();
+        UUID indexingJobId = UUID.randomUUID();
+        OutboxEvent event = new OutboxEvent(
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                1,
+                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                assetId,
+                "asset-key",
+                """
+                        {
+                          "assetId": "%s",
+                          "indexingJobId": "%s",
+                          "snapshotFingerprint": "abc123"
+                        }
+                        """.formatted(assetId, indexingJobId)
+        );
+        ReflectionTestUtils.setField(event, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(event, "createdAt", Instant.parse("2026-06-20T00:00:00Z"));
+
+        publisher.publish(event);
+
+        ArgumentCaptor<String> envelopeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(kafkaSender).send(eq("asset.indexing.requested.v1"), eq("asset-key"), envelopeCaptor.capture());
+        JsonNode envelope = objectMapper.readTree(envelopeCaptor.getValue());
+        assertThat(envelope.path("eventType").asText()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_REQUESTED);
+        assertThat(envelope.path("eventKey").asText()).isEqualTo("asset-key");
+        assertThat(envelope.path("payload").path("indexingJobId").asText()).isEqualTo(indexingJobId.toString());
+        assertThat(envelope.toString()).doesNotContain("transcript text", "objectKey", "secret", "password");
     }
 
     @Test

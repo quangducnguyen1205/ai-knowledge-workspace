@@ -10,9 +10,13 @@ public class WorkspaceKafkaProperties {
     private String bootstrapServers = "localhost:9092";
     private String processingRequestedTopic = "asset.processing.requested.v1";
     private String processingResultTopic = "asset.processing.result.v1";
+    private String indexingRequestedTopic = "asset.indexing.requested.v1";
     private boolean processingResultListenerEnabled = false;
     private String processingResultConsumerGroup = "workspace-processing-result-v1";
     private String processingResultAutoOffsetReset = "latest";
+    private boolean indexingListenerEnabled = false;
+    private String indexingConsumerGroup = "workspace-search-indexer-v1";
+    private String indexingAutoOffsetReset = "latest";
     private Duration sendTimeout = Duration.ofSeconds(10);
     private boolean loggingPlaceholderEnabled = false;
 
@@ -48,6 +52,14 @@ public class WorkspaceKafkaProperties {
         this.processingResultTopic = processingResultTopic;
     }
 
+    public String getIndexingRequestedTopic() {
+        return indexingRequestedTopic;
+    }
+
+    public void setIndexingRequestedTopic(String indexingRequestedTopic) {
+        this.indexingRequestedTopic = indexingRequestedTopic;
+    }
+
     public boolean isProcessingResultListenerEnabled() {
         return processingResultListenerEnabled;
     }
@@ -70,6 +82,30 @@ public class WorkspaceKafkaProperties {
 
     public void setProcessingResultAutoOffsetReset(String processingResultAutoOffsetReset) {
         this.processingResultAutoOffsetReset = processingResultAutoOffsetReset;
+    }
+
+    public boolean isIndexingListenerEnabled() {
+        return indexingListenerEnabled;
+    }
+
+    public void setIndexingListenerEnabled(boolean indexingListenerEnabled) {
+        this.indexingListenerEnabled = indexingListenerEnabled;
+    }
+
+    public String getIndexingConsumerGroup() {
+        return indexingConsumerGroup;
+    }
+
+    public void setIndexingConsumerGroup(String indexingConsumerGroup) {
+        this.indexingConsumerGroup = indexingConsumerGroup;
+    }
+
+    public String getIndexingAutoOffsetReset() {
+        return indexingAutoOffsetReset;
+    }
+
+    public void setIndexingAutoOffsetReset(String indexingAutoOffsetReset) {
+        this.indexingAutoOffsetReset = indexingAutoOffsetReset;
     }
 
     public Duration getSendTimeout() {

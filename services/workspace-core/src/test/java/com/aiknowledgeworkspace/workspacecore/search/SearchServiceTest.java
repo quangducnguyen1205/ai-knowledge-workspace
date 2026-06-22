@@ -9,8 +9,10 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -19,6 +21,8 @@ import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +31,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.data.domain.Sort;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -74,7 +80,7 @@ class SearchServiceTest {
                 properties,
                 new ObjectMapper()
         );
-        searchService = new SearchService(workspaceService, assetService, searchIndexClient);
+        searchService = new SearchService(workspaceService, assetService, assetRepository, searchIndexClient);
     }
 
     @AfterEach
@@ -90,9 +96,17 @@ class SearchServiceTest {
         bindSessionCurrentUser(currentUserId);
         org.mockito.Mockito.when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
                 .thenReturn(java.util.List.of(defaultWorkspace));
+        UUID assetId = UUID.randomUUID();
+        org.mockito.Mockito.when(assetRepository.findByWorkspace_IdAndStatus(
+                        defaultWorkspace.getId(),
+                        AssetStatus.SEARCHABLE,
+                        Sort.unsorted()
+                ))
+                .thenReturn(List.of(searchableAsset(assetId, defaultWorkspace.getId())));
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + defaultWorkspace.getId() + "\"")))
+                .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\":[\"" + assetId + "\"]")))
                 .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
 
         SearchResponse response = searchService.search("dynamic programming", null, null);
@@ -109,5 +123,11 @@ class SearchServiceTest {
         currentUserService.establishCurrentUser(session, currentUserId);
         request.setSession(session);
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    }
+
+    private Asset searchableAsset(UUID assetId, UUID workspaceId) {
+        Asset asset = new Asset("lecture.mp4", "Lecture", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Workspace"));
+        ReflectionTestUtils.setField(asset, "id", assetId);
+        return asset;
     }
 }

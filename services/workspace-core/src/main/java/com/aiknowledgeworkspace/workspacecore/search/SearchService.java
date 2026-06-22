@@ -2,29 +2,37 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class SearchService {
 
+    private static final int MAX_SEARCHABLE_ASSET_TERMS = 1_000;
+
     private final WorkspaceService workspaceService;
     private final AssetService assetService;
+    private final AssetRepository assetRepository;
     private final TranscriptSearchIndexClient transcriptSearchIndexClient;
 
     public SearchService(
             WorkspaceService workspaceService,
             AssetService assetService,
+            AssetRepository assetRepository,
             TranscriptSearchIndexClient transcriptSearchIndexClient
     ) {
         this.workspaceService = workspaceService;
         this.assetService = assetService;
+        this.assetRepository = assetRepository;
         this.transcriptSearchIndexClient = transcriptSearchIndexClient;
     }
 
@@ -32,10 +40,15 @@ public class SearchService {
         String normalizedQuery = normalizeQuery(query);
         UUID resolvedWorkspaceId = workspaceService.resolveWorkspaceOrDefault(workspaceId).getId();
         UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
+        List<UUID> eligibleAssetIds = resolveEligibleAssetIds(resolvedWorkspaceId, validatedAssetId);
+        if (eligibleAssetIds.isEmpty()) {
+            return new SearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, 0, List.of());
+        }
         JsonNode responseBody = transcriptSearchIndexClient.searchTranscriptRows(
                 normalizedQuery,
                 resolvedWorkspaceId,
-                validatedAssetId
+                validatedAssetId,
+                eligibleAssetIds
         );
 
         return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, responseBody);
@@ -58,7 +71,33 @@ public class SearchService {
             throw new AssetNotFoundException();
         }
 
+        if (asset.getStatus() != AssetStatus.SEARCHABLE) {
+            return assetId;
+        }
+
         return assetId;
+    }
+
+    private List<UUID> resolveEligibleAssetIds(UUID workspaceId, UUID assetId) {
+        if (assetId != null) {
+            Asset asset = assetService.getAsset(assetId);
+            return asset.getStatus() == AssetStatus.SEARCHABLE ? List.of(assetId) : List.of();
+        }
+
+        List<UUID> eligibleAssetIds = assetRepository.findByWorkspace_IdAndStatus(
+                        workspaceId,
+                        AssetStatus.SEARCHABLE,
+                        Sort.unsorted()
+                ).stream()
+                .map(Asset::getId)
+                .toList();
+        if (eligibleAssetIds.size() > MAX_SEARCHABLE_ASSET_TERMS) {
+            throw new InvalidSearchRequestException(
+                    "SEARCH_SCOPE_TOO_LARGE",
+                    "Workspace search currently supports up to " + MAX_SEARCHABLE_ASSET_TERMS + " searchable assets"
+            );
+        }
+        return eligibleAssetIds;
     }
 
     private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {

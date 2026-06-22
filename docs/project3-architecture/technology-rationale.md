@@ -293,13 +293,15 @@ Indexing should happen after product state is saved:
 ```text
 Spring consumes transcript.ready
 -> Spring writes transcript/status to Product PostgreSQL
--> Spring publishes index.requested
+-> Spring may publish asset.indexing.requested
 -> Spring indexing consumer writes derived rows to Elasticsearch
 ```
 
 Spring remains responsible for user/workspace/asset scope, deciding what can be indexed, shaping the public search response, and falling back to PostgreSQL transcript snapshots for context.
 
 Do not let Elasticsearch become the source of truth or authorization authority.
+
+Phase P3-B1 implements this as a PostgreSQL-owned indexing job and outbox foundation. The deterministic snapshot fingerprint is computed from ordered transcript row semantics, including row count, segment index, row text, and row order, not database-generated row IDs. The `asset.indexing.requested` v1 payload contains only asset ID, indexing job ID, and snapshot fingerprint. Automatic request creation and the Kafka listener are disabled by default; explicit indexing still works and uses the same core logic. Same-fingerprint indexing is idempotent after a successful index, PostgreSQL prevents duplicate active jobs for the same asset/fingerprint, and final indexing completion rechecks the current transcript fingerprint before marking the product asset `SEARCHABLE`. Search responses are gated by current PostgreSQL asset state so stale Elasticsearch documents cannot authorize or expose a non-searchable asset.
 
 Optional note: OpenSearch is a reasonable future alternative if license or deployment constraints require it, but Elasticsearch remains the primary Project3 choice because of popularity and learning relevance.
 

@@ -45,7 +45,7 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         String envelope = buildEnvelope(event);
         try {
             kafkaSender
-                    .send(properties.getProcessingRequestedTopic(), event.getEventKey(), envelope)
+                    .send(topicFor(event), event.getEventKey(), envelope)
                     .get(resolvedSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -73,6 +73,7 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         envelope.put("eventVersion", event.getEventVersion());
         envelope.put("aggregateType", event.getAggregateType());
         envelope.put("aggregateId", requireId(event.getAggregateId()));
+        envelope.put("eventKey", event.getEventKey());
         envelope.put("occurredAt", resolveOccurredAt(event).toString());
         envelope.set("payload", readPayload(event));
 
@@ -81,6 +82,14 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         } catch (JsonProcessingException exception) {
             throw new OutboxPublishException("Kafka envelope serialization failed", exception);
         }
+    }
+
+    private String topicFor(OutboxEvent event) {
+        return switch (event.getEventType()) {
+            case OutboxEventFactory.ASSET_PROCESSING_REQUESTED -> properties.getProcessingRequestedTopic();
+            case OutboxEventFactory.ASSET_INDEXING_REQUESTED -> properties.getIndexingRequestedTopic();
+            default -> throw new OutboxPublishException("No Kafka topic configured for event type " + event.getEventType());
+        };
     }
 
     private JsonNode readPayload(OutboxEvent event) {

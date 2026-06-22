@@ -80,11 +80,25 @@ Current Kafka defaults:
 - `WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
 - `WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC=asset.processing.requested.v1`
 - `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC=asset.processing.result.v1`
+- `WORKSPACE_CORE_KAFKA_INDEXING_REQUESTED_TOPIC=asset.indexing.requested.v1`
 - `WORKSPACE_CORE_KAFKA_SEND_TIMEOUT=10s`
 - `WORKSPACE_CORE_KAFKA_ENABLED=false`
 - `WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED=false`
 
-Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1` and `asset.processing.result.v1`. Each topic uses one partition and replication factor one for local development.
+Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1`, `asset.processing.result.v1`, and `asset.indexing.requested.v1`. Each topic uses one partition and replication factor one for local development.
+
+Current derived search indexing defaults:
+
+- `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`
+- `WORKSPACE_CORE_SEARCH_SMOKE_COMMAND=none`
+- `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID=`
+- `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=false`
+- `WORKSPACE_CORE_KAFKA_INDEXING_CONSUMER_GROUP=workspace-search-indexer-v1`
+- `WORKSPACE_CORE_KAFKA_INDEXING_AUTO_OFFSET_RESET=latest`
+
+Explicit `POST /api/assets/{assetId}/index` remains supported and uses the same indexing core as the async foundation. A repeated explicit index request for the same already-indexed snapshot is a successful no-op and does not call Elasticsearch again. Automatic indexing request creation is opt-in. When enabled, a stable Spring-owned transcript snapshot can create an `asset_search_index_jobs` row and one metadata-only `asset.indexing.requested` outbox event in the same product transaction. PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint, and indexing completion rechecks the current transcript fingerprint before marking the asset `SEARCHABLE`. The indexing payload contains asset ID, indexing job ID, and snapshot fingerprint only; it does not contain transcript text, raw media bytes, object keys, credentials, or stack traces.
+
+`relay_indexing_outbox_once` is a disabled-by-default smoke command that requires `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID` and relays only that selected `asset.indexing.requested` outbox row. The indexing listener is also disabled by default. Runtime indexing listener smoke, operator reindex, workspace rebuild, reconcile workflows, scheduled indexing relay, retry topics, and DLQ remain future work.
 
 Current outbox-relay defaults:
 
@@ -158,6 +172,7 @@ curl http://localhost:9000/minio/health/live
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.processing.requested.v1
 docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.processing.result.v1
+docker compose --env-file .env -f infra/docker-compose.dev.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic asset.indexing.requested.v1
 ```
 
 Optional Kafka-only CLI smoke, independent of the product outbox table:
@@ -182,7 +197,7 @@ docker compose --env-file .env -f infra/docker-compose.dev.yml exec -T kafka \
 ```
 
 The compose file also runs a short-lived `minio-create-bucket` helper that creates the configured raw-media bucket if it does not already exist.
-It also runs `kafka-create-topics`, which creates `asset.processing.requested.v1` and `asset.processing.result.v1` if they do not already exist.
+It also runs `kafka-create-topics`, which creates `asset.processing.requested.v1`, `asset.processing.result.v1`, and `asset.indexing.requested.v1` if they do not already exist.
 
 ### 4. Start Spring Boot Second
 

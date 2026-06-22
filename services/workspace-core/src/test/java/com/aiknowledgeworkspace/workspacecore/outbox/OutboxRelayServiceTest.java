@@ -224,6 +224,32 @@ class OutboxRelayServiceTest {
     }
 
     @Test
+    void scopedIndexingRelayPublishesOnlySelectedDueIndexingEvent() {
+        OutboxEvent selectedEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent unrelatedDueEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+
+        OutboxEventStatus status = outboxRelayService.relayIndexingEventByIdOnce(selectedEvent.getId());
+
+        assertThat(status).isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(selectedEvent.getId());
+        assertThat(outboxEventRepository.findById(selectedEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(outboxEventRepository.findById(unrelatedDueEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+    }
+
+    @Test
+    void scopedIndexingRelayRejectsProcessingRequestEvent() {
+        OutboxEvent processingEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+
+        assertThatThrownBy(() -> outboxRelayService.relayIndexingEventByIdOnce(processingEvent.getId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("asset.indexing.requested");
+
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
+    }
+
+    @Test
     void relayPropertiesAreDisabledByDefault() {
         assertThat(new OutboxRelayProperties().isEnabled()).isFalse();
     }
@@ -237,6 +263,20 @@ class OutboxRelayServiceTest {
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
+        );
+    }
+
+    private OutboxEvent newIndexingOutboxEvent() {
+        UUID assetId = UUID.randomUUID();
+        UUID indexingJobId = UUID.randomUUID();
+        return new OutboxEvent(
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED_VERSION,
+                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                "{\"assetId\":\"%s\",\"indexingJobId\":\"%s\",\"snapshotFingerprint\":\"abc123\"}"
+                        .formatted(assetId, indexingJobId)
         );
     }
 

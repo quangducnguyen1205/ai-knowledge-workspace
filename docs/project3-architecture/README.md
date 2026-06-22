@@ -178,7 +178,7 @@ The interactive assistant flow does not need Kafka by default because the user i
 13. FastAPI publishes `transcript.ready` or `asset.processing.failed` back to Kafka.
 14. Spring Boot consumes the result event.
 15. Spring Boot saves the transcript snapshot/result and job status in Product PostgreSQL.
-16. Spring Boot creates/publishes `index.requested` after product state is durable.
+16. Spring Boot may create an `asset.indexing.requested` outbox event after product state is durable.
 17. A Spring-owned indexing consumer writes searchable transcript rows into Elasticsearch.
 
 Spring Boot does not stream media bytes to FastAPI in the main processing path. MinIO object keys and internal service credentials keep the media path explicit and scalable.
@@ -187,11 +187,14 @@ Current implementation note: Phase 3I keeps the Phase 3C Kafka publisher foundat
 
 Spring validates `transcript.ready` v1 and `asset.processing.failed` v1 envelopes, records consumed-event idempotency in PostgreSQL by `eventId`, and can apply product-state transitions through either the one-shot local handler or the disabled-by-default listener. Result events correlate to the original Spring `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring matches the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. For `transcript.ready`, Spring retrieves transcript artifact rows from FastAPI by `processingRequestId`, validates the complete row set, and only then replaces its product-owned transcript snapshot and marks the asset ready. The listener defaults to disabled, consumer group `workspace-processing-result-v1`, offset reset `latest`, and `MANUAL_IMMEDIATE` acknowledgement; start it before publishing result events in controlled local runs. Phase 3I adds explicit operator recovery controls for one selected durable `FAILED` result event or one selected stale `PUBLISHING` request outbox event. These commands are exact-ID scoped and disabled by default. No retry topic, DLQ, FastAPI repository change, scheduled recovery, Kafka transactions, Schema Registry, Avro, or Protobuf are implemented yet. Delivery remains at-least-once, so Spring dedupes result events by `eventId` and consumers must remain idempotent.
 
+Phase P3-B1 adds the derived search indexing foundation. PostgreSQL-owned transcript snapshots remain canonical. `asset_search_index_jobs` tracks one asset/snapshot indexing request with a deterministic snapshot fingerprint, and `asset.indexing.requested` v1 carries bounded metadata only: asset ID, indexing job ID, and snapshot fingerprint. PostgreSQL rejects duplicate active jobs for the same asset/fingerprint, same-fingerprint explicit indexing is an idempotent no-op after a successful index, and indexing finalization rechecks the current snapshot fingerprint before marking an asset `SEARCHABLE`. Automatic request creation is opt-in and disabled by default with `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`; explicit Project 2 indexing remains supported through the same indexing core. The indexing listener for `asset.indexing.requested.v1` is disabled by default and has not been runtime-smoked yet.
+
 ### 3. Search
 
 1. Search API remains frontend -> Nginx -> Spring Boot -> Elasticsearch -> Spring Boot.
 2. Spring Boot enforces authorization and user/workspace scope before returning search results.
 3. Transcript context is read from Product PostgreSQL snapshots when product truth is required.
+4. Spring gates search by Product PostgreSQL asset state so stale Elasticsearch documents do not make non-searchable assets visible.
 
 Elasticsearch is derived. Product PostgreSQL remains the truth for transcript snapshots and product status.
 

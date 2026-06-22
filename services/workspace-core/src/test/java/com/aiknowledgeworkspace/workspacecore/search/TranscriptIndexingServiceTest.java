@@ -2,18 +2,9 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.hamcrest.Matchers.containsString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.ExpectedCount.twice;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
@@ -21,25 +12,21 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.http.MediaType;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpMethod;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
 
 @ExtendWith(MockitoExtension.class)
 class TranscriptIndexingServiceTest {
@@ -53,250 +40,180 @@ class TranscriptIndexingServiceTest {
     @Mock
     private AssetPersistenceService assetPersistenceService;
 
-    private MockRestServiceServer mockServer;
-    private TranscriptIndexingService transcriptIndexingService;
+    @Mock
+    private TranscriptSnapshotFingerprintService fingerprintService;
 
-    @BeforeEach
-    void setUp() {
-        RestClient.Builder builder = RestClient.builder()
-                .baseUrl("http://localhost:9201");
-        mockServer = MockRestServiceServer.bindTo(builder).build();
+    @Mock
+    private AssetSearchIndexRequestService searchIndexRequestService;
 
-        ElasticsearchProperties properties = new ElasticsearchProperties();
-        properties.setBaseUrl("http://localhost:9201");
-        properties.setTranscriptIndexName("asset-transcript-rows");
+    @Mock
+    private AssetSearchIndexJobRepository searchIndexJobRepository;
 
-        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
-                builder.build(),
-                properties,
-                new ObjectMapper()
-        );
-        transcriptIndexingService = new TranscriptIndexingService(
-                processingJobRepository,
-                assetService,
-                assetPersistenceService,
-                searchIndexClient,
-                new TranscriptIndexDocumentMapper()
-        );
-    }
+    @Mock
+    private AssetSearchIndexingExecutor searchIndexingExecutor;
+
+    @Mock
+    private AssetIndexingEventParser indexingEventParser;
 
     @Test
-    void indexingSucceedsForTranscriptUsableAsset() {
+    void explicitIndexingUsesSharedIndexingJobExecutor() {
         UUID assetId = UUID.randomUUID();
-        UUID workspaceId = UUID.randomUUID();
-        Asset asset = asset(assetId, workspaceId, "Lecture 1", AssetStatus.TRANSCRIPT_READY);
-        ProcessingJob processingJob = processingJob(assetId, "task-1", "video-1");
-        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
-                transcriptRow(assetId, "row-1", "video-1", 0, "Binary search tree overview"),
-                transcriptRow(assetId, "row-2", "video-1", 1, "Traversal example")
-        );
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture", AssetStatus.TRANSCRIPT_READY);
+        ProcessingJob processingJob = processingJob(assetId);
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(transcriptRow(assetId, 0, "Searchable text"));
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
+        when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
+        when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
+        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
+                indexingJob.getId(),
+                AssetSearchIndexJobStatus.INDEXED,
+                1
+        ));
 
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-1\"}}")))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-2\"}}")))
-                .andExpect(content().string(containsString("\"assetTitle\":\"Lecture 1\"")))
-                .andExpect(content().string(containsString("\"transcriptRowId\":\"row-1\"")))
-                .andExpect(content().string(containsString("\"transcriptRowId\":\"row-2\"")))
-                .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
-                .andExpect(content().string(containsString("\"assetStatus\":\"SEARCHABLE\"")))
-                .andRespond(withSuccess("""
-                        {
-                          "errors": false,
-                          "items": [
-                            {"index": {"_id": "%s-row-1", "status": 201}},
-                            {"index": {"_id": "%s-row-2", "status": 201}}
-                          ]
-                        }
-                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
-
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess());
-
-        AssetIndexResponse response = transcriptIndexingService.indexAssetTranscript(assetId);
+        AssetIndexResponse response = transcriptIndexingService().indexAssetTranscript(assetId);
 
         assertThat(response.assetId()).isEqualTo(assetId);
         assertThat(response.assetStatus()).isEqualTo(AssetStatus.SEARCHABLE);
-        assertThat(response.indexedDocumentCount()).isEqualTo(2);
-
-        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
-        mockServer.verify();
+        assertThat(response.indexedDocumentCount()).isEqualTo(1);
+        verify(searchIndexingExecutor).indexJob(indexingJob.getId());
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
     }
 
     @Test
-    void indexingIsRejectedForEmptyTranscript() {
+    void explicitIndexingAlreadyIndexedSameFingerprintIsIdempotentSuccess() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 2", AssetStatus.TRANSCRIPT_READY);
-        ProcessingJob processingJob = processingJob(assetId, "task-2", "video-2");
-
-        when(assetService.getAsset(assetId)).thenReturn(asset);
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob))
-                .thenThrow(new com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException(
-                        "TRANSCRIPT_NOT_USABLE",
-                        "Transcript is empty or unusable for this asset"
-                ));
-
-        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
-                .isInstanceOf(com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException.class)
-                .satisfies(exception -> {
-                    com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException transcriptException =
-                            (com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException) exception;
-                    assertThat(transcriptException.getCode()).isEqualTo("TRANSCRIPT_NOT_USABLE");
-                    assertThat(transcriptException.getMessage()).isEqualTo("Transcript is empty or unusable for this asset");
-                });
-
-        verify(assetPersistenceService, never()).updateAssetStatus(eq(asset), eq(AssetStatus.SEARCHABLE));
-    }
-
-    @Test
-    void partialBulkFailureDoesNotMarkAssetAsSearchable() {
-        UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 3", AssetStatus.TRANSCRIPT_READY);
-        ProcessingJob processingJob = processingJob(assetId, "task-3", "video-3");
-        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
-                transcriptRow(assetId, "row-3", "video-3", 0, "Heap property explanation"),
-                transcriptRow(assetId, "row-4", "video-3", 1, "Heap sort walkthrough")
-        );
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture", AssetStatus.SEARCHABLE);
+        ProcessingJob processingJob = processingJob(assetId);
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(transcriptRow(assetId, 0, "Searchable text"));
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
+        indexingJob.markIndexing();
+        indexingJob.markIndexed(Instant.now());
 
         when(assetService.getAsset(assetId)).thenReturn(asset);
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
+        when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
+        when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
+        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
+                indexingJob.getId(),
+                AssetSearchIndexJobStatus.INDEXED,
+                0
+        ));
 
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-3\"}}")))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-4\"}}")))
-                .andRespond(withSuccess("""
-                        {
-                          "errors": true,
-                          "items": [
-                            {"index": {"_id": "%s-row-3", "status": 201}},
-                            {"index": {"_id": "%s-row-4", "status": 429, "error": {"reason": "queue full"}}}
-                          ]
-                        }
-                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
+        AssetIndexResponse response = transcriptIndexingService().indexAssetTranscript(assetId);
 
-        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
-                .hasMessageContaining("Elasticsearch bulk indexing failed for document " + assetId + "-row-4")
-                .hasMessageContaining("queue full");
+        assertThat(response.assetId()).isEqualTo(assetId);
+        assertThat(response.assetStatus()).isEqualTo(AssetStatus.SEARCHABLE);
+        assertThat(response.indexedDocumentCount()).isEqualTo(1);
+        verify(searchIndexingExecutor).indexJob(indexingJob.getId());
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+    }
+
+    @Test
+    void explicitIndexingFailureDoesNotRecordDurableJobFailureAndDoesNotMarkSearchable() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture", AssetStatus.SEARCHABLE);
+        ProcessingJob processingJob = processingJob(assetId);
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(transcriptRow(assetId, 0, "Searchable text"));
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
+        ElasticsearchIntegrationException failure = new ElasticsearchIntegrationException("bulk failed");
+
+        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
+        when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
+        when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
+        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenThrow(failure);
+
+        assertThatThrownBy(() -> transcriptIndexingService().indexAssetTranscript(assetId))
+                .isSameAs(failure);
 
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
         verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
-        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
-        mockServer.verify();
     }
 
     @Test
-    void indexingFailureDoesNotMarkAssetAsSearchableWhenBulkRequestFails() {
+    void handleIndexingEventValidatesJobAndExecutesIt() {
+        UUID eventId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 4", AssetStatus.TRANSCRIPT_READY);
-        ProcessingJob processingJob = processingJob(assetId, "task-4", "video-4");
-        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
-                transcriptRow(assetId, "row-5", "video-4", 0, "Red black tree overview")
-        );
+        UUID indexingJobId = UUID.randomUUID();
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(indexingJobId, assetId, "fingerprint-1");
+        indexingJob.attachRequestOutboxEvent(eventId);
+        AssetIndexingEventEnvelope envelope = envelope(eventId, assetId, indexingJobId, "fingerprint-1");
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
+        when(indexingEventParser.parse("raw-event")).thenReturn(envelope);
+        when(searchIndexJobRepository.findById(indexingJobId)).thenReturn(Optional.of(indexingJob));
+        when(searchIndexingExecutor.indexJob(indexingJobId)).thenReturn(new AssetSearchIndexExecutionResult(
+                indexingJobId,
+                AssetSearchIndexJobStatus.INDEXED,
+                2
+        ));
 
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withServerError());
+        AssetIndexingHandleResult result = transcriptIndexingService().handleIndexingEvent("raw-event");
 
-        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
-                .hasMessageContaining("Elasticsearch returned HTTP 500");
-
-        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
-        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
-        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
-        mockServer.verify();
+        assertThat(result.eventId()).isEqualTo(eventId);
+        assertThat(result.indexingJobId()).isEqualTo(indexingJobId);
+        assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
+        assertThat(result.indexedDocumentCount()).isEqualTo(2);
     }
 
     @Test
-    void repeatedIndexingReusesStableDocumentIdsForSameAsset() {
+    void handleIndexingEventRejectsMismatchedJobFingerprint() {
+        UUID eventId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        UUID workspaceId = UUID.randomUUID();
-        Asset firstAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.TRANSCRIPT_READY);
-        Asset searchableAsset = asset(assetId, workspaceId, "Lecture 5", AssetStatus.SEARCHABLE);
-        ProcessingJob processingJob = processingJob(assetId, "task-5", "video-5");
-        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
-                transcriptRow(assetId, "row-6", "video-5", 0, "Graph traversal overview"),
-                transcriptRow(assetId, "row-7", "video-5", 1, "Breadth first search example")
-        );
+        UUID indexingJobId = UUID.randomUUID();
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(indexingJobId, assetId, "fingerprint-1");
+        indexingJob.attachRequestOutboxEvent(eventId);
 
-        when(assetService.getAsset(assetId)).thenReturn(firstAsset, searchableAsset);
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptSnapshot(firstAsset, processingJob)).thenReturn(transcriptRows);
-        when(assetService.loadUsableTranscriptSnapshot(searchableAsset, processingJob)).thenReturn(transcriptRows);
+        when(indexingEventParser.parse("raw-event")).thenReturn(envelope(
+                eventId,
+                assetId,
+                indexingJobId,
+                "other-fingerprint"
+        ));
+        when(searchIndexJobRepository.findById(indexingJobId)).thenReturn(Optional.of(indexingJob));
 
-        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-6\"}}")))
-                .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-7\"}}")))
-                .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
-                .andRespond(withSuccess("""
-                        {
-                          "errors": false,
-                          "items": [
-                            {"index": {"_id": "%s-row-6", "status": 200}},
-                            {"index": {"_id": "%s-row-7", "status": 200}}
-                          ]
-                        }
-                        """.formatted(assetId, assetId), MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> transcriptIndexingService().handleIndexingEvent("raw-event"))
+                .isInstanceOf(AssetIndexingEventRejectedException.class)
+                .hasMessageContaining("snapshot fingerprint");
 
-        mockServer.expect(twice(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess());
-
-        AssetIndexResponse firstResponse = transcriptIndexingService.indexAssetTranscript(assetId);
-        AssetIndexResponse secondResponse = transcriptIndexingService.indexAssetTranscript(assetId);
-
-        assertThat(firstResponse.indexedDocumentCount()).isEqualTo(2);
-        assertThat(secondResponse.indexedDocumentCount()).isEqualTo(2);
-        verify(assetPersistenceService).updateAssetStatus(firstAsset, AssetStatus.SEARCHABLE);
-        verify(assetPersistenceService).updateAssetStatus(searchableAsset, AssetStatus.SEARCHABLE);
-        mockServer.verify();
+        verify(searchIndexingExecutor, never()).indexJob(indexingJobId);
     }
 
-    @Test
-    void partialBulkFailureKeepsAlreadySearchableAssetSearchable() {
-        UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, UUID.randomUUID(), "Lecture 6", AssetStatus.SEARCHABLE);
-        ProcessingJob processingJob = processingJob(assetId, "task-6", "video-6");
-        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
-                transcriptRow(assetId, "row-8", "video-6", 0, "Union find recap")
+    private TranscriptIndexingService transcriptIndexingService() {
+        return new TranscriptIndexingService(
+                processingJobRepository,
+                assetService,
+                assetPersistenceService,
+                fingerprintService,
+                searchIndexRequestService,
+                searchIndexJobRepository,
+                searchIndexingExecutor,
+                indexingEventParser
         );
+    }
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(assetService.loadUsableTranscriptSnapshot(asset, processingJob)).thenReturn(transcriptRows);
-
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("""
-                        {
-                          "errors": true,
-                          "items": [
-                            {"index": {"_id": "%s-row-8", "status": 409, "error": {"reason": "version conflict"}}}
-                          ]
-                        }
-                        """.formatted(assetId), MediaType.APPLICATION_JSON));
-
-        assertThatThrownBy(() -> transcriptIndexingService.indexAssetTranscript(assetId))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
-                .hasMessageContaining("version conflict");
-
-        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
-        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.FAILED);
-        mockServer.verify();
+    private AssetIndexingEventEnvelope envelope(
+            UUID eventId,
+            UUID assetId,
+            UUID indexingJobId,
+            String snapshotFingerprint
+    ) {
+        return new AssetIndexingEventEnvelope(
+                eventId,
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                1,
+                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                Instant.parse("2026-06-22T00:00:00Z"),
+                new AssetIndexingRequestedPayload(assetId, indexingJobId, snapshotFingerprint)
+        );
     }
 
     private Asset asset(UUID assetId, UUID workspaceId, String title, AssetStatus status) {
@@ -305,27 +222,21 @@ class TranscriptIndexingServiceTest {
         return asset;
     }
 
-    private ProcessingJob processingJob(UUID assetId, String taskId, String videoId) {
+    private ProcessingJob processingJob(UUID assetId) {
         return new ProcessingJob(
                 assetId,
-                taskId,
-                videoId,
+                "task-1",
+                "video-1",
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
     }
 
-    private AssetTranscriptRowSnapshot transcriptRow(
-            UUID assetId,
-            String transcriptRowId,
-            String videoId,
-            int segmentIndex,
-            String text
-    ) {
+    private AssetTranscriptRowSnapshot transcriptRow(UUID assetId, int segmentIndex, String text) {
         return new AssetTranscriptRowSnapshot(
                 assetId,
-                transcriptRowId,
-                videoId,
+                "row-" + segmentIndex,
+                "video-1",
                 segmentIndex,
                 text,
                 "2026-03-26T00:00:00Z"

@@ -93,9 +93,10 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm Repo B MinIO is up on `9000`.
 - [ ] Confirm the configured MinIO bucket exists, or that the `minio-create-bucket` compose helper completed successfully.
 - [ ] Confirm Repo B Kafka is up on `9092` if you are validating local Kafka infrastructure.
-- [ ] Confirm the `kafka-create-topics` compose helper created `asset.processing.requested.v1` and `asset.processing.result.v1`.
+- [ ] Confirm the `kafka-create-topics` compose helper created `asset.processing.requested.v1`, `asset.processing.result.v1`, and `asset.indexing.requested.v1`.
 - [ ] Confirm `asset.processing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
+- [ ] Confirm `asset.indexing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
 - [ ] Kafka is not required for the normal upload smoke path because `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` remains the default product trigger.
 - [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once`, and `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` for an explicit scoped one-shot relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads; the smoke command relays only the selected event ID and will not publish arbitrary due outbox rows.
@@ -106,6 +107,12 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Durable `FAILED` result rows can be retried only through exact-ID operator recovery: `WORKSPACE_CORE_PROCESSING_RECOVERY_COMMAND=retry_failed_result_event_once` plus `WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID=<result-event-id>`. This uses the retained bounded metadata-only envelope; it is not a scan of all failed rows.
 - [ ] Stale request outbox rows in `PUBLISHING` can be requeued only through exact-ID operator recovery: `WORKSPACE_CORE_PROCESSING_RECOVERY_COMMAND=requeue_stuck_outbox_event_once`, `WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID=<outbox-event-id>`, and `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE=<duration>`. Requeue does not publish; invoke the scoped request relay separately if needed.
 - [ ] For manual result-event handling, confirm `payload.processingRequestId` equals `causationEventId` and matches `ProcessingJob.processingRequestEventId`; do not use `fastapiTaskId` for Kafka result correlation.
+- [ ] Derived search indexing auto-request is disabled by default with `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`.
+- [ ] If validating the indexing event path later, use a stable Spring-owned transcript snapshot, enable auto-request explicitly, capture the selected `asset.indexing.requested` outbox event ID, and relay only that selected row with `WORKSPACE_CORE_SEARCH_SMOKE_COMMAND=relay_indexing_outbox_once` and `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID=<outbox-event-id>`.
+- [ ] The indexing listener is off by default. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=true`; the default consumer group is `workspace-search-indexer-v1`, and default offset reset is `latest`.
+- [ ] Indexing events must contain bounded metadata only: `assetId`, `indexingJobId`, and `snapshotFingerprint`. Do not include transcript text, object keys, raw media bytes, credentials, or stack traces.
+- [ ] PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint. Repeated indexing of an already-indexed identical snapshot should be a successful no-op, while a changed transcript snapshot must create or use a distinct current job.
+- [ ] Indexing completion rechecks the current transcript fingerprint before marking an asset `SEARCHABLE`; stale or superseded jobs must not make a newer snapshot searchable.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
   - [ ] `curl http://localhost:8081/health`
@@ -564,7 +571,8 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm the returned `assetStatus` is `SEARCHABLE`.
 - [ ] Call `POST /api/assets/{assetId}/index` again for the same asset.
 - [ ] Expect HTTP `200` again.
-- [ ] Confirm the asset stays `SEARCHABLE` and the rerun does not require cleanup before retrying.
+- [ ] Confirm the asset stays `SEARCHABLE`; if the transcript snapshot has not changed, the rerun is idempotent and should not require another Elasticsearch write before reporting success.
+- [ ] Optional async-indexing foundation check for a later phase: after a transcript snapshot is stable and auto-request is explicitly enabled, confirm Product PostgreSQL has one `asset_search_index_jobs` row for the current snapshot fingerprint and one `asset.indexing.requested` outbox row. Do not mark this as listener smoke unless the disabled-by-default indexing listener was actually started and observed.
 
 ### Failure Path
 
@@ -603,7 +611,8 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm results come from Spring's product response shape, not a FastAPI search response.
 - [ ] Confirm `workspaceIdFilter` matches the requested workspace or the current user's default workspace when omitted.
 - [ ] Confirm search only returns results inside the resolved workspace scope.
-- [ ] Confirm search returns only assets that were successfully indexed and are `SEARCHABLE`.
+- [ ] Confirm search returns only assets that are currently `SEARCHABLE` according to Product PostgreSQL, not merely according to stale Elasticsearch document metadata.
+- [ ] If possible, create or retain stale Elasticsearch documents for an asset whose Product PostgreSQL status is not `SEARCHABLE`; confirm workspace search and asset-scoped search do not return them.
 - [ ] If you know a short phrase that appears verbatim in one transcript row or asset title, search for that phrase and confirm the obvious phrase match rises near the top of the returned results.
 - [ ] Re-establish the auth session as a different user, then call `GET /api/search?q=your-query`.
 - [ ] Confirm results from another user's workspace do not appear.

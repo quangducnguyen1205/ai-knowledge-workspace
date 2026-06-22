@@ -69,7 +69,34 @@ public class OutboxRelayService {
 
         OutboxEvent event = outboxEventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + eventId));
-        validateSelectedRequestEvent(event, Instant.now(clock));
+        validateSelectedEvent(
+                event,
+                Instant.now(clock),
+                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
+                "Manual smoke relay only supports asset.processing.requested events"
+        );
+
+        if (!relayEvent(event)) {
+            throw new IllegalStateException("Outbox event could not be claimed for publishing: " + eventId);
+        }
+
+        return outboxEventRepository.findById(eventId).orElseThrow().getStatus();
+    }
+
+    @Transactional
+    public OutboxEventStatus relayIndexingEventByIdOnce(UUID eventId) {
+        if (!outboxRelayProperties.isEnabled()) {
+            throw new IllegalStateException("Outbox relay is disabled");
+        }
+
+        OutboxEvent event = outboxEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + eventId));
+        validateSelectedEvent(
+                event,
+                Instant.now(clock),
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                "Manual search smoke relay only supports asset.indexing.requested events"
+        );
 
         if (!relayEvent(event)) {
             throw new IllegalStateException("Outbox event could not be claimed for publishing: " + eventId);
@@ -106,11 +133,14 @@ public class OutboxRelayService {
         return true;
     }
 
-    private void validateSelectedRequestEvent(OutboxEvent event, Instant now) {
-        if (!OutboxEventFactory.ASSET_PROCESSING_REQUESTED.equals(event.getEventType())) {
-            throw new IllegalStateException(
-                    "Manual smoke relay only supports asset.processing.requested events: " + event.getId()
-            );
+    private void validateSelectedEvent(
+            OutboxEvent event,
+            Instant now,
+            String requiredEventType,
+            String eventTypeError
+    ) {
+        if (!requiredEventType.equals(event.getEventType())) {
+            throw new IllegalStateException(eventTypeError + ": " + event.getId());
         }
         if (event.getStatus() == OutboxEventStatus.PUBLISHED) {
             throw new IllegalStateException("Outbox event is already published: " + event.getId());

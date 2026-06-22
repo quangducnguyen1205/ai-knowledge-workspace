@@ -15,6 +15,9 @@ public class OutboxEventFactory {
     public static final String ASSET_PROCESSING_REQUESTED = "asset.processing.requested";
     public static final int ASSET_PROCESSING_REQUESTED_VERSION = 1;
     public static final String ASSET_AGGREGATE_TYPE = "Asset";
+    public static final String ASSET_INDEXING_REQUESTED = "asset.indexing.requested";
+    public static final int ASSET_INDEXING_REQUESTED_VERSION = 1;
+    public static final String ASSET_INDEXING_AGGREGATE_TYPE = "ASSET";
 
     private final ObjectMapper objectMapper;
 
@@ -46,7 +49,25 @@ public class OutboxEventFactory {
         );
     }
 
-    private String serialize(AssetProcessingRequestedPayload payload) {
+    public OutboxEvent assetIndexingRequested(UUID assetId, UUID indexingJobId, String snapshotFingerprint) {
+        AssetIndexingRequestedPayload payload = new AssetIndexingRequestedPayload(
+                assetId,
+                indexingJobId,
+                snapshotFingerprint
+        );
+
+        return new OutboxEvent(
+                UUID.randomUUID(),
+                ASSET_INDEXING_REQUESTED,
+                ASSET_INDEXING_REQUESTED_VERSION,
+                ASSET_INDEXING_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                serialize(payload)
+        );
+    }
+
+    private String serialize(Object payload) {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException exception) {

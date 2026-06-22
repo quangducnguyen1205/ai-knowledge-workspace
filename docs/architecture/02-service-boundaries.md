@@ -47,6 +47,8 @@ flowchart LR
 - Product-facing transcript reads and transcript-context responses
 - Local transcript snapshot persistence
 - Explicit transcript indexing into Elasticsearch
+- PostgreSQL-owned search indexing jobs and metadata-only indexing outbox intent
+- Disabled-by-default indexing listener foundation for `asset.indexing.requested.v1`
 
 ### Intentionally Keeps Out Of Scope For Now
 
@@ -95,6 +97,7 @@ flowchart LR
 - Business logic
 - User or workspace authority
 - Media processing
+- Asset searchability decisions
 
 ## PostgreSQL
 
@@ -104,6 +107,7 @@ flowchart LR
 - Object-storage references for raw media
 - Outbox rows that record durable event publication intent
 - Consumed processing-result event records used for Spring-side idempotency
+- Search indexing jobs used for Spring-owned derived Elasticsearch writes
 - Flyway-managed product schema for the current individual ownership model
 
 ### Does Not Own
@@ -131,6 +135,9 @@ flowchart LR
 - Disabled-by-default one-shot smoke commands for scoped request relay and result-file handling. The request-relay smoke command requires an explicit `asset.processing.requested` outbox event ID and relays only that selected event. These commands close the Spring application after one run and do not expose a public endpoint, scheduler, or Kafka listener.
 - A disabled-by-default Kafka listener for `asset.processing.result.v1`. It is enabled only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, uses `MANUAL_IMMEDIATE` offset acknowledgements, and handles result events through the existing `ProcessingResultEventHandler`.
 - Disabled-by-default manual operator recovery commands scoped to one exact event ID: retry one durable `FAILED` consumed result event with its retained safe envelope, or requeue one stale `PUBLISHING` request outbox event back to `PENDING`.
+- Durable `asset.indexing.requested` publication intent for derived search indexing when `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=true`.
+- A disabled-by-default Kafka listener for `asset.indexing.requested.v1`. It loads canonical transcript snapshot rows from PostgreSQL, writes derived documents to Elasticsearch, and marks assets `SEARCHABLE` only after successful indexing.
+- A disabled-by-default one-shot smoke command for relaying exactly one selected indexing outbox event ID.
 
 ### Does Not Own Yet
 
@@ -139,8 +146,11 @@ flowchart LR
 - Automated recovery, broad scans, or scheduled stale-row repair for rows stuck in `PUBLISHING` after process interruption.
 - Automatic retry of durable `FAILED` consumed result events.
 - Kafka retry-topic framework.
+- Runtime indexing listener smoke, operator-triggered exact-asset reindex, workspace-wide rebuild, and Elasticsearch reconcile workflows.
 
 Phase 3I keeps Kafka as transport, not product truth. Spring can consume FastAPI result envelopes from `asset.processing.result.v1` through a disabled-by-default listener, but no retry topic, DLQ, scheduled relay, or recovery automation is wired. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state is updated only after Spring validates the result and, for `transcript.ready`, retrieves and persists a complete transcript snapshot. Result events correlate to product state with the original `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring loads the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. FastAPI direct upload remains the default product trigger in `direct_upload` mode. `kafka_request` is an explicit local/manual transition mode; it is mutually exclusive with direct upload for each upload and must be used before manually relaying request outbox rows to avoid duplicate processing.
+
+Phase P3-B1 adds the derived search indexing foundation. The PostgreSQL transcript snapshot remains canonical. `asset_search_index_jobs` records the durable indexing state for one asset and snapshot fingerprint, and optional auto-request creation can persist an `asset.indexing.requested` outbox row in the same transaction as a stable transcript snapshot replacement. The event payload is metadata-only and does not carry transcript text. PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint, already-indexed fingerprints are explicit-indexing no-ops, and final indexing completion rechecks the current transcript fingerprint before marking an asset `SEARCHABLE`. The indexing listener is disabled by default and uses PostgreSQL product state to load rows before writing derived Elasticsearch documents. Search results are also gated by PostgreSQL asset searchability so stale Elasticsearch documents cannot make a non-searchable asset visible.
 
 Listener offset policy is intentionally simple. `APPLIED` results, duplicate already-applied results, durable `FAILED` handler outcomes, and known malformed/unsupported result events acknowledge the Kafka offset immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown without acknowledgement so Kafka can redeliver the record. Immediate acknowledgement reduces unnecessary redelivery of earlier successfully handled records from the same poll, but the delivery model remains at-least-once overall. The default consumer group is `workspace-processing-result-v1`, and default offset reset is `latest`; local controlled runs should start the listener before publishing result events. Durable `FAILED` result rows can be retried only through the explicit operator command for one selected result event ID and retained metadata-only envelope.
 
@@ -182,5 +192,6 @@ Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in 
 - MinIO stores bytes only; Spring stores and authorizes the object references in PostgreSQL.
 - PostgreSQL outbox rows are durable publication intent; the Kafka publisher adapter is transport on top of that intent.
 - PostgreSQL consumed-result rows are durable Spring-side idempotency state; Kafka offsets are not product state.
+- PostgreSQL indexing jobs are durable product-side indexing state; Elasticsearch documents are derived data.
 - Kafka transports events; it does not own product state, authorization, asset metadata, or transcript snapshots.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.

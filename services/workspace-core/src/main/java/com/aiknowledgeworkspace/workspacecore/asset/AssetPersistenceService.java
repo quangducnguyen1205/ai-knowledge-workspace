@@ -8,6 +8,7 @@ import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
@@ -25,19 +26,22 @@ public class AssetPersistenceService {
     private final AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxEventFactory outboxEventFactory;
+    private final AssetSearchIndexRequestService assetSearchIndexRequestService;
 
     public AssetPersistenceService(
             AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
             AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository,
             OutboxEventRepository outboxEventRepository,
-            OutboxEventFactory outboxEventFactory
+            OutboxEventFactory outboxEventFactory,
+            AssetSearchIndexRequestService assetSearchIndexRequestService
     ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.assetTranscriptRowSnapshotRepository = assetTranscriptRowSnapshotRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.outboxEventFactory = outboxEventFactory;
+        this.assetSearchIndexRequestService = assetSearchIndexRequestService;
     }
 
     @Transactional
@@ -209,7 +213,11 @@ public class AssetPersistenceService {
                 ))
                 .toList();
 
-        return sortTranscriptSnapshots(assetTranscriptRowSnapshotRepository.saveAll(snapshots));
+        List<AssetTranscriptRowSnapshot> sortedSnapshots = sortTranscriptSnapshots(
+                assetTranscriptRowSnapshotRepository.saveAll(snapshots)
+        );
+        assetSearchIndexRequestService.requestIndexingIfEnabled(asset, sortedSnapshots);
+        return sortedSnapshots;
     }
 
     @Transactional

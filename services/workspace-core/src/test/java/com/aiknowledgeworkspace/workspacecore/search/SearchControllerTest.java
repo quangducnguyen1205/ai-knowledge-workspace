@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
@@ -24,11 +25,14 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -40,6 +44,7 @@ class SearchControllerTest {
     private MockMvc mockMvc;
     private WorkspaceService workspaceService;
     private AssetService assetService;
+    private AssetRepository assetRepository;
 
     @BeforeEach
     void setUp() {
@@ -48,6 +53,7 @@ class SearchControllerTest {
         mockServer = MockRestServiceServer.bindTo(builder).build();
         workspaceService = mock(WorkspaceService.class);
         assetService = mock(AssetService.class);
+        assetRepository = mock(AssetRepository.class);
 
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://localhost:9201");
@@ -58,7 +64,7 @@ class SearchControllerTest {
                 properties,
                 new ObjectMapper()
         );
-        SearchService searchService = new SearchService(workspaceService, assetService, searchIndexClient);
+        SearchService searchService = new SearchService(workspaceService, assetService, assetRepository, searchIndexClient);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)
@@ -153,10 +159,13 @@ class SearchControllerTest {
         UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         when(workspaceService.resolveWorkspaceOrDefault(null))
                 .thenReturn(new Workspace(defaultWorkspaceId, "Default Workspace"));
+        when(assetRepository.findByWorkspace_IdAndStatus(defaultWorkspaceId, AssetStatus.SEARCHABLE, Sort.unsorted()))
+                .thenReturn(List.of(searchableAsset(UUID.randomUUID(), defaultWorkspaceId)));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + defaultWorkspaceId + "\"")))
+                .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\"")))
                 .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
 
         mockMvc.perform(get("/api/search")
@@ -171,13 +180,17 @@ class SearchControllerTest {
     @Test
     void searchWithoutAssetIdStillFiltersByResolvedWorkspaceAndSearchableAssets() throws Exception {
         UUID workspaceId = UUID.randomUUID();
+        UUID searchableAssetId = UUID.randomUUID();
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
                 .thenReturn(new Workspace(workspaceId, "Systems"));
+        when(assetRepository.findByWorkspace_IdAndStatus(workspaceId, AssetStatus.SEARCHABLE, Sort.unsorted()))
+                .thenReturn(List.of(searchableAsset(searchableAssetId, workspaceId)));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + workspaceId + "\"")))
                 .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
+                .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\":[\"" + searchableAssetId + "\"]")))
                 .andExpect(content().string(not(containsString("\"term\":{\"assetId.keyword\""))))
                 .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
 
@@ -236,12 +249,16 @@ class SearchControllerTest {
     @Test
     void searchAddsPhraseBoostLayerWithoutChangingResponseContract() throws Exception {
         UUID workspaceId = UUID.randomUUID();
+        UUID searchableAssetId = UUID.randomUUID();
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
                 .thenReturn(new Workspace(workspaceId, "Systems"));
+        when(assetRepository.findByWorkspace_IdAndStatus(workspaceId, AssetStatus.SEARCHABLE, Sort.unsorted()))
+                .thenReturn(List.of(searchableAsset(searchableAssetId, workspaceId)));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"multi_match\":{\"query\":\"binary search tree\",\"fields\":[\"text^3\",\"assetTitle\"]}")))
+                .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\":[\"" + searchableAssetId + "\"]")))
                 .andExpect(content().string(containsString("\"should\":[")))
                 .andExpect(content().string(containsString("\"match_phrase\":{\"text\":{\"query\":\"binary search tree\",\"boost\":6.0}}")))
                 .andExpect(content().string(containsString("\"match_phrase\":{\"assetTitle\":{\"query\":\"binary search tree\",\"boost\":4.0}}")))
@@ -292,5 +309,11 @@ class SearchControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+    }
+
+    private Asset searchableAsset(UUID assetId, UUID workspaceId) {
+        Asset asset = new Asset("lecture.mp4", "Lecture", AssetStatus.SEARCHABLE, new Workspace(workspaceId, "Workspace"));
+        ReflectionTestUtils.setField(asset, "id", assetId);
+        return asset;
     }
 }
