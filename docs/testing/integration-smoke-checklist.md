@@ -112,6 +112,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] The indexing listener is off by default. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=true`; the default consumer group is `workspace-search-indexer-v1`, and default offset reset is `latest`.
 - [ ] Indexing events must contain bounded metadata only: `assetId`, `indexingJobId`, and `snapshotFingerprint`. Do not include transcript text, object keys, raw media bytes, credentials, or stack traces.
 - [ ] PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint. Repeated indexing of an already-indexed identical snapshot should be a successful no-op, while a changed transcript snapshot must create or use a distinct current job.
+- [ ] P3-B2 verified the controlled runtime path with Kafka and Elasticsearch: a stable Spring-owned snapshot produced one indexing job and one metadata-only outbox event, a scoped relay published exactly that selected event, the disabled-by-default indexing listener marked the job `INDEXED` and asset `SEARCHABLE`, search/context APIs returned the expected selected asset, and PostgreSQL state blocked stale Elasticsearch documents after the asset was set back to `TRANSCRIPT_READY`. This smoke did not run FastAPI media processing.
 - [ ] Indexing completion rechecks the current transcript fingerprint before marking an asset `SEARCHABLE`; stale or superseded jobs must not make a newer snapshot searchable.
 - [ ] Start Spring Boot for `services/workspace-core`.
 - [ ] Check Spring Boot health:
@@ -572,7 +573,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `POST /api/assets/{assetId}/index` again for the same asset.
 - [ ] Expect HTTP `200` again.
 - [ ] Confirm the asset stays `SEARCHABLE`; if the transcript snapshot has not changed, the rerun is idempotent and should not require another Elasticsearch write before reporting success.
-- [ ] Optional async-indexing foundation check for a later phase: after a transcript snapshot is stable and auto-request is explicitly enabled, confirm Product PostgreSQL has one `asset_search_index_jobs` row for the current snapshot fingerprint and one `asset.indexing.requested` outbox row. Do not mark this as listener smoke unless the disabled-by-default indexing listener was actually started and observed.
+- [ ] Optional async-indexing foundation check: after a transcript snapshot is stable and auto-request is explicitly enabled, confirm Product PostgreSQL has one `asset_search_index_jobs` row for the current snapshot fingerprint and one `asset.indexing.requested` outbox row. Mark it as listener smoke only when the disabled-by-default indexing listener is started before relay and the selected Kafka record is observed through to `INDEXED`.
 
 ### Failure Path
 

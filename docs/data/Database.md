@@ -444,6 +444,7 @@ Current role:
 - An already `INDEXED` job for the current snapshot fingerprint makes explicit indexing idempotent: the request is treated as a successful no-op, Elasticsearch is not called again, and a `SEARCHABLE` asset remains `SEARCHABLE`.
 - A redelivered `INDEXING` job can retry safely. Elasticsearch infrastructure failures leave the job retryable instead of turning it into durable `FAILED`; deterministic domain failures such as an empty usable snapshot can still be recorded as `FAILED`.
 - The indexing listener is disabled by default. When enabled in a controlled local run, it consumes `asset.indexing.requested.v1`, loads canonical transcript rows from PostgreSQL, writes derived documents to Elasticsearch, and marks the asset `SEARCHABLE` only after a successful Elasticsearch write.
+- P3-B2 runtime-smoked this controlled listener path with Kafka and Elasticsearch using a Spring-owned transcript snapshot and one selected indexing outbox event. The same smoke also proved that stale Elasticsearch documents are not returned once PostgreSQL product state says the asset is no longer `SEARCHABLE`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.
 - Asset reads and listing require an asset to belong to a workspace owned by the current user.
