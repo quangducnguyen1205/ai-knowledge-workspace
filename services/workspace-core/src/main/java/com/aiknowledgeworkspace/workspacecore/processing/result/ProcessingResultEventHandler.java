@@ -25,6 +25,7 @@ public class ProcessingResultEventHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingResultEventHandler.class);
     private static final int MAX_ERROR_DETAIL_LENGTH = 1024;
     private static final int MAX_RAW_UPSTREAM_STATE_LENGTH = 64;
+    private static final int MAX_RECOVERABLE_EVENT_JSON_LENGTH = 8192;
 
     private final ProcessingResultEventParser eventParser;
     private final ConsumedProcessingResultEventRepository consumedEventRepository;
@@ -54,7 +55,35 @@ public class ProcessingResultEventHandler {
 
     @Transactional
     public ProcessingResultHandleResult handle(String rawEventJson) {
+        return handle(rawEventJson, false);
+    }
+
+    @Transactional
+    public ProcessingResultHandleResult recoverFailedEvent(UUID eventId) {
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalStateException("Consumed processing result event was not found: " + eventId));
+        if (consumedEvent.getStatus() != ConsumedProcessingResultEventStatus.FAILED) {
+            throw new IllegalStateException(
+                    "Consumed processing result event is not FAILED: " + eventId + " status=" + consumedEvent.getStatus()
+            );
+        }
+        if (!StringUtils.hasText(consumedEvent.getRecoverableEventJson())) {
+            throw new IllegalStateException(
+                    "Consumed processing result event does not have a recoverable event envelope: " + eventId
+            );
+        }
+        ProcessingResultEventEnvelope recoverableEvent = parseEvent(consumedEvent.getRecoverableEventJson());
+        if (!eventId.equals(recoverableEvent.eventId())) {
+            throw new IllegalStateException("Recoverable processing result event ID did not match requested event ID");
+        }
+
+        ProcessingResultHandleResult result = handle(consumedEvent.getRecoverableEventJson(), true);
+        return result;
+    }
+
+    private ProcessingResultHandleResult handle(String rawEventJson, boolean manualRecovery) {
         ProcessingResultEventEnvelope event = parseEvent(rawEventJson);
+        String recoverableEventJson = recoverableEventJson(rawEventJson, event);
         ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(event.eventId())
                 .orElseGet(() -> new ConsumedProcessingResultEvent(
                         event.eventId(),
@@ -66,6 +95,11 @@ public class ProcessingResultEventHandler {
 
         if (consumedEvent.getStatus() == ConsumedProcessingResultEventStatus.APPLIED) {
             LOGGER.info("Ignoring duplicate already-applied processing result event {}", event.eventId());
+            return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), false);
+        }
+
+        if (consumedEvent.getStatus() == ConsumedProcessingResultEventStatus.FAILED && !manualRecovery) {
+            LOGGER.info("Ignoring duplicate durable failed processing result event {}", event.eventId());
             return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), false);
         }
 
@@ -84,7 +118,7 @@ public class ProcessingResultEventHandler {
                     event.eventId(),
                     safeError
             );
-            consumedEvent.markFailed(safeError);
+            consumedEvent.markFailed(safeError, recoverableEventJson);
             consumedEventRepository.save(consumedEvent);
             return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), false);
         }
@@ -97,6 +131,14 @@ public class ProcessingResultEventHandler {
             LOGGER.warn("Rejected processing result event: {}", exception.getMessage());
             throw exception;
         }
+    }
+
+    private String recoverableEventJson(String rawEventJson, ProcessingResultEventEnvelope event) {
+        String recoverableEventJson = eventParser.recoverableEnvelopeJson(rawEventJson, event);
+        if (recoverableEventJson.length() > MAX_RECOVERABLE_EVENT_JSON_LENGTH) {
+            throw new ProcessingResultEventRejectedException("Processing result event recoverable envelope exceeded safe length");
+        }
+        return recoverableEventJson;
     }
 
     private void applyBusinessChange(ProcessingResultEventEnvelope event) {

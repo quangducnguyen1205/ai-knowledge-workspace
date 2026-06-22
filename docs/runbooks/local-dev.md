@@ -64,6 +64,15 @@ Manual processing smoke controls:
 
 Supported one-shot smoke commands are `relay_request_outbox_once` and `handle_result_file_once`. They are disabled by default, run once, then close the Spring application context. They do not add an HTTP endpoint, scheduler, or Kafka listener. `relay_request_outbox_once` requires `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID` and relays only that selected `asset.processing.requested` outbox event, never all due rows.
 
+Manual operator recovery controls:
+
+- `WORKSPACE_CORE_PROCESSING_RECOVERY_COMMAND=none`
+- `WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID=`
+- `WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID=`
+- `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE=5m`
+
+Supported recovery commands are `retry_failed_result_event_once` and `requeue_stuck_outbox_event_once`. They are disabled by default, run once, then close the Spring application context. They do not add an HTTP endpoint, scheduler, retry topic, DLQ, or broad recovery scan. `retry_failed_result_event_once` requires `WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID` and retries only that selected durable `FAILED` consumed result event using the retained safe result envelope. `requeue_stuck_outbox_event_once` requires `WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID`, requires the selected outbox row to still be `PUBLISHING`, and requires it to be older than `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE`. Empty and negative minimum ages are rejected; `0s` is allowed only for explicit controlled local smoke.
+
 Current Kafka defaults:
 
 - `KAFKA_IMAGE=apache/kafka:4.0.2`
@@ -99,14 +108,14 @@ Current outbox behavior:
 - The outbox row is durable publication intent for the Kafka processing lifecycle.
 - Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
 - Kafka publishing exists only when explicitly enabled. Scheduled relay execution is not implemented; for local smoke, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once` plus `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` can invoke the relay for exactly one selected request event.
-- Recovery for rows stuck in `PUBLISHING` after process interruption is future work.
+- Exact-ID manual requeue exists for a selected request outbox row stuck in `PUBLISHING` after process interruption. It moves only that selected stale row back to `PENDING` and does not publish it automatically. Broad stale-row scans and scheduled recovery are still not implemented.
 - Transition warning: the Spring request outbox relay remains disabled/manual. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for manual request-path validation so the same asset is not processed twice. The smoke command is scoped by event ID so it will not relay arbitrary due outbox rows.
 - Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`.
 - The result listener defaults to consumer group `workspace-processing-result-v1` and `latest` offset reset. Start the listener before publishing result events in a local controlled run; it will not silently replay historical topic data for a new group by default.
 - `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
 - In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
 - For local smoke, capture one result envelope to a temporary file and run `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with `WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE` pointing at that file. This calls the existing manual handler once; it does not install an automatic listener.
-- Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged with `MANUAL_IMMEDIATE`, so the commit happens immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. This reduces unnecessary redelivery of earlier successfully handled records from the same poll, but delivery remains at-least-once. There is still no retry topic, DLQ, or automated failed-event recovery.
+- Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged with `MANUAL_IMMEDIATE`, so the commit happens immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. This reduces unnecessary redelivery of earlier successfully handled records from the same poll, but delivery remains at-least-once. Durable `FAILED` rows require exact-ID manual recovery; there is still no retry topic, DLQ, broad failed-row scan, or automated failed-event recovery.
 - Delivery is at-least-once; future consumers must be idempotent.
 
 ## Startup Sequence

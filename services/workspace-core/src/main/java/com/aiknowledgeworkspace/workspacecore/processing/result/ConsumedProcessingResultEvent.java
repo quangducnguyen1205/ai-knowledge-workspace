@@ -41,6 +41,9 @@ public class ConsumedProcessingResultEvent {
     @Column(length = 1024)
     private String errorDetail;
 
+    @Column(columnDefinition = "text")
+    private String recoverableEventJson;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -112,6 +115,10 @@ public class ConsumedProcessingResultEvent {
         return errorDetail;
     }
 
+    public String getRecoverableEventJson() {
+        return recoverableEventJson;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -124,17 +131,24 @@ public class ConsumedProcessingResultEvent {
         status = ConsumedProcessingResultEventStatus.RECEIVED;
         processedAt = null;
         errorDetail = null;
+        recoverableEventJson = null;
     }
 
     public void markApplied() {
         status = ConsumedProcessingResultEventStatus.APPLIED;
         processedAt = Instant.now();
         errorDetail = null;
+        recoverableEventJson = null;
     }
 
     public void markFailed(String errorDetail) {
+        markFailed(errorDetail, null);
+    }
+
+    public void markFailed(String errorDetail, String recoverableEventJson) {
         status = ConsumedProcessingResultEventStatus.FAILED;
         processedAt = null;
         this.errorDetail = errorDetail;
+        this.recoverableEventJson = recoverableEventJson;
     }
 }

@@ -112,6 +112,12 @@ public class OutboxEvent {
         this.nextAttemptAt = nextAttemptAt;
     }
 
+    public void requeueFromPublishing() {
+        status = OutboxEventStatus.PENDING;
+        nextAttemptAt = null;
+        publishedAt = null;
+    }
+
     @PrePersist
     void onCreate() {
         if (id == null) {

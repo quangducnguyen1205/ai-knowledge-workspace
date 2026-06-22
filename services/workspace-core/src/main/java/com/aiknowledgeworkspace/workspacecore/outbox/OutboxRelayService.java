@@ -82,7 +82,8 @@ public class OutboxRelayService {
         int claimedCount = outboxEventRepository.markPublishing(
                 event.getId(),
                 OutboxEventStatus.PENDING,
-                OutboxEventStatus.PUBLISHING
+                OutboxEventStatus.PUBLISHING,
+                Instant.now(clock)
         );
         if (claimedCount != 1) {
             return false;

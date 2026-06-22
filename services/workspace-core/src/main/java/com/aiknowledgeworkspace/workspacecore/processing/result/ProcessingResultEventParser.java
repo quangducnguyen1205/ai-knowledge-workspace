@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.processing.result;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.UUID;
@@ -65,6 +66,32 @@ class ProcessingResultEventParser {
         );
     }
 
+    String recoverableEnvelopeJson(String rawEventJson, ProcessingResultEventEnvelope event) {
+        JsonNode payload = requiredObject(readRoot(rawEventJson), "payload");
+        ObjectNode recoverablePayload = objectMapper.createObjectNode();
+        copyAllowedPayloadFields(event.eventType(), payload, recoverablePayload, event.payload());
+
+        ObjectNode recoverableEnvelope = objectMapper.createObjectNode();
+        recoverableEnvelope.put("eventId", event.eventId().toString());
+        recoverableEnvelope.put("eventType", event.eventType());
+        recoverableEnvelope.put("eventVersion", event.eventVersion());
+        recoverableEnvelope.put("aggregateType", event.aggregateType());
+        recoverableEnvelope.put("aggregateId", event.aggregateId().toString());
+        recoverableEnvelope.put("eventKey", event.eventKey());
+        recoverableEnvelope.put("causationEventId", event.causationEventId().toString());
+        recoverableEnvelope.put("occurredAt", event.occurredAt().toString());
+        recoverableEnvelope.set("payload", recoverablePayload);
+
+        try {
+            return objectMapper.writeValueAsString(recoverableEnvelope);
+        } catch (JsonProcessingException exception) {
+            throw new ProcessingResultEventRejectedException(
+                    "Processing result event could not be converted to recoverable JSON",
+                    exception
+            );
+        }
+    }
+
     private ProcessingResultPayload parsePayload(String eventType, JsonNode payload) {
         return switch (eventType) {
             case TRANSCRIPT_READY -> new TranscriptReadyPayload(requiredPayloadUuid(
@@ -79,6 +106,54 @@ class ProcessingResultEventParser {
             );
             default -> throw rejected("Unsupported processing result event type: " + eventType);
         };
+    }
+
+    private void copyAllowedPayloadFields(
+            String eventType,
+            JsonNode source,
+            ObjectNode target,
+            ProcessingResultPayload parsedPayload
+    ) {
+        target.put("processingRequestId", parsedPayload.processingRequestId().toString());
+
+        switch (eventType) {
+            case TRANSCRIPT_READY -> {
+                copyOptionalScalar(source, target, "assetId", 64, "asset_id");
+                copyOptionalScalar(source, target, "status", 64);
+                copyOptionalScalar(source, target, "segmentCount", 32);
+                copyOptionalScalar(source, target, "completedAt", 128);
+            }
+            case ASSET_PROCESSING_FAILED -> {
+                copyOptionalScalar(source, target, "assetId", 64, "asset_id");
+                copyOptionalScalar(source, target, "status", 64);
+                copyOptionalScalar(source, target, "errorCode", 128, "error_code");
+                copyOptionalScalar(source, target, "errorMessage", 1024, "message", "error_message");
+                copyOptionalScalar(source, target, "completedAt", 128);
+            }
+            default -> throw rejected("Unsupported processing result event type: " + eventType);
+        }
+    }
+
+    private void copyOptionalScalar(JsonNode source, ObjectNode target, String fieldName, int maxTextLength, String... aliases) {
+        JsonNode value = source.get(fieldName);
+        if (value == null) {
+            for (String alias : aliases) {
+                value = source.get(alias);
+                if (value != null) {
+                    break;
+                }
+            }
+        }
+        if (value == null || value.isNull()) {
+            return;
+        }
+        if (!value.isValueNode() || value.isBinary()) {
+            throw rejected("Processing result event payload field '" + fieldName + "' must be a scalar value");
+        }
+        if (value.isTextual() && value.asText().length() > maxTextLength) {
+            throw rejected("Processing result event payload field '" + fieldName + "' exceeded safe length");
+        }
+        target.set(fieldName, value.deepCopy());
     }
 
     private JsonNode readRoot(String rawEventJson) {

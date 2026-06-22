@@ -17,6 +17,8 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V3__add_outbox_events.sql` adds the PostgreSQL-backed outbox table for durable event publication intent.
 - `V4__extend_outbox_relay_state.sql` extends the outbox status constraint for relay processing state.
 - `V5__add_consumed_processing_result_events.sql` adds Spring-side idempotency records for FastAPI processing result events.
+- `V6__allow_kafka_request_processing_jobs.sql` allows direct-upload task identifiers to be nullable for explicit `kafka_request` uploads.
+- `V7__add_recoverable_processing_result_event_json.sql` adds bounded, metadata-only retained result envelopes for explicit manual recovery of durable failed result events.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -95,6 +97,7 @@ erDiagram
         uuid aggregateId
         uuid causationEventId
         string status
+        string recoverableEventJson
         instant receivedAt
         instant processedAt
     }
@@ -305,6 +308,7 @@ Current fields:
 - `processedAt`
 - `status`
 - `errorDetail`
+- `recoverableEventJson`
 - `createdAt`
 - `updatedAt`
 
@@ -319,8 +323,10 @@ Current role:
 - Stores Spring-side durable idempotency state for FastAPI processing result events from `asset.processing.result.v1`.
 - Dedupe is keyed by the result event's `eventId`, not by an in-memory cache.
 - Supports `transcript.ready` v1 and `asset.processing.failed` v1 result events for the `ASSET` aggregate.
-- Records durably failed handler outcomes without marking product state ready when transcript artifacts cannot be fetched or validated; those rows require manual recovery in the current system.
-- Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, automated failed-event recovery, or scheduled consumer.
+- Records durably failed handler outcomes without marking product state ready when transcript artifacts cannot be fetched or validated.
+- Retains a bounded, allow-listed, metadata-only copy of the original result envelope only for durable `FAILED` rows so an operator can retry that exact event later.
+- Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, automated failed-event recovery, broad failed-row scan, or scheduled consumer.
+- Supports an explicit manual recovery command for one selected `FAILED` result event ID. Recovery reuses the existing handler boundary, can move the same consumed event to `APPLIED` on success, keeps it `FAILED` on another known durable apply failure, and rethrows unexpected runtime or infrastructure failures.
 
 ## `AssetTranscriptRowSnapshot`
 
@@ -361,12 +367,12 @@ Current role:
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
 - The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
 - Request relays must not be enabled for ordinary `direct_upload` uploads. The explicit `kafka_request` trigger mode exists to prevent duplicate processing before cutover.
-- Recovery for rows left in `PUBLISHING` by a process interruption is future work and should be added with the real scheduled relay/publisher phase.
+- Exact-ID manual requeue exists for a selected `PUBLISHING` request outbox row that is older than the configured minimum age. Requeue moves only that selected row back to the retryable `PENDING` state and does not publish it automatically; the operator must invoke the scoped relay separately. Broad stale-row scans and automated recovery remain out of scope.
 - Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. It uses `MANUAL_IMMEDIATE` acknowledgements, consumer group `workspace-processing-result-v1`, and `latest` offset reset by default. Enable it only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, and start it before publishing result events in controlled local runs.
 - `transcript.ready` handling validates the result event, requires `payload.processingRequestId == causationEventId`, loads the `ProcessingJob` by asset ID plus `processingRequestEventId`, fetches transcript artifact rows from FastAPI by `processingRequestId`, validates the complete artifact set, replaces the Spring-owned transcript snapshot, marks the processing job `SUCCEEDED`, and marks the asset `TRANSCRIPT_READY`.
 - `asset.processing.failed` handling validates the same request/result correlation, marks the processing job and asset `FAILED`, and stores only bounded safe error state.
 - Duplicate result events with the same `eventId` are ignored after the first successful application.
-- Listener offset acknowledgement is intentionally conservative: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged immediately on the consumer thread; unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. The delivery model remains at-least-once overall.
+- Listener offset acknowledgement is intentionally conservative: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged immediately on the consumer thread; unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. Durable `FAILED` rows require explicit operator recovery by event ID. The delivery model remains at-least-once overall.
 - On-demand status refresh can update both `ProcessingJob.processingJobStatus` and `Asset.status`.
 - Transcript capture can persist local transcript snapshot rows after transcript data is validated as usable.
 - Transcript read, transcript context, and explicit indexing use those local transcript rows in the normal path.
@@ -383,7 +389,7 @@ Current role:
 - Transcript sync state beyond the current snapshot
 - Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
 - Kafka listener offsets as product state
-- Automatic recovery for stuck `PUBLISHING` outbox rows
+- Automatic recovery, broad scans, or scheduled stale-row repair for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics
 

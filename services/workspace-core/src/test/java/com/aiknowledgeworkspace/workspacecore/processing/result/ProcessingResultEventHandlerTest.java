@@ -194,10 +194,162 @@ class ProcessingResultEventHandlerTest {
         assertThat(result.applied()).isFalse();
         assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
                 .contains("FastAPI returned HTTP 503");
+        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getRecoverableEventJson())
+                .contains(eventId.toString())
+                .contains(processingRequestEventId.toString())
+                .doesNotContain("transcript text")
+                .doesNotContain("credential")
+                .doesNotContain("stack trace");
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.RUNNING);
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+    }
+
+    @Test
+    void duplicateFailedEventDoesNotRetryWithoutExplicitRecovery() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+                .thenReturn(List.of(transcriptRow("row-1", 0, "Recovered row")));
+
+        ProcessingResultHandleResult failedResult = processingResultEventHandler.handle(rawEvent);
+        ProcessingResultHandleResult duplicateResult = processingResultEventHandler.handle(rawEvent);
+
+        assertThat(failedResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(duplicateResult.applied()).isFalse();
+        verify(fastApiProcessingClient, times(1)).getTranscriptArtifactRows(processingRequestEventId.toString());
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+    }
+
+    @Test
+    void manualRecoveryReplaysRetainedEnvelopeAndAppliesTranscriptSnapshot() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+                .thenReturn(List.of(
+                        transcriptRow("row-1", 0, "Recovered transcript row"),
+                        transcriptRow("row-2", 1, "Still ordered")
+                ));
+
+        processingResultEventHandler.handle(rawEvent);
+
+        ProcessingResultHandleResult result = processingResultEventHandler.recoverFailedEvent(eventId);
+
+        assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
+        assertThat(result.applied()).isTrue();
+        verify(fastApiProcessingClient, times(2)).getTranscriptArtifactRows(processingRequestEventId.toString());
+
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
+        assertThat(consumedEvent.getRecoverableEventJson()).isNull();
+        assertThat(consumedEvent.getErrorDetail()).isNull();
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.TRANSCRIPT_READY);
+        assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
+                .isEqualTo(ProcessingJobStatus.SUCCEEDED);
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId()))
+                .extracting(AssetTranscriptRowSnapshot::getText)
+                .containsExactly("Recovered transcript row", "Still ordered");
+    }
+
+    @Test
+    void manualRecoveryRejectsMissingNonFailedOrUnrecoverableEvent() {
+        UUID missingEventId = UUID.randomUUID();
+        assertThatThrownBy(() -> processingResultEventHandler.recoverFailedEvent(missingEventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("was not found")
+                .hasMessageContaining(missingEventId.toString());
+
+        UUID appliedEventId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        ConsumedProcessingResultEvent appliedEvent = new ConsumedProcessingResultEvent(
+                appliedEventId,
+                "transcript.ready",
+                assetId,
+                UUID.randomUUID(),
+                Instant.now()
+        );
+        appliedEvent.markApplied();
+        consumedEventRepository.save(appliedEvent);
+
+        assertThatThrownBy(() -> processingResultEventHandler.recoverFailedEvent(appliedEventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("is not FAILED");
+
+        UUID unrecoverableEventId = UUID.randomUUID();
+        ConsumedProcessingResultEvent unrecoverableEvent = new ConsumedProcessingResultEvent(
+                unrecoverableEventId,
+                "transcript.ready",
+                assetId,
+                UUID.randomUUID(),
+                Instant.now()
+        );
+        unrecoverableEvent.markFailed("old failure without retained envelope");
+        consumedEventRepository.save(unrecoverableEvent);
+
+        assertThatThrownBy(() -> processingResultEventHandler.recoverFailedEvent(unrecoverableEventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("does not have a recoverable event envelope");
+    }
+
+    @Test
+    void manualRecoveryKeepsFailedStatusOnKnownApplyFailure() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+                .thenReturn(List.of(transcriptRow("row-1", 0, " ")));
+
+        processingResultEventHandler.handle(rawEvent);
+
+        ProcessingResultHandleResult result = processingResultEventHandler.recoverFailedEvent(eventId);
+
+        assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(result.applied()).isFalse();
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(consumedEvent.getErrorDetail()).contains("text");
+        assertThat(consumedEvent.getRecoverableEventJson()).contains(eventId.toString());
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+    }
+
+    @Test
+    void manualRecoveryRethrowsUnexpectedRuntimeFailureAndLeavesFailedRecord() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
+        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+                .thenThrow(new IllegalStateException("database unavailable"));
+
+        processingResultEventHandler.handle(rawEvent);
+
+        assertThatThrownBy(() -> processingResultEventHandler.recoverFailedEvent(eventId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("database unavailable");
+
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(consumedEvent.getErrorDetail()).contains("FastAPI unavailable");
+        assertThat(consumedEvent.getRecoverableEventJson()).contains(eventId.toString());
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
         assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
     }
 

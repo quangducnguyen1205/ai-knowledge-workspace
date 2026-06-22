@@ -30,13 +30,15 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     @Query("""
             update OutboxEvent event
             set event.status = :publishingStatus,
-                event.nextAttemptAt = null
+                event.nextAttemptAt = null,
+                event.updatedAt = :now
             where event.id = :id
               and event.status = :pendingStatus
             """)
     int markPublishing(
             @Param("id") UUID id,
             @Param("pendingStatus") OutboxEventStatus pendingStatus,
-            @Param("publishingStatus") OutboxEventStatus publishingStatus
+            @Param("publishingStatus") OutboxEventStatus publishingStatus,
+            @Param("now") Instant now
     );
 }
