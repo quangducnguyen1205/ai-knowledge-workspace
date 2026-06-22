@@ -319,8 +319,8 @@ Current role:
 - Stores Spring-side durable idempotency state for FastAPI processing result events from `asset.processing.result.v1`.
 - Dedupe is keyed by the result event's `eventId`, not by an in-memory cache.
 - Supports `transcript.ready` v1 and `asset.processing.failed` v1 result events for the `ASSET` aggregate.
-- Records retryable handler failures without marking product state ready when transcript artifacts cannot be fetched or validated.
-- Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, or scheduled consumer.
+- Records durably failed handler outcomes without marking product state ready when transcript artifacts cannot be fetched or validated; those rows require manual recovery in the current system.
+- Is written by the manual result handler and by the disabled-by-default Kafka result listener. It does not implement a retry topic, dead-letter route, automated failed-event recovery, or scheduled consumer.
 
 ## `AssetTranscriptRowSnapshot`
 

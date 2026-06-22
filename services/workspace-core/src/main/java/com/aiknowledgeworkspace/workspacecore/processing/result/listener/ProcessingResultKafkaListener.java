@@ -29,10 +29,10 @@ class ProcessingResultKafkaListener {
     }
 
     @KafkaListener(
-            topics = "#{@workspaceKafkaProperties.processingResultTopic}",
-            groupId = "#{@workspaceKafkaProperties.processingResultConsumerGroup}",
+            topics = "${workspace.kafka.processing-result-topic}",
+            groupId = "${workspace.kafka.processing-result-consumer-group}",
             containerFactory = ProcessingResultKafkaListenerConfiguration.CONTAINER_FACTORY_BEAN_NAME,
-            autoStartup = "#{@workspaceKafkaProperties.processingResultListenerEnabled}"
+            autoStartup = "${workspace.kafka.processing-result-listener-enabled:false}"
     )
     void onMessage(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
         try {

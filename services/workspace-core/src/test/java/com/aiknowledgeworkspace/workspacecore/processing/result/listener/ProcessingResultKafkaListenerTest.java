@@ -153,12 +153,12 @@ class ProcessingResultKafkaListenerTest {
 
         KafkaListener annotation = onMessage.getAnnotation(KafkaListener.class);
 
-        assertThat(annotation.topics()).containsExactly("#{@workspaceKafkaProperties.processingResultTopic}");
-        assertThat(annotation.groupId()).isEqualTo("#{@workspaceKafkaProperties.processingResultConsumerGroup}");
+        assertThat(annotation.topics()).containsExactly("${workspace.kafka.processing-result-topic}");
+        assertThat(annotation.groupId()).isEqualTo("${workspace.kafka.processing-result-consumer-group}");
         assertThat(annotation.containerFactory())
                 .isEqualTo(ProcessingResultKafkaListenerConfiguration.CONTAINER_FACTORY_BEAN_NAME);
         assertThat(annotation.autoStartup())
-                .isEqualTo("#{@workspaceKafkaProperties.processingResultListenerEnabled}");
+                .isEqualTo("${workspace.kafka.processing-result-listener-enabled:false}");
     }
 
     @Test
