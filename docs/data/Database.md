@@ -480,4 +480,6 @@ Because this is a personal Docker-first project, older local PostgreSQL volumes 
 
 Elasticsearch is already used for search indexing and retrieval, but those transcript-row documents are not part of the primary relational schema described here. The current transcript-row search documents include `workspaceId` and `assetId`, but Spring still gates search through PostgreSQL product state.
 
+The derived transcript-row index is created lazily and explicitly by the Spring indexing write path when the configured Elasticsearch index is absent. A clean local Elasticsearch environment should not require manual pre-creation of `asset-transcript-rows`; Spring still treats the index as derived storage and does not make Elasticsearch authoritative for product state.
+
 Workspace-scoped search resolves currently `SEARCHABLE` asset IDs from PostgreSQL and applies a bounded Elasticsearch terms filter. Asset-scoped search returns no hits when the selected asset is not currently `SEARCHABLE` in PostgreSQL, even if stale Elasticsearch documents still exist. This keeps Elasticsearch derived and prevents stale index metadata from becoming product authority. The current bounded terms-filter approach is intentionally small-scale; larger workspace rebuild/reconcile/search-scale work remains future work.

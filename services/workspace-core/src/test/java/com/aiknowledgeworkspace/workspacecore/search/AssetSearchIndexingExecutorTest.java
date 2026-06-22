@@ -12,6 +12,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -125,6 +127,44 @@ class AssetSearchIndexingExecutorTest {
         assertThat(asset.getStatus()).isEqualTo(AssetStatus.SEARCHABLE);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         verify(assetRepository).save(asset);
+        mockServer.verify();
+    }
+
+    @Test
+    void missingIndexIsCreatedBeforeReplacingAssetDocuments() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, "Lecture fresh cluster", AssetStatus.TRANSCRIPT_READY);
+        List<AssetTranscriptRowSnapshot> transcriptRows = List.of(
+                transcriptRow(assetId, "row-1", 0, "Fresh index text")
+        );
+        String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(transcriptRowSnapshotRepository.findByAssetId(assetId)).thenReturn(transcriptRows);
+
+        expectMissingIndexCreated();
+        expectDeleteRequest(assetId);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "errors": false,
+                          "items": [
+                            {"index": {"_id": "%s-row-1", "status": 201}}
+                          ]
+                        }
+                        """.formatted(assetId), MediaType.APPLICATION_JSON));
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_refresh"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess());
+
+        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+
+        assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
+        assertThat(asset.getStatus()).isEqualTo(AssetStatus.SEARCHABLE);
         mockServer.verify();
     }
 
@@ -241,6 +281,7 @@ class AssetSearchIndexingExecutorTest {
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(transcriptRowSnapshotRepository.findByAssetId(assetId)).thenReturn(transcriptRows);
 
+        expectIndexExists();
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
@@ -293,6 +334,33 @@ class AssetSearchIndexingExecutorTest {
     }
 
     private void expectDelete(UUID assetId) {
+        expectIndexExists();
+        expectDeleteRequest(assetId);
+    }
+
+    private void expectIndexExists() {
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows"))
+                .andExpect(method(HttpMethod.HEAD))
+                .andRespond(withSuccess());
+    }
+
+    private void expectMissingIndexCreated() {
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows"))
+                .andExpect(method(HttpMethod.HEAD))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND));
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().string(containsString("\"number_of_shards\":1")))
+                .andExpect(content().string(containsString("\"number_of_replicas\":0")))
+                .andExpect(content().string(containsString("\"assetId\"")))
+                .andExpect(content().string(containsString("\"workspaceId\"")))
+                .andExpect(content().string(containsString("\"assetStatus\"")))
+                .andExpect(content().string(containsString("\"segmentIndex\":{\"type\":\"integer\"}")))
+                .andExpect(content().string(containsString("\"text\":{\"type\":\"text\"}")))
+                .andRespond(withSuccess());
+    }
+
+    private void expectDeleteRequest(UUID assetId) {
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))

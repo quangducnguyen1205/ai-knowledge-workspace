@@ -53,6 +53,15 @@ public class TranscriptSearchIndexClient {
         );
     }
 
+    public void ensureTranscriptIndexExists() {
+        String indexName = elasticsearchProperties.getTranscriptIndexName();
+        if (transcriptIndexExists(indexName)) {
+            return;
+        }
+
+        createTranscriptIndex(indexName);
+    }
+
     public void indexTranscriptRows(List<TranscriptIndexOperation> operations) {
         JsonNode bulkResponse = execute(
                 () -> elasticsearchRestClient.post()
@@ -117,6 +126,102 @@ public class TranscriptSearchIndexClient {
         );
 
         validateTitleSyncResponse(assetId, responseBody);
+    }
+
+    private boolean transcriptIndexExists(String indexName) {
+        try {
+            elasticsearchRestClient.head()
+                    .uri("/{indexName}", indexName)
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (ResourceAccessException exception) {
+            throw new ElasticsearchConnectivityException(
+                    "Elasticsearch is unavailable while checking transcript index existence",
+                    exception
+            );
+        } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 404) {
+                return false;
+            }
+            throw new ElasticsearchIntegrationException(
+                    "Elasticsearch returned HTTP " + exception.getStatusCode().value()
+                            + " while checking transcript index existence",
+                    exception
+            );
+        } catch (RestClientException exception) {
+            throw new ElasticsearchIntegrationException(
+                    "Elasticsearch request failed while checking transcript index existence",
+                    exception
+            );
+        }
+    }
+
+    private void createTranscriptIndex(String indexName) {
+        try {
+            elasticsearchRestClient.put()
+                    .uri("/{indexName}", indexName)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(buildTranscriptIndexDefinition())
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (ResourceAccessException exception) {
+            throw new ElasticsearchConnectivityException(
+                    "Elasticsearch is unavailable while creating transcript index",
+                    exception
+            );
+        } catch (RestClientResponseException exception) {
+            if (isIndexAlreadyExistsRace(exception) && transcriptIndexExists(indexName)) {
+                return;
+            }
+            throw new ElasticsearchIntegrationException(
+                    "Elasticsearch returned HTTP " + exception.getStatusCode().value()
+                            + " while creating transcript index",
+                    exception
+            );
+        } catch (RestClientException exception) {
+            throw new ElasticsearchIntegrationException(
+                    "Elasticsearch request failed while creating transcript index",
+                    exception
+            );
+        }
+    }
+
+    private boolean isIndexAlreadyExistsRace(RestClientResponseException exception) {
+        return exception.getStatusCode().value() == 400
+                && exception.getResponseBodyAsString().contains("resource_already_exists_exception");
+    }
+
+    private Map<String, Object> buildTranscriptIndexDefinition() {
+        Map<String, Object> settings = new LinkedHashMap<>();
+        settings.put("number_of_shards", 1);
+        settings.put("number_of_replicas", 0);
+
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("assetId", textWithKeywordField());
+        properties.put("workspaceId", textWithKeywordField());
+        properties.put("assetTitle", textWithKeywordField());
+        properties.put("transcriptRowId", textWithKeywordField());
+        properties.put("segmentIndex", Map.of("type", "integer"));
+        properties.put("text", Map.of("type", "text"));
+        properties.put("createdAt", Map.of("type", "keyword"));
+        properties.put("assetStatus", textWithKeywordField());
+
+        Map<String, Object> definition = new LinkedHashMap<>();
+        definition.put("settings", settings);
+        definition.put("mappings", Map.of("properties", properties));
+        return definition;
+    }
+
+    private Map<String, Object> textWithKeywordField() {
+        Map<String, Object> keywordField = new LinkedHashMap<>();
+        keywordField.put("type", "keyword");
+        keywordField.put("ignore_above", 256);
+
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("type", "text");
+        field.put("fields", Map.of("keyword", keywordField));
+        return field;
     }
 
     private Map<String, Object> buildSearchBody(

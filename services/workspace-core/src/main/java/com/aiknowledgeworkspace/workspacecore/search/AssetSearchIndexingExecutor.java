@@ -113,6 +113,7 @@ public class AssetSearchIndexingExecutor {
     }
 
     private void writeToElasticsearch(Asset asset, List<AssetTranscriptRowSnapshot> transcriptRows) {
+        transcriptSearchIndexClient.ensureTranscriptIndexExists();
         transcriptSearchIndexClient.deleteTranscriptRowsForAsset(asset.getId());
         transcriptSearchIndexClient.indexTranscriptRows(toIndexOperations(asset, transcriptRows));
         transcriptSearchIndexClient.refreshTranscriptIndex();
