@@ -10,6 +10,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundExcepti
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.AuthModeUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.EmailAlreadyRegisteredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidAuthRequestException;
@@ -148,6 +149,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleAuthenticationRequired(AuthenticationRequiredException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ApiErrorResponse("AUTHENTICATION_REQUIRED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(AuthModeUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthModeUnavailable(AuthModeUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse("AUTH_MODE_UNAVAILABLE", exception.getMessage()));
     }
 
     @ExceptionHandler(InvalidSearchRequestException.class)

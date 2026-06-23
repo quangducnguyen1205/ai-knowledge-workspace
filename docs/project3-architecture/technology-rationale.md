@@ -112,6 +112,8 @@ Use Keycloak for:
 
 Spring still owns workspace ownership, asset authorization, assistant-context authorization, resource-level rules, and product-specific permission checks. Do not push all product authorization into Keycloak.
 
+Current implementation note: P3-C1 adds an opt-in Spring Security resource-server foundation with `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 session auth is not removed and no Keycloak configuration is required for normal local startup. In JWT mode, Spring validates issuer/signature and optional audience, then links provider plus OIDC `sub` to a local `UserAccount`. Email is profile data only, no tokens are stored, and Keycloak realm/client roles do not become workspace authorization in this phase. Keycloak runtime setup, frontend bearer-token integration, token-refresh UX, and runtime OIDC smoke are future work.
+
 ## Product PostgreSQL
 
 Product PostgreSQL is the system of record.

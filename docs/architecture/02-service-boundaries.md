@@ -35,6 +35,7 @@ flowchart LR
 ### Currently Owns In This Repo
 
 - Workspace model and workspace-scoped access rules
+- Legacy session auth by default, plus an opt-in `keycloak_jwt` foundation that validates bearer JWTs and maps provider/subject identity to local `UserAccount` rows
 - Explicit individual ownership policy for the current user -> workspace -> asset model
 - Asset registration and product-visible asset metadata
 - MinIO/S3 object-reference metadata and storage orchestration for raw uploaded media
@@ -52,8 +53,9 @@ flowchart LR
 
 ### Intentionally Keeps Out Of Scope For Now
 
-- A full authentication platform
-- Collaboration, sharing, roles, and broader authorization policies
+- Keycloak runtime realm/client provisioning and runtime OIDC smoke
+- Frontend bearer-token integration
+- Collaboration, sharing, organization membership, enterprise roles, and broader authorization policies
 - Organization, organization-membership, tenant-SaaS, or enterprise RBAC modeling
 
 ### Does Not Own
@@ -187,6 +189,7 @@ Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in 
 ## Boundary Rules
 
 - Spring Boot is the only product entry point for clients.
+- Keycloak may authenticate the person and issue JWTs, but Spring maps that identity to a local `UserAccount` and remains the authority for workspace and asset permissions.
 - FastAPI may produce artifacts that support search, but it does not define the client-facing search contract.
 - Elasticsearch supports product retrieval, but business rules remain in Spring Boot.
 - MinIO stores bytes only; Spring stores and authorizes the object references in PostgreSQL.
@@ -195,3 +198,5 @@ Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in 
 - PostgreSQL indexing jobs are durable product-side indexing state; Elasticsearch documents are derived data.
 - Kafka transports events; it does not own product state, authorization, asset metadata, or transcript snapshots.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.
+
+Phase P3-C1 adds the Keycloak JWT identity foundation behind `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 register/login/session behavior still works without Keycloak configuration. In JWT mode, Spring validates bearer tokens as a resource server, provisions or resolves a local product user by provider plus OIDC `sub`, creates the default workspace through Spring-owned PostgreSQL state, and rejects session-only product API requests. Email is copied only as safe profile data; it is not the durable identity key. Keycloak roles are not workspace authorization authority in this phase, and no token values are persisted.

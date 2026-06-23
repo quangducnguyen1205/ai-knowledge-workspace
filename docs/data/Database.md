@@ -21,6 +21,7 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V7__add_recoverable_processing_result_event_json.sql` adds bounded, metadata-only retained result envelopes for explicit manual recovery of durable failed result events.
 - `V8__add_asset_search_index_jobs.sql` adds PostgreSQL-owned derived search indexing jobs.
 - `V9__harden_asset_search_index_jobs.sql` adds the active-fingerprint key used to prevent duplicate active indexing jobs for the same asset and snapshot fingerprint.
+- `V10__add_user_external_identity.sql` adds nullable provider/subject identity linkage for opt-in OIDC/JWT users.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -174,14 +175,18 @@ Current fields:
 - `id` UUID primary key
 - `email`
 - `passwordHash`
+- `identityProvider` nullable
+- `externalSubject` nullable
 - `createdAt`
 
 Current role:
 
-- Represents the current minimal product user record for session-based auth.
+- Represents the current minimal product user record for session-based auth and opt-in OIDC/JWT identity mapping.
 - Supports register, login, logout, and `GET /api/me`.
 - Owns workspaces logically through `Workspace.ownerId`.
-- Is intentionally narrow and does not introduce roles, sharing, or broader auth-platform features yet.
+- In `keycloak_jwt` mode, links a validated JWT to the local product user with provider plus OIDC `sub`; email is profile data only and is not the durable identity key.
+- Does not persist Keycloak access tokens, refresh tokens, client secrets, or Keycloak role grants.
+- Is intentionally narrow and does not introduce roles, sharing, organization membership, or broader auth-platform features yet.
 
 ## `Workspace`
 

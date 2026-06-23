@@ -28,6 +28,12 @@ server:
 workspace:
   default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
+  security:
+    authentication-mode: ${WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE:legacy_session}
+    oidc:
+      issuer-uri: ${WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI:}
+      jwk-set-uri: ${WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI:}
+      audience: ${WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE:}
   processing:
     trigger-mode: ${WORKSPACE_CORE_PROCESSING_TRIGGER_MODE:direct_upload}
     smoke:

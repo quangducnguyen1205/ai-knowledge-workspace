@@ -52,6 +52,15 @@ Current object-storage defaults:
 
 Spring uses the AWS SDK v2 S3 client against MinIO's S3-compatible API. Keep path-style access enabled for the local MinIO compose service.
 
+Current product-auth defaults:
+
+- `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=legacy_session`
+- `WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI=`
+- `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI=`
+- `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=`
+
+`legacy_session` is the default and preserves the existing register/login/session path. `keycloak_jwt` is an opt-in foundation mode: Spring validates bearer JWTs as an OAuth2 resource server, maps provider plus OIDC `sub` to a local `UserAccount`, and keeps PostgreSQL workspace/asset ownership as the product authorization source. Set `WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI` when enabling JWT mode; `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI` can point at an explicit JWKS endpoint while issuer validation still uses the issuer URI. Audience validation is applied only when `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE` is set. Keycloak runtime setup and frontend bearer-token integration are not part of the default local run yet.
+
 Current processing trigger default:
 
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`

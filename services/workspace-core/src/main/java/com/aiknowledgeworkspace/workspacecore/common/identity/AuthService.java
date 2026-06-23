@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 import jakarta.servlet.http.HttpSession;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,18 +19,31 @@ public class AuthService {
     private final UserAccountRepository userAccountRepository;
     private final CurrentUserService currentUserService;
     private final PasswordEncoder passwordEncoder;
+    private final WorkspaceSecurityProperties securityProperties;
+
+    @Autowired
+    public AuthService(
+            UserAccountRepository userAccountRepository,
+            CurrentUserService currentUserService,
+            PasswordEncoder passwordEncoder,
+            WorkspaceSecurityProperties securityProperties
+    ) {
+        this.userAccountRepository = userAccountRepository;
+        this.currentUserService = currentUserService;
+        this.passwordEncoder = passwordEncoder;
+        this.securityProperties = securityProperties;
+    }
 
     public AuthService(
             UserAccountRepository userAccountRepository,
             CurrentUserService currentUserService,
             PasswordEncoder passwordEncoder
     ) {
-        this.userAccountRepository = userAccountRepository;
-        this.currentUserService = currentUserService;
-        this.passwordEncoder = passwordEncoder;
+        this(userAccountRepository, currentUserService, passwordEncoder, new WorkspaceSecurityProperties());
     }
 
     public AuthenticatedUserResponse register(RegisterRequest request, HttpSession session) {
+        requireLegacySessionMode();
         Credentials credentials = normalizeCredentials(request == null ? null : request.email(), request == null ? null : request.password());
 
         if (userAccountRepository.findByEmail(credentials.email()).isPresent()) {
@@ -51,6 +65,7 @@ public class AuthService {
     }
 
     public AuthenticatedUserResponse login(LoginRequest request, HttpSession session) {
+        requireLegacySessionMode();
         Credentials credentials = normalizeCredentials(request == null ? null : request.email(), request == null ? null : request.password());
 
         UserAccount userAccount = userAccountRepository.findByEmail(credentials.email())
@@ -62,13 +77,16 @@ public class AuthService {
     }
 
     public void logout(HttpSession session) {
+        requireLegacySessionMode();
         if (session != null) {
             currentUserService.clearCurrentUser(session);
         }
     }
 
     public AuthenticatedUserResponse getCurrentUser() {
-        String authenticatedUserId = currentUserService.getAuthenticatedSessionUserId();
+        String authenticatedUserId = securityProperties.isKeycloakJwtMode()
+                ? currentUserService.getCurrentUserId()
+                : currentUserService.getAuthenticatedSessionUserId();
         if (!StringUtils.hasText(authenticatedUserId)) {
             throw new AuthenticationRequiredException("Authentication is required");
         }
@@ -84,6 +102,12 @@ public class AuthService {
                 .orElseThrow(() -> new AuthenticationRequiredException("Authentication is required"));
 
         return toResponse(userAccount);
+    }
+
+    private void requireLegacySessionMode() {
+        if (!securityProperties.isLegacySessionMode()) {
+            throw new AuthModeUnavailableException("Legacy session authentication is unavailable in keycloak_jwt mode");
+        }
     }
 
     private Credentials normalizeCredentials(String email, String password) {

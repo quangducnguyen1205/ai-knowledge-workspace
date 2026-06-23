@@ -2,6 +2,11 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -14,12 +19,29 @@ public class CurrentUserService {
     private static final int MAX_CURRENT_USER_ID_LENGTH = 255;
 
     private final CurrentUserProperties currentUserProperties;
+    private final WorkspaceSecurityProperties securityProperties;
+    private final OidcUserProvisioningService oidcUserProvisioningService;
 
     public CurrentUserService(CurrentUserProperties currentUserProperties) {
+        this(currentUserProperties, new WorkspaceSecurityProperties(), null);
+    }
+
+    @Autowired
+    public CurrentUserService(
+            CurrentUserProperties currentUserProperties,
+            WorkspaceSecurityProperties securityProperties,
+            OidcUserProvisioningService oidcUserProvisioningService
+    ) {
         this.currentUserProperties = currentUserProperties;
+        this.securityProperties = securityProperties;
+        this.oidcUserProvisioningService = oidcUserProvisioningService;
     }
 
     public String getCurrentUserId() {
+        if (securityProperties.isKeycloakJwtMode()) {
+            return resolveJwtProductUserId();
+        }
+
         ServletRequestAttributes requestAttributes = getServletRequestAttributes();
         if (requestAttributes == null) {
             return resolveDevFallbackUserId();
@@ -86,6 +108,25 @@ public class CurrentUserService {
         }
 
         return null;
+    }
+
+    private String resolveJwtProductUserId() {
+        if (oidcUserProvisioningService == null) {
+            throw new AuthenticationRequiredException("Authentication is required");
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthenticationToken)
+                || !authentication.isAuthenticated()) {
+            throw new AuthenticationRequiredException("Authentication is required");
+        }
+
+        Jwt jwt = jwtAuthenticationToken.getToken();
+        try {
+            return oidcUserProvisioningService.resolveUser(jwt).getId().toString();
+        } catch (InvalidJwtIdentityException exception) {
+            throw new AuthenticationRequiredException("Authentication is required");
+        }
     }
 
     private String resolveSessionUserId(HttpServletRequest request) {

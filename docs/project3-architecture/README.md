@@ -156,10 +156,12 @@ The interactive assistant flow does not need Kafka by default because the user i
 ### 1. Login / Auth
 
 1. Browser opens the React/Vite frontend.
-2. Frontend authenticates with Keycloak using OIDC Authorization Code + PKCE.
-3. Frontend calls `/api/**` through Nginx with the access token.
-4. Spring Boot validates JWTs using Keycloak issuer/JWKS.
-5. Spring Boot enforces workspace/resource authorization from Product PostgreSQL state.
+2. Current implementation default: Spring uses `legacy_session` mode, so existing Project 2 register/login/session APIs remain the product path.
+3. Opt-in foundation: with `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`, the frontend will authenticate with Keycloak using OIDC Authorization Code + PKCE and call `/api/**` with an access token.
+4. Spring Boot validates JWTs using Keycloak issuer/JWKS, maps provider plus OIDC `sub` to a local `UserAccount`, and creates a default workspace on first valid JWT request.
+5. Spring Boot enforces workspace/resource authorization from Product PostgreSQL state, not from Keycloak roles.
+
+P3-C1 implements the Spring-side JWT/resource-server and local identity mapping foundation only. Keycloak Docker realm/client setup, frontend bearer-token integration, and runtime OIDC smoke remain future work.
 
 ### 2. Upload, Processing, And Transcript Indexing
 

@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,10 +15,21 @@ public class AuthController {
 
     private final AuthService authService;
     private final CurrentUserService currentUserService;
+    private final WorkspaceSecurityProperties securityProperties;
 
-    public AuthController(AuthService authService, CurrentUserService currentUserService) {
+    @Autowired
+    public AuthController(
+            AuthService authService,
+            CurrentUserService currentUserService,
+            WorkspaceSecurityProperties securityProperties
+    ) {
         this.authService = authService;
         this.currentUserService = currentUserService;
+        this.securityProperties = securityProperties;
+    }
+
+    public AuthController(AuthService authService, CurrentUserService currentUserService) {
+        this(authService, currentUserService, new WorkspaceSecurityProperties());
     }
 
     @PostMapping("/api/auth/session")
@@ -25,6 +37,7 @@ public class AuthController {
             @RequestBody(required = false) CreateAuthSessionRequest request,
             HttpServletRequest httpServletRequest
     ) {
+        requireLegacySessionMode();
         if (!currentUserService.isDevFallbackEnabled()) {
             throw new AuthenticationRequiredException("Authentication is required");
         }
@@ -43,6 +56,7 @@ public class AuthController {
             @RequestBody(required = false) RegisterRequest request,
             HttpServletRequest httpServletRequest
     ) {
+        requireLegacySessionMode();
         return authService.register(request, httpServletRequest.getSession(true));
     }
 
@@ -51,17 +65,25 @@ public class AuthController {
             @RequestBody(required = false) LoginRequest request,
             HttpServletRequest httpServletRequest
     ) {
+        requireLegacySessionMode();
         return authService.login(request, httpServletRequest.getSession(true));
     }
 
     @PostMapping("/api/auth/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(HttpServletRequest httpServletRequest) {
+        requireLegacySessionMode();
         authService.logout(httpServletRequest.getSession(false));
     }
 
     @GetMapping("/api/me")
     public AuthenticatedUserResponse getCurrentUser() {
         return authService.getCurrentUser();
+    }
+
+    private void requireLegacySessionMode() {
+        if (!securityProperties.isLegacySessionMode()) {
+            throw new AuthModeUnavailableException("Legacy session authentication is unavailable in keycloak_jwt mode");
+        }
     }
 }

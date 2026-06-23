@@ -16,6 +16,7 @@ For the current backend slice, the primary product-facing current-user path is s
 `POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
 If authenticated session, auth-session fallback, and header are all absent, Spring can fall back to the configured local/dev default user when `CURRENT_USER_DEV_FALLBACK_ENABLED=true`.
 The smoke helper now follows the authenticated product path by default and only uses the older auth-session shortcut when `SMOKE_USE_LEGACY_AUTH_FALLBACK=1` is set explicitly.
+P3-C1 adds a code-verified but not yet runtime-smoked `keycloak_jwt` mode. Keep `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=legacy_session` for the current smoke checklist unless you are running a future controlled Keycloak/OIDC smoke. In JWT mode, bearer tokens map to local `UserAccount` rows by provider plus OIDC `sub`; Keycloak roles do not authorize workspaces, and no token values are stored.
 
 ## Helper Shortcut
 
