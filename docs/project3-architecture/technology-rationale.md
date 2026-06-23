@@ -112,7 +112,9 @@ Use Keycloak for:
 
 Spring still owns workspace ownership, asset authorization, assistant-context authorization, resource-level rules, and product-specific permission checks. Do not push all product authorization into Keycloak.
 
-Current implementation note: P3-C1 adds an opt-in Spring Security resource-server foundation with `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 session auth is not removed and no Keycloak configuration is required for normal local startup. In JWT mode, Spring validates issuer/signature and optional audience, then links provider plus OIDC `sub` to a local `UserAccount`. Email is profile data only, no tokens are stored, and Keycloak realm/client roles do not become workspace authorization in this phase. Keycloak runtime setup, frontend bearer-token integration, token-refresh UX, and runtime OIDC smoke are future work.
+Current implementation note: P3-C1 adds an opt-in Spring Security resource-server foundation with `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 session auth is not removed and no Keycloak configuration is required for normal local startup. In JWT mode, Spring validates issuer/signature and optional audience, then links provider plus OIDC `sub` to a local `UserAccount`. Email is profile data only, no tokens are stored, and Keycloak realm/client roles do not become workspace authorization in this phase.
+
+P3-C2A adds local Keycloak topology without making it a product default. The Compose `keycloak` profile starts a dedicated Keycloak PostgreSQL service and Keycloak on `localhost:8180`, importing a local `workspace-dev` realm when it is absent. The public `workspace-web` client uses Authorization Code + PKCE and emits the `workspace-core` audience for Spring resource-server validation. The import has no users, passwords, tokens, client secrets, groups, or role-based authorization policy. Frontend bearer-token integration, token-refresh UX, logout UX, and runtime OIDC smoke are future work.
 
 ## Product PostgreSQL
 

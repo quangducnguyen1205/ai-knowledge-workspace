@@ -53,8 +53,7 @@ flowchart LR
 
 ### Intentionally Keeps Out Of Scope For Now
 
-- Keycloak runtime realm/client provisioning and runtime OIDC smoke
-- Frontend bearer-token integration
+- Keycloak runtime OIDC smoke and frontend bearer-token integration
 - Collaboration, sharing, organization membership, enterprise roles, and broader authorization policies
 - Organization, organization-membership, tenant-SaaS, or enterprise RBAC modeling
 
@@ -200,3 +199,5 @@ Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in 
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.
 
 Phase P3-C1 adds the Keycloak JWT identity foundation behind `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 register/login/session behavior still works without Keycloak configuration. In JWT mode, Spring validates bearer tokens as a resource server, provisions or resolves a local product user by provider plus OIDC `sub`, creates the default workspace through Spring-owned PostgreSQL state, and rejects session-only product API requests. Email is copied only as safe profile data; it is not the durable identity key. Keycloak roles are not workspace authorization authority in this phase, and no token values are persisted.
+
+Phase P3-C2A adds only local Keycloak runtime topology. Keycloak is available through the explicit Docker Compose `keycloak` profile, uses a dedicated `keycloak-postgres` database/volume rather than Product PostgreSQL, and imports the local `workspace-dev` realm from `infra/keycloak/realm-import/` when the realm does not already exist. The import defines the public `workspace-web` client with Authorization Code + PKCE and an access-token audience mapper for `workspace-core`, but contains no users, passwords, client secrets, tokens, roles, groups, or authorization policies. Deleting/recreating Keycloak realm data is an explicit local operator action, not startup behavior.

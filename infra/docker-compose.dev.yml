@@ -19,6 +19,48 @@ services:
       timeout: 5s
       retries: 5
 
+  keycloak-postgres:
+    profiles: ["keycloak"]
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-change-me-local-only}
+    volumes:
+      - workspace_core_keycloak_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    profiles: ["keycloak"]
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.6.3}
+    command: start-dev --import-realm
+    depends_on:
+      keycloak-postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-postgres
+      KC_DB_URL_DATABASE: ${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-change-me-local-only}
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:-temp-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}
+    ports:
+      - "${KEYCLOAK_PORT:-8180}:8080"
+    volumes:
+      - ./keycloak/realm-import:/opt/keycloak/data/import:ro
+
   elasticsearch:
     image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.11.1}
     environment:
@@ -124,6 +166,7 @@ services:
 
 volumes:
   workspace_core_postgres_data:
+  workspace_core_keycloak_postgres_data:
   workspace_core_elasticsearch_data:
   workspace_core_minio_data:
   workspace_core_kafka_data:

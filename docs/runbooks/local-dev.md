@@ -61,6 +61,24 @@ Current product-auth defaults:
 
 `legacy_session` is the default and preserves the existing register/login/session path. `keycloak_jwt` is an opt-in foundation mode: Spring validates bearer JWTs as an OAuth2 resource server, maps provider plus OIDC `sub` to a local `UserAccount`, and keeps PostgreSQL workspace/asset ownership as the product authorization source. Set `WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI` when enabling JWT mode; `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI` can point at an explicit JWKS endpoint while issuer validation still uses the issuer URI. Audience validation is applied only when `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE` is set. Keycloak runtime setup and frontend bearer-token integration are not part of the default local run yet.
 
+Optional local Keycloak topology is profile-gated and is not part of the normal infrastructure startup:
+
+- `KEYCLOAK_IMAGE=quay.io/keycloak/keycloak:26.6.3`
+- `KEYCLOAK_PORT=8180`
+- `KEYCLOAK_REALM=workspace-dev`
+- `KEYCLOAK_FRONTEND_CLIENT_ID=workspace-web`
+- `KEYCLOAK_RESOURCE_AUDIENCE=workspace-core`
+
+When explicitly started with the Docker Compose `keycloak` profile, Keycloak uses a dedicated `keycloak-postgres` database and the `workspace_core_keycloak_postgres_data` volume. It does not reuse Product PostgreSQL. The tracked realm import contains no users, passwords, client secrets, tokens, roles, or groups; temporary admin credentials come only from local environment variables. Keycloak import skips an already-existing realm, so deleting/recreating local realm data is an explicit operator action rather than startup behavior. A future OIDC smoke can opt Spring into JWT mode with:
+
+```bash
+WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt
+WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI=http://localhost:8180/realms/workspace-dev
+WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=workspace-core
+```
+
+Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal.
+
 Current processing trigger default:
 
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`

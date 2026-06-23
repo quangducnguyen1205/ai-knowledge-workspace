@@ -163,6 +163,8 @@ The interactive assistant flow does not need Kafka by default because the user i
 
 P3-C1 implements the Spring-side JWT/resource-server and local identity mapping foundation only. Keycloak Docker realm/client setup, frontend bearer-token integration, and runtime OIDC smoke remain future work.
 
+P3-C2A adds a profile-gated local Keycloak topology for the next controlled smoke. Running `docker compose --profile keycloak ...` adds `keycloak-postgres` and `keycloak` on host port `8180`; normal infrastructure commands without the profile do not start Keycloak. The tracked local realm import creates `workspace-dev` with public client `workspace-web`, PKCE `S256`, localhost-only frontend redirects/origins, and an access-token audience mapper for `workspace-core`. It intentionally contains no users, passwords, client secrets, tokens, realm/client roles, groups, or authorization policies. `legacy_session` remains the default until a later OIDC runtime smoke proves token issuance and Spring validation against the local issuer.
+
 ### 2. Upload, Processing, And Transcript Indexing
 
 1. User uploads media through React/Vite.
