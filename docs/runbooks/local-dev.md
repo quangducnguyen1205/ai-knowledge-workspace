@@ -69,7 +69,7 @@ Optional local Keycloak topology is profile-gated and is not part of the normal 
 - `KEYCLOAK_FRONTEND_CLIENT_ID=workspace-web`
 - `KEYCLOAK_RESOURCE_AUDIENCE=workspace-core`
 
-When explicitly started with the Docker Compose `keycloak` profile, Keycloak uses a dedicated `keycloak-postgres` database and the `workspace_core_keycloak_postgres_data` volume. It does not reuse Product PostgreSQL. The tracked realm import contains no users, passwords, client secrets, tokens, roles, or groups; temporary admin credentials come only from local environment variables. Keycloak import skips an already-existing realm, so deleting/recreating local realm data is an explicit operator action rather than startup behavior. A future OIDC smoke can opt Spring into JWT mode with:
+When explicitly started with the Docker Compose `keycloak` profile, Keycloak uses a dedicated `keycloak-postgres` database and the `workspace_core_keycloak_postgres_data` volume. It does not reuse Product PostgreSQL. The tracked realm import contains no users, passwords, client secrets, tokens, roles, or groups; temporary admin credentials come only from local environment variables. Keycloak import skips an already-existing realm, so deleting/recreating local realm data is an explicit operator action rather than startup behavior. P3-C2B `[ĐÃ SMOKE THỰC TẾ]` verified the backend path with real Authorization Code + PKCE tokens, no direct grant, Spring issuer/signature/audience validation, first-login local user/default-workspace provisioning, repeated-login idempotency, workspace ownership isolation, and rejection of legacy login/session-only identity in JWT mode. A controlled OIDC run can opt Spring into JWT mode with:
 
 ```bash
 WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt
@@ -77,7 +77,7 @@ WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI=http://localhost:8180/realms/workspace-d
 WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=workspace-core
 ```
 
-Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal.
+Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal. React/Vite bearer-token integration, browser login UX, token refresh/logout UX, default auth cutover, legacy-session removal, and collaboration/membership/RBAC remain future work.
 
 Current processing trigger default:
 

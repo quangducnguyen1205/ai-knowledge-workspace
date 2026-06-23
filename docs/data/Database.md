@@ -187,6 +187,7 @@ Current role:
 - In `keycloak_jwt` mode, links a validated JWT to the local product user with provider plus OIDC `sub`; email is profile data only and is not the durable identity key.
 - Does not persist Keycloak access tokens, refresh tokens, client secrets, or Keycloak role grants.
 - Is intentionally narrow and does not introduce roles, sharing, organization membership, or broader auth-platform features yet.
+- P3-C2B `[ĐÃ SMOKE THỰC TẾ]` verified with real local Keycloak tokens that first JWT use creates exactly one local user and default workspace, repeated JWT use resolves the same local user, and another JWT subject cannot access that user's workspace. Product PostgreSQL remains the authorization source; no token values are persisted.
 
 ## `Workspace`
 
