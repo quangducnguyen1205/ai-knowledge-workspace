@@ -59,7 +59,7 @@ Current product-auth defaults:
 - `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI=`
 - `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=`
 
-`legacy_session` is the default and preserves the existing register/login/session path. `keycloak_jwt` is an opt-in foundation mode: Spring validates bearer JWTs as an OAuth2 resource server, maps provider plus OIDC `sub` to a local `UserAccount`, and keeps PostgreSQL workspace/asset ownership as the product authorization source. Set `WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI` when enabling JWT mode; `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI` can point at an explicit JWKS endpoint while issuer validation still uses the issuer URI. Audience validation is applied only when `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE` is set. Keycloak runtime setup and frontend bearer-token integration are not part of the default local run yet.
+`legacy_session` is the default and preserves the existing register/login/session path. `keycloak_jwt` is an opt-in foundation mode: Spring validates bearer JWTs as an OAuth2 resource server, maps provider plus OIDC `sub` to a local `UserAccount`, and keeps PostgreSQL workspace/asset ownership as the product authorization source. Set `WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI` when enabling JWT mode; `WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI` can point at an explicit JWKS endpoint while issuer validation still uses the issuer URI. Audience validation is applied only when `WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE` is set. Keycloak runtime setup is not part of the default local run.
 
 Optional local Keycloak topology is profile-gated and is not part of the normal infrastructure startup:
 
@@ -77,7 +77,7 @@ WORKSPACE_CORE_SECURITY_OIDC_ISSUER_URI=http://localhost:8180/realms/workspace-d
 WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=workspace-core
 ```
 
-Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal. React/Vite bearer-token integration, browser login UX, token refresh/logout UX, default auth cutover, legacy-session removal, and collaboration/membership/RBAC remain future work.
+Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal. P3-C3 `[ĐÃ XÁC MINH TỪ CODE]` adds the React/Vite opt-in bearer-token foundation: `VITE_AUTHENTICATION_MODE=legacy_session` remains the frontend default; `keycloak_jwt` requires public Keycloak client settings for `workspace-web`, uses Authorization Code + PKCE, keeps the access token in memory only, sends Spring API calls with `Authorization: Bearer <access-token>`, and treats `GET /api/me` as the Spring-owned product-user authority. The frontend must not use Keycloak roles or raw JWT claims for workspace or asset authorization. Browser Keycloak smoke, token refresh, silent SSO, global logout propagation, account management, default auth cutover, legacy-session removal, and collaboration/membership/RBAC remain future work.
 
 Current processing trigger default:
 
