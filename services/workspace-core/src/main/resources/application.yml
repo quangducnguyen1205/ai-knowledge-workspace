@@ -36,6 +36,10 @@ workspace:
       audience: ${WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE:}
   processing:
     trigger-mode: ${WORKSPACE_CORE_PROCESSING_TRIGGER_MODE:direct_upload}
+    request-relay:
+      enabled: ${WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED:false}
+      fixed-delay: ${WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_FIXED_DELAY:10s}
+      batch-size: ${WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_BATCH_SIZE:10}
     smoke:
       command: ${WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND:none}
       result-event-file: ${WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE:}

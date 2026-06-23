@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -113,6 +115,55 @@ class OutboxRelayServiceTest {
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
+    }
+
+    @Test
+    void requestRelayPublishesOnlyDueProcessingRequestEventsAndHonorsBatchSize() {
+        OutboxEvent firstRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent secondRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent thirdRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent indexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent futureRequestEvent = newOutboxEvent();
+        futureRequestEvent.recordPublishFailure("not yet", Instant.now().plusSeconds(3600), 5);
+        futureRequestEvent = outboxEventRepository.saveAndFlush(futureRequestEvent);
+
+        int processedCount = outboxRelayService.relayDueProcessingRequestEvents(2);
+
+        assertThat(processedCount).isEqualTo(2);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds())
+                .containsExactly(firstRequestEvent.getId(), secondRequestEvent.getId());
+        assertThat(outboxEventRepository.findById(firstRequestEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(outboxEventRepository.findById(secondRequestEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(outboxEventRepository.findById(thirdRequestEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEventRepository.findById(indexingEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEventRepository.findById(futureRequestEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+    }
+
+    @Test
+    void requestRelayFailureForOneCandidateDoesNotPreventLaterCandidate() {
+        OutboxEvent failingRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent successfulRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        fakeOutboxMessagePublisher.failEventWith(failingRequestEvent.getId(), "broker unavailable");
+
+        int processedCount = outboxRelayService.relayDueProcessingRequestEvents(10);
+
+        assertThat(processedCount).isEqualTo(2);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds())
+                .containsExactly(successfulRequestEvent.getId());
+
+        OutboxEvent savedFailingEvent = outboxEventRepository.findById(failingRequestEvent.getId()).orElseThrow();
+        assertThat(savedFailingEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(savedFailingEvent.getAttemptCount()).isEqualTo(1);
+        assertThat(savedFailingEvent.getLastError()).isEqualTo("broker unavailable");
+        assertThat(savedFailingEvent.getNextAttemptAt()).isAfter(Instant.now());
+
+        OutboxEvent savedSuccessfulEvent = outboxEventRepository.findById(successfulRequestEvent.getId()).orElseThrow();
+        assertThat(savedSuccessfulEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
     }
 
     @Test
@@ -294,11 +345,15 @@ class OutboxRelayServiceTest {
 
         private final List<UUID> publishedEventIds = new ArrayList<>();
         private final List<OutboxEventStatus> publishedStatuses = new ArrayList<>();
+        private final Map<UUID, String> eventFailures = new HashMap<>();
         private String failureMessage;
 
         @Override
         public void publish(OutboxEvent event) {
             publishedStatuses.add(event.getStatus());
+            if (eventFailures.containsKey(event.getId())) {
+                throw new IllegalStateException(eventFailures.get(event.getId()));
+            }
             if (failureMessage != null) {
                 throw new IllegalStateException(failureMessage);
             }
@@ -307,6 +362,10 @@ class OutboxRelayServiceTest {
 
         void failWith(String failureMessage) {
             this.failureMessage = failureMessage;
+        }
+
+        void failEventWith(UUID eventId, String failureMessage) {
+            eventFailures.put(eventId, failureMessage);
         }
 
         List<UUID> publishedEventIds() {
@@ -320,6 +379,7 @@ class OutboxRelayServiceTest {
         void reset() {
             publishedEventIds.clear();
             publishedStatuses.clear();
+            eventFailures.clear();
             failureMessage = null;
         }
     }

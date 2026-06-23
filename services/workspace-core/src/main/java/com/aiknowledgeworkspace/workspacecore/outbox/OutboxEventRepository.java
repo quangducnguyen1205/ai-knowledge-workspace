@@ -26,6 +26,34 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
             Pageable pageable
     );
 
+    @Query("""
+            select event.id
+            from OutboxEvent event
+            where event.status = :status
+              and (event.nextAttemptAt is null or event.nextAttemptAt <= :now)
+            order by event.createdAt asc, event.id asc
+            """)
+    List<UUID> findDueEventIds(
+            @Param("status") OutboxEventStatus status,
+            @Param("now") Instant now,
+            Pageable pageable
+    );
+
+    @Query("""
+            select event.id
+            from OutboxEvent event
+            where event.status = :status
+              and event.eventType = :eventType
+              and (event.nextAttemptAt is null or event.nextAttemptAt <= :now)
+            order by event.createdAt asc, event.id asc
+            """)
+    List<UUID> findDueEventIdsByEventType(
+            @Param("status") OutboxEventStatus status,
+            @Param("eventType") String eventType,
+            @Param("now") Instant now,
+            Pageable pageable
+    );
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             update OutboxEvent event

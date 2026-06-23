@@ -82,6 +82,11 @@ Do not enable that mode for the default local path until a controlled Keycloak/O
 Current processing trigger default:
 
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`
+- `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=false`
+- `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_FIXED_DELAY=10s`
+- `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_BATCH_SIZE=10`
+
+The automatic request relay is an opt-in transition control for `kafka_request` only. It also requires `WORKSPACE_CORE_KAFKA_ENABLED=true`. When enabled, it relays a bounded batch of due `asset.processing.requested` outbox rows through the existing outbox state machine and publisher envelope. It does not relay result events, indexing events, or arbitrary outbox rows, and it does not change the default `direct_upload` path.
 
 Manual processing smoke controls:
 

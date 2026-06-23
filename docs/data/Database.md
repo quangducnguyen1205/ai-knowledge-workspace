@@ -309,8 +309,8 @@ Current role:
 - Avoids a dual-write gap between product database changes and opt-in Kafka publishing.
 - Currently records `asset.processing.requested` with `eventVersion = 1` when a successful upload persists an `Asset` and `ProcessingJob`.
 - Provides a relay foundation that can select due pending rows, call a publisher abstraction, and update attempt/status metadata.
-- Can publish to the local Kafka topic `asset.processing.requested.v1` when `WORKSPACE_CORE_KAFKA_ENABLED=true` and the relay is explicitly invoked.
-- Does not schedule relay execution, consume from Kafka, route dead-letter topics, or trigger FastAPI Kafka consumption yet.
+- Can publish to the local Kafka topic `asset.processing.requested.v1` when `WORKSPACE_CORE_KAFKA_ENABLED=true` and the relay is explicitly invoked or the narrow processing request relay is explicitly enabled.
+- Does not run a generic all-event scheduler, consume from Kafka, route dead-letter topics, or trigger FastAPI Kafka consumption by itself.
 - Kafka is event transport only; PostgreSQL remains the durable outbox and product source of truth.
 - Delivery remains at-least-once because a relay process can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future consumers must be idempotent.
 - Stores JSON payload text and never stores raw media bytes or secrets.
@@ -431,6 +431,7 @@ Current role:
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
 - The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
+- `workspace.processing.request-relay.enabled=false` is the P3-D1 default. When set true together with `workspace.processing.trigger-mode=kafka_request` and `workspace.kafka.enabled=true`, Spring can periodically relay only due `asset.processing.requested` rows in a bounded batch. It does not relay `asset.processing.result`, `asset.indexing.requested`, or arbitrary outbox event types.
 - Request relays must not be enabled for ordinary `direct_upload` uploads. The explicit `kafka_request` trigger mode exists to prevent duplicate processing before cutover.
 - Exact-ID manual requeue exists for a selected `PUBLISHING` request outbox row that is older than the configured minimum age. Requeue moves only that selected row back to the retryable `PENDING` state and does not publish it automatically; the operator must invoke the scoped relay separately. Broad stale-row scans and automated recovery remain out of scope.
 - Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. It uses `MANUAL_IMMEDIATE` acknowledgements, consumer group `workspace-processing-result-v1`, and `latest` offset reset by default. Enable it only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, and start it before publishing result events in controlled local runs.
