@@ -88,6 +88,8 @@ Current processing trigger default:
 
 The automatic request relay is an opt-in transition control for `kafka_request` only. It also requires `WORKSPACE_CORE_KAFKA_ENABLED=true`. When enabled, it relays a bounded batch of due `asset.processing.requested` outbox rows through the existing outbox state machine and publisher envelope. It does not relay result events, indexing events, or arbitrary outbox rows, and it does not change the default `direct_upload` path.
 
+P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified this as a normal opt-in runtime path with `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true`, and the Spring result listener enabled before FastAPI result publication. The run used one Spring upload, no manual Spring request relay command, FastAPI/Celery processing from MinIO, one FastAPI result relay, and automatic Spring result consumption through to `TRANSCRIPT_READY`/`SUCCEEDED`. Search indexing stayed disabled.
+
 Manual processing smoke controls:
 
 - `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=none`

@@ -83,6 +83,8 @@ Project3 should improve the backend with clearer module boundaries, Flyway migra
 
 Do not split Spring Boot into many services just to look modern. The stronger design is one well-structured product core with real platform infrastructure around it.
 
+P3-D2 `[ĐÃ SMOKE THỰC TẾ]` validates that split of responsibility for processing: Spring stayed the product owner, persisted the upload/job/request outbox, automatically relayed the request only in opt-in `kafka_request` mode, consumed the FastAPI result through the Spring listener, and stored the final transcript snapshot and product state. FastAPI/Celery performed the internal media work from MinIO. Elasticsearch/search indexing was intentionally not part of that smoke.
+
 ## AI Assistant API / Context Orchestrator
 
 The assistant is part of Project3 core because AI Knowledge Workspace should demonstrate interactive AI over workspace knowledge, not only background transcription and search.

@@ -42,6 +42,8 @@ Repo B currently persists eight main records:
 - `AssetSearchIndexJob`
 - `AssetTranscriptRowSnapshot`
 
+P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the normal opt-in async processing state transitions in Product PostgreSQL: a `kafka_request` upload created one `Asset`, one `ProcessingJob`, and one `asset.processing.requested` `OutboxEvent`; the automatic request relay marked that request outbox row `PUBLISHED`; the Spring result listener recorded one `ConsumedProcessingResultEvent` as `APPLIED`, marked the job `SUCCEEDED`, marked the asset `TRANSCRIPT_READY`, and persisted the Spring-owned transcript snapshot. Search indexing was disabled, so no `AssetSearchIndexJob` or `asset.indexing.requested` row was created for that run.
+
 ## Simplified Persistence Relationship Diagram
 
 This diagram is intentionally simplified and asset-centric. The detailed sections below are the source of truth for the current field lists and notes.
