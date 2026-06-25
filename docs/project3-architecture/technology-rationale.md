@@ -85,6 +85,8 @@ Do not split Spring Boot into many services just to look modern. The stronger de
 
 P3-D2 `[ĐÃ SMOKE THỰC TẾ]` validates that split of responsibility for processing: Spring stayed the product owner, persisted the upload/job/request outbox, automatically relayed the request only in opt-in `kafka_request` mode, consumed the FastAPI result through the Spring listener, and stored the final transcript snapshot and product state. FastAPI/Celery performed the internal media work from MinIO. Elasticsearch/search indexing was intentionally not part of that smoke.
 
+P3-D4 `[ĐÃ SMOKE THỰC TẾ]` validates the fully automatic result-publication variant of the same split: Spring automatic request relay, FastAPI consumer/Celery, FastAPI automatic result-relay, and Spring automatic result listener completed one MinIO-backed upload without manual request relay, manual result relay, result-file handling, recovery command, or fabricated Kafka injection. `direct_upload` remained the default product mode and was not exercised; search/indexing stayed disabled.
+
 ## AI Assistant API / Context Orchestrator
 
 The assistant is part of Project3 core because AI Knowledge Workspace should demonstrate interactive AI over workspace knowledge, not only background transcription and search.

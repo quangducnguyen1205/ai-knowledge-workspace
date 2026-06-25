@@ -44,6 +44,8 @@ Repo B currently persists eight main records:
 
 P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the normal opt-in async processing state transitions in Product PostgreSQL: a `kafka_request` upload created one `Asset`, one `ProcessingJob`, and one `asset.processing.requested` `OutboxEvent`; the automatic request relay marked that request outbox row `PUBLISHED`; the Spring result listener recorded one `ConsumedProcessingResultEvent` as `APPLIED`, marked the job `SUCCEEDED`, marked the asset `TRANSCRIPT_READY`, and persisted the Spring-owned transcript snapshot. Search indexing was disabled, so no `AssetSearchIndexJob` or `asset.indexing.requested` row was created for that run.
 
+P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the same product-state endpoint through the fully automatic path: Spring automatic request relay published the selected durable request row, FastAPI automatic result-relay published the selected durable result row after consumer/Celery processing, and Spring automatic result listener applied it. Cleanup deleted only the selected Product PostgreSQL rows, FastAPI processing rows, Redis task metadata, and selected MinIO object while retaining Kafka history and Docker cache. `direct_upload` remained the default and was not exercised; indexing/search stayed disabled.
+
 ## Simplified Persistence Relationship Diagram
 
 This diagram is intentionally simplified and asset-centric. The detailed sections below are the source of truth for the current field lists and notes.
