@@ -128,6 +128,8 @@ FastAPI owns Python-side prompt execution:
 
 Frontend must not call LLM providers directly. That would bypass product authorization, workspace scope, auditability, prompt policy, and provider isolation.
 
+P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` implements only the first Spring-owned retrieval boundary: `POST /api/assistant/context` returns a deterministic, bounded context pack with source citations after existing workspace/asset/searchability checks. It does not call the FastAPI LLM adapter, invoke any provider, generate an answer, create embeddings, persist chat history, or add token accounting. Later LLM orchestration must consume context through this Spring-owned policy boundary rather than bypassing product authorization.
+
 ## Kafka And Celery
 
 Kafka and Celery both support asynchronous work, but they sit at different boundaries.
@@ -216,11 +218,9 @@ Elasticsearch is derived. Product PostgreSQL remains the truth for transcript sn
 2. Frontend calls Spring Boot through Nginx.
 3. Spring Boot AI Assistant API / Context Orchestrator validates JWT and user/workspace scope.
 4. Spring Boot retrieves authorized context from Product PostgreSQL and Elasticsearch.
-5. Spring Boot calls the internal FastAPI LLM Adapter / Prompt Executor.
-6. FastAPI constructs/executes the prompt and calls the configured LLM Provider / Local Model Runtime.
-7. The LLM response returns to FastAPI and then to Spring Boot.
-8. Spring Boot returns the answer to the frontend.
-9. Spring Boot optionally stores conversation/audit/history in Product PostgreSQL.
+5. Later phases can pass that context to the internal FastAPI LLM Adapter / Prompt Executor.
+6. Later phases can return an LLM answer to the frontend through Spring.
+7. Later phases may optionally store conversation/audit/history in Product PostgreSQL if product requirements need it.
 
 Possible providers include Ollama/local model, OpenAI/OpenRouter adapter, or other LLM providers. They are implementation choices behind the adapter, not product-state owners.
 

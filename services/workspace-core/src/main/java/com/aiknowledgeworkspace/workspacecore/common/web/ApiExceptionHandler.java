@@ -9,6 +9,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthModeUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.EmailAlreadyRegisteredException;
@@ -159,6 +160,14 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(InvalidSearchRequestException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidSearchRequest(InvalidSearchRequestException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidAssistantContextRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidAssistantContextRequest(
+            InvalidAssistantContextRequestException exception
+    ) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
     }

@@ -143,6 +143,8 @@ Explicit `POST /api/assets/{assetId}/index` remains supported and uses the same 
 
 For a full automatic processing-to-search smoke, enable all separate opt-in controls together: `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true`, `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=true`, `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true`, and `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=true`. P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verified that combination with Kafka, FastAPI/Celery/MinIO, Elasticsearch, and Spring host runtime, without invoking any manual relay or recovery command.
 
+P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/context` as a local retrieval-only assistant context pack endpoint. Send JSON with `workspaceId`, `query`, optional `assetId`, optional `maxSources`, and optional `contextWindow`. Defaults are `maxSources=5` and `contextWindow=1`; bounds are `maxSources 1..10`, `contextWindow 0..5`, and query length at most `500` characters. The endpoint returns cited source context only and reuses existing search/context authorization; it does not call FastAPI, invoke an LLM provider, generate an answer, persist chat history, or add embeddings.
+
 Current outbox-relay defaults:
 
 - `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=false`

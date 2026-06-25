@@ -103,6 +103,8 @@ Use Spring Boot for:
 
 Do not let FastAPI or an external LLM provider decide product authorization. Do not let the browser call model providers directly.
 
+P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` starts this boundary as a retrieval-only Spring API. `POST /api/assistant/context` validates the authenticated workspace and optional asset scope, reuses existing searchability gates and canonical transcript snapshots, and returns bounded cited sources. It intentionally does not add a provider SDK, LangChain/Spring AI/Ollama/OpenRouter client, outbound HTTP call, answer generator, chat persistence, embeddings, token accounting, rate-limit implementation, feedback, or audit persistence.
+
 ## Identity: Keycloak
 
 Keycloak is a strong fit because it is widely used, free enough for local development, and relevant to backend/platform learning.

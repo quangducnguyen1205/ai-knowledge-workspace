@@ -664,6 +664,19 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `GET /api/assets/{assetId}/transcript/context?transcriptRowId=<rowId>` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 
+### Assistant Context Pack Checks
+
+- [ ] P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/context` for retrieval only.
+- [ ] Authenticate through the current product auth mode before calling it.
+- [ ] Send JSON with `workspaceId`, `query`, optional `assetId`, optional `maxSources`, and optional `contextWindow`.
+- [ ] Confirm valid empty retrieval returns HTTP `200` with `sources: []`.
+- [ ] Confirm each returned source has `assetId`, `assetTitle`, `transcriptRowId`, `segmentIndex`, `createdAt`, `text`, and `citation`.
+- [ ] Confirm there is no `answer`, `summary`, model/provider metadata, or invented assistant text.
+- [ ] Confirm returned sources are limited by `maxSources`, context text respects `contextWindow`, and citations use asset ID plus transcript-row identity plus segment index.
+- [ ] Confirm another user's workspace, a cross-workspace `assetId`, and a non-`SEARCHABLE` asset are not exposed.
+- [ ] Confirm blank or oversized query, invalid `maxSources`, and invalid `contextWindow` return structured HTTP `400`.
+- [ ] Do not treat this as an LLM smoke: no provider SDK, FastAPI adapter, outbound HTTP call, embeddings, chat persistence, or token accounting is involved.
+
 ### Validation Path
 
 - [ ] Call `GET /api/search?q=` with a blank or whitespace-only query value.
