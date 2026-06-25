@@ -315,6 +315,8 @@ Phase P3-B1 implements this as a PostgreSQL-owned indexing job and outbox founda
 
 A controlled P3-B2 local smoke has verified the indexing transport path without running FastAPI media processing: Spring created one indexing job and one metadata-only indexing outbox event from a stable Spring-owned snapshot, relayed exactly that selected event, consumed it with the disabled-by-default indexing listener, wrote two derived Elasticsearch documents, and then proved stale-document protection by changing the asset back to non-searchable in PostgreSQL while the Elasticsearch documents still existed.
 
+P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete opt-in automatic processing-to-search composition. One normal Spring upload in `kafka_request` mode flowed through the automatic processing request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay, Spring result listener, transcript snapshot replacement, automatic indexing request creation, automatic indexing request relay, and indexing listener. Elasticsearch received the derived document, the asset reached `SEARCHABLE`, workspace and asset-scoped search plus context returned the selected asset, and PostgreSQL product-state gating hid the same Elasticsearch document after the selected asset was temporarily set back to `TRANSCRIPT_READY`. This does not change the default `direct_upload` mode and does not add retry topics, DLQ, generic outbox automation, reindex, rebuild, or reconcile workflows.
+
 Optional note: OpenSearch is a reasonable future alternative if license or deployment constraints require it, but Elasticsearch remains the primary Project3 choice because of popularity and learning relevance.
 
 ## Observability: Prometheus / Grafana / Loki
