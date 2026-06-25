@@ -52,6 +52,10 @@ workspace:
   search:
     indexing:
       auto-request-enabled: ${WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED:false}
+    indexing-relay:
+      enabled: ${WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED:false}
+      fixed-delay: ${WORKSPACE_CORE_SEARCH_INDEXING_RELAY_FIXED_DELAY:10s}
+      batch-size: ${WORKSPACE_CORE_SEARCH_INDEXING_RELAY_BATCH_SIZE:10}
     smoke:
       command: ${WORKSPACE_CORE_SEARCH_SMOKE_COMMAND:none}
       indexing-outbox-event-id: ${WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID:}

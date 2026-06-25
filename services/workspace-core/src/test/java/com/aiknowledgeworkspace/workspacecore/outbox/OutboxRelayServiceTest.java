@@ -167,6 +167,71 @@ class OutboxRelayServiceTest {
     }
 
     @Test
+    void indexingRelayPublishesOnlyDueIndexingEventsAndHonorsBatchSize() {
+        OutboxEvent firstIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent secondIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent thirdIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent processingRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent resultEvent = outboxEventRepository.saveAndFlush(newResultOutboxEvent());
+        OutboxEvent futureIndexingEvent = newIndexingOutboxEvent();
+        futureIndexingEvent.recordPublishFailure("not yet", Instant.now().plusSeconds(3600), 5);
+        futureIndexingEvent = outboxEventRepository.saveAndFlush(futureIndexingEvent);
+
+        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(2);
+
+        assertThat(processedCount).isEqualTo(2);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds())
+                .containsExactly(firstIndexingEvent.getId(), secondIndexingEvent.getId());
+        assertThat(outboxEventRepository.findById(firstIndexingEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(outboxEventRepository.findById(secondIndexingEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(outboxEventRepository.findById(thirdIndexingEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEventRepository.findById(processingRequestEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEventRepository.findById(resultEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEventRepository.findById(futureIndexingEvent.getId()).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+    }
+
+    @Test
+    void indexingRelayFailureForOneCandidateDoesNotPreventLaterCandidate() {
+        OutboxEvent failingIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        OutboxEvent successfulIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+        fakeOutboxMessagePublisher.failEventWith(failingIndexingEvent.getId(), "broker unavailable");
+
+        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(10);
+
+        assertThat(processedCount).isEqualTo(2);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds())
+                .containsExactly(successfulIndexingEvent.getId());
+
+        OutboxEvent savedFailingEvent = outboxEventRepository.findById(failingIndexingEvent.getId()).orElseThrow();
+        assertThat(savedFailingEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(savedFailingEvent.getAttemptCount()).isEqualTo(1);
+        assertThat(savedFailingEvent.getLastError()).isEqualTo("broker unavailable");
+        assertThat(savedFailingEvent.getNextAttemptAt()).isAfter(Instant.now());
+
+        OutboxEvent savedSuccessfulEvent = outboxEventRepository.findById(successfulIndexingEvent.getId()).orElseThrow();
+        assertThat(savedSuccessfulEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
+    }
+
+    @Test
+    void indexingRelayDoesNotRequireSensitivePayloadData() {
+        OutboxEvent indexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
+
+        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(1);
+
+        assertThat(processedCount).isEqualTo(1);
+        assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(indexingEvent.getId());
+        assertThat(indexingEvent.getPayload())
+                .contains("assetId", "indexingJobId", "snapshotFingerprint")
+                .doesNotContain("transcript text", "objectKey", "storageBucket", "credential", "token", "password");
+    }
+
+    @Test
     void scopedRelayPublishesOnlySelectedDueRequestEvent() {
         OutboxEvent selectedEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
         OutboxEvent unrelatedDueEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
@@ -328,6 +393,18 @@ class OutboxRelayServiceTest {
                 assetId.toString(),
                 "{\"assetId\":\"%s\",\"indexingJobId\":\"%s\",\"snapshotFingerprint\":\"abc123\"}"
                         .formatted(assetId, indexingJobId)
+        );
+    }
+
+    private OutboxEvent newResultOutboxEvent() {
+        UUID assetId = UUID.randomUUID();
+        return new OutboxEvent(
+                "transcript.ready",
+                1,
+                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                assetId,
+                assetId.toString(),
+                "{\"assetId\":\"%s\",\"status\":\"ready\"}".formatted(assetId)
         );
     }
 

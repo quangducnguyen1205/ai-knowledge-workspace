@@ -74,6 +74,22 @@ public class OutboxRelayService {
         );
     }
 
+    public int relayDueIndexingRequestEvents(int batchSize) {
+        List<UUID> dueEventIds = outboxEventRepository.findDueEventIdsByEventType(
+                OutboxEventStatus.PENDING,
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                Instant.now(clock),
+                PageRequest.of(0, Math.max(1, batchSize))
+        );
+
+        return relaySelectedEventIds(
+                dueEventIds,
+                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                "Automatic indexing request relay only supports asset.indexing.requested events",
+                false
+        );
+    }
+
     public OutboxEventStatus relayEventByIdOnce(UUID eventId) {
         if (!outboxRelayProperties.isEnabled()) {
             throw new IllegalStateException("Outbox relay is disabled");

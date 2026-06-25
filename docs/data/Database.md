@@ -395,7 +395,7 @@ Current role:
 - Links to the `asset.indexing.requested` outbox event when automatic indexing request creation is enabled.
 - Captures bounded safe error detail for known durable indexing failures.
 - Does not store transcript text, raw media bytes, object keys, credentials, or Elasticsearch document payloads.
-- Does not implement operator reindex, workspace rebuild, reconcile workflows, retry topics, DLQ, or scheduled indexing relay yet.
+- Does not implement operator reindex, workspace rebuild, reconcile workflows, retry topics, DLQ, or generic indexing recovery.
 
 ## `AssetTranscriptRowSnapshot`
 
@@ -455,6 +455,7 @@ Current role:
 - An already `INDEXED` job for the current snapshot fingerprint makes explicit indexing idempotent: the request is treated as a successful no-op, Elasticsearch is not called again, and a `SEARCHABLE` asset remains `SEARCHABLE`.
 - A redelivered `INDEXING` job can retry safely. Elasticsearch infrastructure failures leave the job retryable instead of turning it into durable `FAILED`; deterministic domain failures such as an empty usable snapshot can still be recorded as `FAILED`.
 - The indexing listener is disabled by default. When enabled in a controlled local run, it consumes `asset.indexing.requested.v1`, loads canonical transcript rows from PostgreSQL, writes derived documents to Elasticsearch, and marks the asset `SEARCHABLE` only after a successful Elasticsearch write.
+- `workspace.search.indexing-relay.enabled=false` is the P3-E1 default. When set true together with `workspace.kafka.enabled=true`, Spring can periodically relay only due `asset.indexing.requested` outbox rows in a bounded batch. It does not create indexing jobs, enable `workspace.search.indexing.auto-request-enabled`, start the indexing listener, or relay processing request/result events.
 - P3-B2 runtime-smoked this controlled listener path with Kafka and Elasticsearch using a Spring-owned transcript snapshot and one selected indexing outbox event. The same smoke also proved that stale Elasticsearch documents are not returned once PostgreSQL product state says the asset is no longer `SEARCHABLE`.
 - Empty transcript handling can move an asset to `FAILED`.
 - Successful indexing can move an asset to `SEARCHABLE`.

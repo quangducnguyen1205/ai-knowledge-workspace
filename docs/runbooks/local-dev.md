@@ -126,6 +126,9 @@ Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived 
 Current derived search indexing defaults:
 
 - `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`
+- `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=false`
+- `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_FIXED_DELAY=10s`
+- `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_BATCH_SIZE=10`
 - `WORKSPACE_CORE_SEARCH_SMOKE_COMMAND=none`
 - `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID=`
 - `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=false`
@@ -134,7 +137,7 @@ Current derived search indexing defaults:
 
 Explicit `POST /api/assets/{assetId}/index` remains supported and uses the same indexing core as the async foundation. A repeated explicit index request for the same already-indexed snapshot is a successful no-op and does not call Elasticsearch again. Automatic indexing request creation is opt-in. When enabled, a stable Spring-owned transcript snapshot can create an `asset_search_index_jobs` row and one metadata-only `asset.indexing.requested` outbox event in the same product transaction. PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint, and indexing completion rechecks the current transcript fingerprint before marking the asset `SEARCHABLE`. The indexing payload contains asset ID, indexing job ID, and snapshot fingerprint only; it does not contain transcript text, raw media bytes, object keys, credentials, or stack traces.
 
-`relay_indexing_outbox_once` is a disabled-by-default smoke command that requires `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID` and relays only that selected `asset.indexing.requested` outbox row. The indexing listener is also disabled by default. P3-B2 runtime-smoked this path by starting the listener before relaying one selected indexing event, writing derived Elasticsearch documents from Spring PostgreSQL snapshot rows, and proving that PostgreSQL asset state gates stale Elasticsearch documents. P3-B2.1 then runtime-smoked a fresh local Elasticsearch environment with no `asset-transcript-rows` index: the Spring indexing write path created the derived index lazily, indexed the selected asset documents, and completed search successfully without manual index pre-creation. Operator reindex, workspace rebuild, reconcile workflows, scheduled indexing relay, retry topics, and DLQ remain future work.
+`relay_indexing_outbox_once` is a disabled-by-default smoke command that requires `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID` and relays only that selected `asset.indexing.requested` outbox row. P3-E1 `[ĐÃ XÁC MINH TỪ CODE]` adds an automatic indexing request relay with separate controls: it requires `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true` and `WORKSPACE_CORE_KAFKA_ENABLED=true`, relays only due `asset.indexing.requested` rows in bounded batches, and does not enable auto-request creation or the indexing listener. The indexing listener is also disabled by default. P3-B2 runtime-smoked this path by starting the listener before relaying one selected indexing event, writing derived Elasticsearch documents from Spring PostgreSQL snapshot rows, and proving that PostgreSQL asset state gates stale Elasticsearch documents. P3-B2.1 then runtime-smoked a fresh local Elasticsearch environment with no `asset-transcript-rows` index: the Spring indexing write path created the derived index lazily, indexed the selected asset documents, and completed search successfully without manual index pre-creation. Operator reindex, workspace rebuild, reconcile workflows, automatic stale-row recovery, retry topics, and DLQ remain future work.
 
 Current outbox-relay defaults:
 
