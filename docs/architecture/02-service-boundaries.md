@@ -4,6 +4,12 @@
 
 The current pre-AI baseline separates product logic from internal AI/media processing. Spring Boot is the product core. FastAPI is an internal processing service. Elasticsearch is the search layer. PostgreSQL is the domain data store, MinIO stores raw media bytes behind Spring, and Kafka is local event transport for opt-in outbox publishing plus future processing-result consumption.
 
+P3-BE0 adds an evidence-based backend modularity baseline in
+[`backend-modularity-baseline.md`](backend-modularity-baseline.md). It maps the
+current Spring package roots, dependency directions, confirmed boundary risks,
+and a staged Spring Modulith/ArchUnit adoption path before any Java package
+refactor or dependency addition.
+
 ## Current Boundary Diagram
 
 ```mermaid

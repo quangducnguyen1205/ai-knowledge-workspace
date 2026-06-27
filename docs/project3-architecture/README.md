@@ -37,6 +37,7 @@ Current source-of-truth docs:
 - `docs/architecture/05-end-to-end-diagram-pack.md`
 - `docs/architecture/01-system-context.md`
 - `docs/architecture/02-service-boundaries.md`
+- `docs/architecture/backend-modularity-baseline.md`
 - `docs/architecture/phase1-implemented-product-flow.md`
 - `docs/api/API.md`
 - `docs/data/Database.md`
@@ -49,6 +50,12 @@ Historical/reference docs:
 - Sprint, phase-closure, and transition notes are useful context, but not the current runtime contract.
 
 Backend code confirms that Project2 is already a Spring Boot product backend with workspace, asset, transcript, explicit indexing, search, auth/session, PostgreSQL, Elasticsearch, and a FastAPI service boundary.
+
+P3-BE0 `[ĐÃ XÁC MINH TỪ CODE]` records the current Spring modular-monolith
+package map and dependency risks before refactor work. The baseline keeps the
+implementation unchanged and identifies `workspace`, `asset`, `processing`,
+`search`, `assistant`, identity/authentication, platform/infrastructure, and
+common technical concerns as candidate module boundaries for later verification.
 
 Frontend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace-fe`. It confirms a React/Vite product UI that calls the Spring Boot API boundary and does not call FastAPI, LLM providers, or infrastructure directly.
 
