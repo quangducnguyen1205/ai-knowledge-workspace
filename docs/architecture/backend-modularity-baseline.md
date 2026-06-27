@@ -41,6 +41,13 @@ This is a ratchet. A future failure means module detection changed or the
 violation report changed. That can be good or bad, but it must be reviewed
 intentionally instead of silently drifting in CI.
 
+P3-BE1.1 stabilizes that ratchet by normalizing non-semantic Java source line
+locations in the Modulith report. Entries such as `(AssetPersistenceService.java:104)`
+are stored and compared as `(AssetPersistenceService.java)`: class/file names,
+cycle text, module/package names, and dependency descriptions remain preserved,
+but harmless line movement no longer fails the baseline. This does not suppress,
+filter, or hash away any module violation.
+
 Strict `ApplicationModules.verify()` is intentionally not green yet. The
 committed baseline currently records `137` violation messages, including
 dependency cycles and non-exposed type dependencies. Those messages are expected
