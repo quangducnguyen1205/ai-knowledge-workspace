@@ -12,10 +12,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -352,10 +352,10 @@ class AssistantContextServiceTest {
         currentUserProperties.setDevFallbackEnabled(false);
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = mock(WorkspaceRepository.class);
-        AssetRepository assetRepository = mock(AssetRepository.class);
+        AssetWorkspaceUsageService assetWorkspaceUsageService = mock(AssetWorkspaceUsageService.class);
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 new WorkspaceProperties(),
                 currentUserService
         );

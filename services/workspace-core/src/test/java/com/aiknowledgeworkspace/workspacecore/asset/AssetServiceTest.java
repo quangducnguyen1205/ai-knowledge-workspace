@@ -473,11 +473,11 @@ class AssetServiceTest {
         CurrentUserProperties currentUserProperties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
-        AssetRepository workspaceAssetRepository = org.mockito.Mockito.mock(AssetRepository.class);
+        AssetWorkspaceUsageService assetWorkspaceUsageService = org.mockito.Mockito.mock(AssetWorkspaceUsageService.class);
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService realWorkspaceService = new WorkspaceService(
                 workspaceRepository,
-                workspaceAssetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -517,10 +517,10 @@ class AssetServiceTest {
         CurrentUserProperties currentUserProperties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
-        AssetRepository workspaceAssetRepository = org.mockito.Mockito.mock(AssetRepository.class);
+        AssetWorkspaceUsageService assetWorkspaceUsageService = org.mockito.Mockito.mock(AssetWorkspaceUsageService.class);
         WorkspaceService realWorkspaceService = new WorkspaceService(
                 workspaceRepository,
-                workspaceAssetRepository,
+                assetWorkspaceUsageService,
                 new WorkspaceProperties(),
                 currentUserService
         );

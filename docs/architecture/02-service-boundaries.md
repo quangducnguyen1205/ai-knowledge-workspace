@@ -27,9 +27,17 @@ indexing through asset-owned contracts; assistant context reads transcript
 context through an asset public read API. This narrows direct persistence/entity
 coupling without changing public API, event, schema, search, processing, or
 assistant behavior. Strict Modulith verification is still not green because
-deferred edges remain, including `workspace -> asset repository`, `asset ->
+deferred edges remain.
+
+P3-BE2B `[ĐÃ XÁC MINH TỪ CODE]` isolates the workspace delete guard behind the
+asset public application boundary. `WorkspaceService` now asks
+`AssetWorkspaceUsageService.workspaceHasAssets(workspaceId)` instead of calling
+`AssetRepository.countByWorkspace_Id` directly. This preserves workspace delete
+behavior while keeping repository ownership internal to Asset. Strict Modulith
+verification is still blocked by deferred edges including `asset ->
 processing/search`, outbox product-event construction, `common.web` exception
-coupling, and `search -> processing repository`.
+coupling, `common.identity -> workspace` provisioning, and `search -> processing
+repository`.
 
 ## Current Boundary Diagram
 

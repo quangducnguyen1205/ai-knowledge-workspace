@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -19,7 +19,7 @@ public class WorkspaceService {
     private static final int MAX_WORKSPACE_NAME_LENGTH = 255;
 
     private final WorkspaceRepository workspaceRepository;
-    private final AssetRepository assetRepository;
+    private final AssetWorkspaceUsageService assetWorkspaceUsageService;
     private final WorkspaceProperties workspaceProperties;
     private final CurrentUserService currentUserService;
     private final DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor;
@@ -28,14 +28,14 @@ public class WorkspaceService {
     @Autowired
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
-            AssetRepository assetRepository,
+            AssetWorkspaceUsageService assetWorkspaceUsageService,
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor,
             WorkspaceAccessPolicy workspaceAccessPolicy
     ) {
         this.workspaceRepository = workspaceRepository;
-        this.assetRepository = assetRepository;
+        this.assetWorkspaceUsageService = assetWorkspaceUsageService;
         this.workspaceProperties = workspaceProperties;
         this.currentUserService = currentUserService;
         this.defaultWorkspaceCreationExecutor = defaultWorkspaceCreationExecutor;
@@ -44,13 +44,13 @@ public class WorkspaceService {
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
-            AssetRepository assetRepository,
+            AssetWorkspaceUsageService assetWorkspaceUsageService,
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService
     ) {
         this(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService,
                 workspaceRepository::save,
@@ -60,14 +60,14 @@ public class WorkspaceService {
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
-            AssetRepository assetRepository,
+            AssetWorkspaceUsageService assetWorkspaceUsageService,
             WorkspaceProperties workspaceProperties,
             CurrentUserService currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
     ) {
         this(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService,
                 defaultWorkspaceCreationExecutor,
@@ -116,7 +116,7 @@ public class WorkspaceService {
             );
         }
 
-        if (assetRepository.countByWorkspace_Id(workspace.getId()) > 0) {
+        if (assetWorkspaceUsageService.workspaceHasAssets(workspace.getId())) {
             throw new WorkspaceDeleteConflictException(
                     "WORKSPACE_NOT_EMPTY",
                     "Workspace cannot be deleted while it still contains assets"

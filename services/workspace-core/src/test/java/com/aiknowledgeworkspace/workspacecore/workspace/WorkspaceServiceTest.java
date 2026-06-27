@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +37,7 @@ class WorkspaceServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @Mock
-    private AssetRepository assetRepository;
+    private AssetWorkspaceUsageService assetWorkspaceUsageService;
 
     @Mock
     private CurrentUserService currentUserService;
@@ -52,7 +52,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -92,7 +92,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -114,7 +114,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -134,7 +134,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -166,7 +166,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -181,7 +181,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -200,7 +200,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 realCurrentUserService
         );
@@ -230,7 +230,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 realCurrentUserService
         );
@@ -260,7 +260,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -297,7 +297,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -334,7 +334,7 @@ class WorkspaceServiceTest {
         };
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService,
                 defaultWorkspaceCreationExecutor
@@ -366,7 +366,7 @@ class WorkspaceServiceTest {
         };
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService,
                 defaultWorkspaceCreationExecutor
@@ -386,7 +386,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -409,7 +409,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -439,7 +439,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -454,7 +454,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -470,10 +470,11 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
-        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(0L);
+        when(assetWorkspaceUsageService.workspaceHasAssets(workspaceId)).thenReturn(false);
 
         workspaceService.deleteWorkspace(workspaceId);
 
+        verify(assetWorkspaceUsageService).workspaceHasAssets(workspaceId);
         verify(workspaceRepository).delete(ownedWorkspace);
     }
 
@@ -482,7 +483,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -504,7 +505,7 @@ class WorkspaceServiceTest {
                 .hasMessage("Default workspace cannot be deleted");
 
         verify(workspaceRepository, never()).delete(any());
-        verify(assetRepository, never()).countByWorkspace_Id(any());
+        verify(assetWorkspaceUsageService, never()).workspaceHasAssets(any());
     }
 
     @Test
@@ -512,7 +513,7 @@ class WorkspaceServiceTest {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 workspaceProperties,
                 currentUserService
         );
@@ -528,12 +529,13 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
-        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(2L);
+        when(assetWorkspaceUsageService.workspaceHasAssets(workspaceId)).thenReturn(true);
 
         assertThatThrownBy(() -> workspaceService.deleteWorkspace(workspaceId))
                 .isInstanceOf(WorkspaceDeleteConflictException.class)
                 .hasMessage("Workspace cannot be deleted while it still contains assets");
 
+        verify(assetWorkspaceUsageService).workspaceHasAssets(workspaceId);
         verify(workspaceRepository, never()).delete(any());
     }
 

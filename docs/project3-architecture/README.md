@@ -72,9 +72,16 @@ searchability state transitions. Processing, search, and assistant now consume
 those asset contracts instead of selected direct asset persistence/entity
 internals. The refactor preserves REST/event/schema/runtime behavior and keeps
 the Modulith baseline as an honest ratchet; strict verification is still blocked
-by deferred edges such as workspace delete guards, asset-to-processing/search
-cycles, outbox product-event construction, common web exception coupling, and
-search's processing repository dependency.
+by deferred edges such as asset-to-processing/search cycles, outbox product-event
+construction, common web exception coupling, and search's processing repository
+dependency.
+
+P3-BE2B `[ĐÃ XÁC MINH TỪ CODE]` narrows the workspace-to-asset edge for
+workspace deletion: Workspace now consumes the asset-owned
+`AssetWorkspaceUsageService.workspaceHasAssets` query instead of
+`AssetRepository.countByWorkspace_Id`. The module-level relationship remains
+intentional, but the persistence-internal leak is gone; the Modulith baseline
+changed intentionally and remains a ratchet, not a strict-green verification.
 
 Frontend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace-fe`. It confirms a React/Vite product UI that calls the Spring Boot API boundary and does not call FastAPI, LLM providers, or infrastructure directly.
 

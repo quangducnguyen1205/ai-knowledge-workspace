@@ -8,8 +8,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -42,7 +42,7 @@ class SearchServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @Mock
-    private AssetRepository assetRepository;
+    private AssetWorkspaceUsageService assetWorkspaceUsageService;
 
     @Mock
     private AssetReadService assetReadService;
@@ -61,7 +61,7 @@ class SearchServiceTest {
         currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetRepository,
+                assetWorkspaceUsageService,
                 new WorkspaceProperties(),
                 currentUserService
         );

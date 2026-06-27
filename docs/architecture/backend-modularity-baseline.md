@@ -84,13 +84,21 @@ by the new explicit asset public contracts and by preserving current transitiona
 edges such as `asset -> integration.fastapi`; it is a reviewed ratchet update,
 not proof of full modularity.
 
+P3-BE2B `[ĐÃ XÁC MINH TỪ CODE]` adds one more asset-owned public query:
+`AssetWorkspaceUsageService.workspaceHasAssets(UUID workspaceId)`. Workspace
+deletion now consumes this boolean application fact instead of injecting
+`AssetRepository` and calling `countByWorkspace_Id` directly. Asset repository
+ownership remains internal to the asset module. The module-level `workspace ->
+asset` dependency remains intentional, and the same `161`-message Modulith
+baseline remains a ratchet.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 
 | Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
 |---|---:|---|---|---|---|---|---|
-| `asset` | 34 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints, and public application contracts for processing-result apply, indexing-source reads, searchability state, and transcript context. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetReadService`, `AssetProcessingResultApplicationService`, `AssetSearchabilityService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs, immutable asset read contracts; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
+| `asset` | 35 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints, and public application contracts for processing-result apply, indexing-source reads, searchability state, transcript context, and workspace usage. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetReadService`, `AssetProcessingResultApplicationService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs, immutable asset read contracts; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
 | `assistant` | 7 | Retrieval-only assistant context pack API. | `AssistantContextController` | `AssistantContextService` | none | DTOs for request, source, citation, response; reuses search and asset context services. | Domain/application-specific. |
 | `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
 | `integration` | 8 | FastAPI client boundary and FastAPI DTOs/exceptions. | none | `FastApiProcessingClientImpl` component | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses. | Technical adapter, provider-specific. |
@@ -130,7 +138,7 @@ The table below records meaningful cross-package dependencies in production code
 | `asset` | `outbox` | Creates and stores processing request outbox rows. | Questionable; durable outbox mechanics are platform, but product event creation is currently inside asset persistence. | `asset/AssetPersistenceService.java:5-7`, `asset/AssetPersistenceService.java:104-120` |
 | `asset` | `search` | Explicit indexing controller dependency, delete/title sync, auto-index request after snapshot replace. | Confirmed cycle risk because search also depends on asset. | `asset/AssetController.java:18`, `asset/AssetPersistenceService.java:11`, `asset/AssetDeletionService.java:3`, `asset/AssetTitleUpdateService.java:3` |
 | `workspace` | `common.identity` | Current user and access policy. | Acceptable if identity is a named public API. | `workspace/WorkspaceService.java:4`, `workspace/WorkspaceAccessPolicy.java:3` |
-| `workspace` | `asset` | Delete conflict guard uses `AssetRepository.countByWorkspace_Id`. | Confirmed boundary-leak risk if workspace and asset are separate modules. | `workspace/WorkspaceService.java:3`, `workspace/WorkspaceService.java:119` |
+| `workspace` | `asset` | Delete conflict guard asks `AssetWorkspaceUsageService.workspaceHasAssets`. | Improved in P3-BE2B; workspace now depends on an asset public application query instead of asset repository internals. | `workspace/WorkspaceService.java`, `asset/AssetWorkspaceUsageService.java` |
 | `processing` | `asset` | Result handler delegates asset terminal state and snapshot replacement through `AssetProcessingResultApplicationService` and `AssetTranscriptRowInput`. | Improved in P3-BE2A; this is now an explicit asset public application boundary rather than direct asset persistence/entity mutation. | `processing/result/ProcessingResultEventHandler.java` |
 | `processing` | `integration.fastapi` | Retrieves transcript artifact rows by processing request ID and maps them to asset input records at the module boundary. | Acceptable processing adapter dependency; FastAPI DTOs no longer flow into asset persistence. | `processing/result/ProcessingResultEventHandler.java`, `processing/result/TranscriptArtifactValidator.java` |
 | `processing` | `outbox` | Recovery, smoke, request relay, listener config use outbox state and Kafka properties. | Acceptable platform dependency, but should be through named outbox relay API. | `processing/request/ProcessingRequestRelayScheduler.java:3-4`, `processing/recovery/ProcessingRecoveryService.java:3-6` |
@@ -164,7 +172,9 @@ The table below records meaningful cross-package dependencies in production code
   - `asset` creates processing jobs and calls search indexing request/sync services.
   - `processing` now applies asset state through an asset public command, but it still depends on the asset module.
   - `search` now reads canonical asset/transcript/searchability state through asset public contracts and still loads processing jobs for explicit indexing.
-- `workspace` depends on `asset` through `AssetRepository` for workspace delete checks.
+- `workspace` still depends on `asset` for workspace delete checks, but P3-BE2B
+  moved the guard behind the public `AssetWorkspaceUsageService` query instead
+  of `AssetRepository`.
 - `outbox` is both platform relay state machine and product event factory; `OutboxEventFactory` imports `Asset`, `Workspace`, and `StoredObject`.
 - `common/web/ApiExceptionHandler` imports exceptions from nearly every product/infrastructure package.
 - Several public classes are likely internal implementation details only because there is no package visibility/module API convention yet, for example repositories, parsers, schedulers, smoke command runners, and many DTOs.
@@ -192,7 +202,9 @@ These candidate boundaries are review frames, not instructions to move packages 
 - Provided API: resolve current user's workspace/default workspace, workspace ownership check, create/list/update/delete workspace.
 - Internal implementation: `Workspace`, `WorkspaceRepository`, name validation, default workspace creation.
 - Required dependencies: identity current-user API.
-- Dependencies to remove or narrow: direct `AssetRepository` delete guard should become an asset-facing `workspaceHasAssets` style API or domain policy.
+- Dependencies to remove or narrow: P3-BE2B removed the direct `AssetRepository`
+  delete guard; the remaining dependency is the intentional asset public
+  workspace-usage query.
 - Current package root: `workspace` is a plausible module root after the asset delete-check dependency is narrowed.
 - Package-private practicality: controllers/DTOs stay public; repository/entity/service internals can later be package-private or under `internal` after tests adapt.
 
@@ -277,7 +289,7 @@ common -> neutral API/error primitives only
 
 Concrete direction changes after P3-BE2A:
 
-- replace `workspace -> AssetRepository` with an asset public count/guard API;
+- completed in P3-BE2B: replace `workspace -> AssetRepository` with an asset public workspace-usage query;
 - completed in P3-BE2A: replace `processing -> AssetRepository/Asset` with an asset application command for processing results;
 - completed in P3-BE2A: replace affected `search -> AssetRepository/AssetTranscriptRowSnapshotRepository/Asset` flows with asset visibility, transcript snapshot, indexing source, and searchability command APIs;
 - move product event payload construction out of platform outbox or expose it through product module event factories;
@@ -347,15 +359,27 @@ Spring Modulith alone can express and verify module dependencies once public API
 - Still blocked: strict `ApplicationModules.verify()` because deferred edges
   remain.
 
+### P3-BE2B: Workspace Asset-Usage Guard
+
+- Completed: add `AssetWorkspaceUsageService.workspaceHasAssets(UUID)` as the
+  minimal asset-owned public query for workspace delete checks.
+- Completed: migrate `WorkspaceService.deleteWorkspace` away from direct
+  `AssetRepository.countByWorkspace_Id` access while preserving default
+  workspace, ownership/not-found, conflict, and successful delete behavior.
+- Completed: update the Modulith baseline after reviewing that module roots and
+  message counts stayed stable and the changed lines represent the intentional
+  `workspace -> asset public API` dependency.
+- Still blocked: strict `ApplicationModules.verify()` because deferred edges
+  remain.
+
 ### Later P3-BE2 Steps
 
 Potential first refactors, in order of least blast radius:
 
-1. Replace `workspace -> AssetRepository` with an asset module query/guard.
-2. Split identity from neutral `common` conceptually or via named interface.
-3. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
-4. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
-5. Decide whether `search -> ProcessingJobRepository` belongs behind a product transcript-availability API.
+1. Split identity from neutral `common` conceptually or via named interface.
+2. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
+3. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
+4. Decide whether `search -> ProcessingJobRepository` belongs behind a product transcript-availability API.
 
 ### Future
 
