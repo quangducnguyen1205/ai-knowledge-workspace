@@ -581,7 +581,9 @@ public class AssetService {
             );
         }
 
-        return assetPersistenceService.replaceTranscriptSnapshot(asset, usableTranscriptRows);
+        return assetPersistenceService.replaceTranscriptSnapshot(asset, usableTranscriptRows.stream()
+                .map(this::toAssetTranscriptRowInput)
+                .toList());
     }
 
     private void markAssetTranscriptUsable(Asset asset) {
@@ -599,5 +601,15 @@ public class AssetService {
         return transcriptRow != null
                 && transcriptRow.segmentIndex() != null
                 && StringUtils.hasText(transcriptRow.text());
+    }
+
+    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
+        return new AssetTranscriptRowInput(
+                transcriptRow.id(),
+                transcriptRow.videoId(),
+                transcriptRow.segmentIndex(),
+                transcriptRow.text(),
+                transcriptRow.createdAt()
+        );
     }
 }

@@ -14,7 +14,7 @@ Non-goals:
 - no runtime Spring Modulith feature, ArchUnit, jMolecules, or production dependency addition;
 - no database schema, Flyway, API, Kafka event, outbox, auth, processing, search, or assistant behavior change.
 
-The current backend is one Maven module, `services/workspace-core/pom.xml`, on Spring Boot `3.3.5` and Java `21`. P3-BE1 adds only Spring Modulith `1.2.5` as test-scoped architecture inspection support through the Spring Modulith BOM plus `spring-modulith-starter-test`. The production Java tree contains about `9,216` lines across the Spring application root `com.aiknowledgeworkspace.workspacecore`.
+The current backend is one Maven module, `services/workspace-core/pom.xml`, on Spring Boot `3.3.5` and Java `21`. P3-BE1 adds only Spring Modulith `1.2.5` as test-scoped architecture inspection support through the Spring Modulith BOM plus `spring-modulith-starter-test`. After P3-BE2A, the production Java tree contains about `9,553` lines across the Spring application root `com.aiknowledgeworkspace.workspacecore`.
 
 ## P3-BE1 Verification Baseline
 
@@ -49,10 +49,40 @@ but harmless line movement no longer fails the baseline. This does not suppress,
 filter, or hash away any module violation.
 
 Strict `ApplicationModules.verify()` is intentionally not green yet. The
-committed baseline currently records `137` violation messages, including
-dependency cycles and non-exposed type dependencies. Those messages are expected
-while P3-BE2 extracts the smallest useful public APIs, especially asset public
-APIs for transcript/searchability reads and processing-result application.
+P3-BE1.1 baseline recorded `137` violation messages, including dependency cycles
+and non-exposed type dependencies.
+
+## P3-BE2A Asset Application Boundary
+
+P3-BE2A `[ĐÃ XÁC MINH TỪ CODE]` introduces a narrow public application boundary
+owned by the `asset` root package. The new public contracts are:
+
+- `AssetReadService` plus immutable read models (`AssetDetails`,
+  `AssetIndexingSource`, `AssetTranscriptContext`, `AssetTranscriptRowView`) for
+  authorized asset details, canonical transcript context, searchable visibility,
+  and indexing-source reads.
+- `AssetProcessingResultApplicationService` plus `AssetTranscriptRowInput` for
+  applying the asset-owned portion of successful or failed processing results,
+  including terminal asset state and canonical transcript snapshot replacement.
+- `AssetSearchabilityService` for asset-owned lifecycle transitions to
+  `TRANSCRIPT_READY` and `SEARCHABLE`.
+
+Processing, search, and assistant code now consume these asset contracts instead
+of the selected direct `AssetRepository`, `AssetTranscriptRowSnapshotRepository`,
+`Asset`, `AssetService`, or `AssetPersistenceService` internals that P3-BE0
+identified. Asset remains owner of asset lifecycle, canonical transcript
+snapshots, transcript context, and searchability state. Search still owns
+indexing jobs and Elasticsearch writes; processing still owns result-event
+idempotency, processing jobs, FastAPI artifact retrieval, and result orchestration;
+assistant remains retrieval-only.
+
+The Modulith baseline changed intentionally after this refactor. Module roots are
+unchanged, strict `ApplicationModules.verify()` is still not green, and the
+committed violation report now records `161` messages: the same `51` cycle
+messages and `110` non-exposed-type dependency messages. The increase is caused
+by the new explicit asset public contracts and by preserving current transitional
+edges such as `asset -> integration.fastapi`; it is a reviewed ratchet update,
+not proof of full modularity.
 
 ## Current Package Inventory
 
@@ -60,7 +90,7 @@ Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 
 | Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
 |---|---:|---|---|---|---|---|---|
-| `asset` | 26 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
+| `asset` | 34 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints, and public application contracts for processing-result apply, indexing-source reads, searchability state, and transcript context. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetReadService`, `AssetProcessingResultApplicationService`, `AssetSearchabilityService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs, immutable asset read contracts; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
 | `assistant` | 7 | Retrieval-only assistant context pack API. | `AssistantContextController` | `AssistantContextService` | none | DTOs for request, source, citation, response; reuses search and asset context services. | Domain/application-specific. |
 | `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
 | `integration` | 8 | FastAPI client boundary and FastAPI DTOs/exceptions. | none | `FastApiProcessingClientImpl` component | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses. | Technical adapter, provider-specific. |
@@ -101,15 +131,15 @@ The table below records meaningful cross-package dependencies in production code
 | `asset` | `search` | Explicit indexing controller dependency, delete/title sync, auto-index request after snapshot replace. | Confirmed cycle risk because search also depends on asset. | `asset/AssetController.java:18`, `asset/AssetPersistenceService.java:11`, `asset/AssetDeletionService.java:3`, `asset/AssetTitleUpdateService.java:3` |
 | `workspace` | `common.identity` | Current user and access policy. | Acceptable if identity is a named public API. | `workspace/WorkspaceService.java:4`, `workspace/WorkspaceAccessPolicy.java:3` |
 | `workspace` | `asset` | Delete conflict guard uses `AssetRepository.countByWorkspace_Id`. | Confirmed boundary-leak risk if workspace and asset are separate modules. | `workspace/WorkspaceService.java:3`, `workspace/WorkspaceService.java:119` |
-| `processing` | `asset` | Result handler loads asset, saves asset status, delegates snapshot replacement. | Confirmed boundary-leak risk; should become an asset-facing application command or public port. | `processing/result/ProcessingResultEventHandler.java:3-6`, `processing/result/ProcessingResultEventHandler.java:154-172` |
-| `processing` | `integration.fastapi` | Retrieves transcript artifact rows by processing request ID. | Acceptable processing adapter dependency, but FastAPI DTOs flow into asset persistence today. | `processing/result/ProcessingResultEventHandler.java:7-9`, `processing/result/TranscriptArtifactValidator.java:3` |
+| `processing` | `asset` | Result handler delegates asset terminal state and snapshot replacement through `AssetProcessingResultApplicationService` and `AssetTranscriptRowInput`. | Improved in P3-BE2A; this is now an explicit asset public application boundary rather than direct asset persistence/entity mutation. | `processing/result/ProcessingResultEventHandler.java` |
+| `processing` | `integration.fastapi` | Retrieves transcript artifact rows by processing request ID and maps them to asset input records at the module boundary. | Acceptable processing adapter dependency; FastAPI DTOs no longer flow into asset persistence. | `processing/result/ProcessingResultEventHandler.java`, `processing/result/TranscriptArtifactValidator.java` |
 | `processing` | `outbox` | Recovery, smoke, request relay, listener config use outbox state and Kafka properties. | Acceptable platform dependency, but should be through named outbox relay API. | `processing/request/ProcessingRequestRelayScheduler.java:3-4`, `processing/recovery/ProcessingRecoveryService.java:3-6` |
-| `search` | `asset` | Searchability gate, transcript snapshot reads, asset status mutation to `SEARCHABLE`, mapper fields. | Confirmed boundary-leak risk; product-state reads are correct, but direct repositories/entities create tight coupling. | `search/SearchService.java:3-7`, `search/AssetSearchIndexingExecutor.java:3-7`, `search/TranscriptIndexingService.java:3-9` |
+| `search` | `asset` | Searchability gate, transcript/context reads, indexing-source reads, and asset searchability transitions through asset public contracts. | Improved in P3-BE2A; direct asset repository/entity access was removed for the affected search/indexing flows, while the search-to-asset dependency remains intentional. | `search/SearchService.java`, `search/AssetSearchIndexingExecutor.java`, `search/TranscriptIndexingService.java`, `search/TranscriptIndexDocumentMapper.java` |
 | `search` | `processing` | Explicit indexing loads `ProcessingJobRepository` to validate transcript availability. | Questionable; likely should be a product transcript-read API instead of processing repository access. | `search/TranscriptIndexingService.java:11-12`, `search/TranscriptIndexingService.java:49-56` |
 | `search` | `outbox` | Indexing event payload parsing, auto-request outbox creation, indexing relay/smoke. | Acceptable but needs named outbox event-contract interface. | `search/AssetSearchIndexRequestService.java:5-7`, `search/AssetIndexingEventParser.java:3-4` |
 | `search` | `common.config` | Elasticsearch properties. | Acceptable technical config dependency, but config may move under platform. | `search/TranscriptSearchIndexClient.java:4` |
 | `assistant` | `search` | Reuses existing search API/service. | Acceptable; this is the intended retrieval boundary. | `assistant/AssistantContextService.java:11-13` |
-| `assistant` | `asset` | Reuses asset authorization/transcript context service and asset status. | Acceptable for P3-F1; should eventually depend on a named transcript-context API. | `assistant/AssistantContextService.java:3-10` |
+| `assistant` | `asset` | Reuses the asset public transcript-context/searchability read API. | Improved in P3-BE2A; assistant no longer depends on `AssetService`, `Asset`, or asset HTTP response DTOs for context assembly. | `assistant/AssistantContextService.java` |
 | `outbox` | `asset`, `workspace`, `storage` | Event factory accepts entities/value records to build payloads. | Violation candidate for strict platform module; outbox platform currently contains product event construction. | `outbox/OutboxEventFactory.java:3-5`, `outbox/OutboxEventFactory.java:28-67` |
 | `common.web` | all domain packages | Global exception handler imports domain exceptions and infrastructure exceptions. | Confirmed boundary-leak risk for default Modulith verification; common technical code depends inward on all modules. | `common/web/ApiExceptionHandler.java:3-28` |
 | `common.identity` | `workspace` | OIDC first-login provisioning uses workspace repository/properties. | Questionable but intentional product flow; should become identity -> workspace public API. | `common/identity/TransactionalOidcUserCreationExecutor.java:3-5` |
@@ -130,10 +160,10 @@ The table below records meaningful cross-package dependencies in production code
 
 ### Confirmed
 
-- `asset`, `processing`, and `search` form a concrete cycle:
+- `asset`, `processing`, and `search` still form a concrete cycle:
   - `asset` creates processing jobs and calls search indexing request/sync services.
-  - `processing` result handling loads and mutates asset records.
-  - `search` loads asset repositories, transcript snapshots, processing jobs, and mutates asset `SEARCHABLE` state.
+  - `processing` now applies asset state through an asset public command, but it still depends on the asset module.
+  - `search` now reads canonical asset/transcript/searchability state through asset public contracts and still loads processing jobs for explicit indexing.
 - `workspace` depends on `asset` through `AssetRepository` for workspace delete checks.
 - `outbox` is both platform relay state machine and product event factory; `OutboxEventFactory` imports `Asset`, `Workspace`, and `StoredObject`.
 - `common/web/ApiExceptionHandler` imports exceptions from nearly every product/infrastructure package.
@@ -143,7 +173,7 @@ The table below records meaningful cross-package dependencies in production code
 
 - `AssetService` has multiple independent responsibilities: upload orchestration, direct FastAPI compatibility, object storage, asset listing/status, transcript reads/context, and fallback transcript capture.
 - `TranscriptSearchIndexClient` combines adapter, query DSL construction, index mapping/bootstrap, bulk write, delete, title sync, and response validation.
-- `ProcessingResultEventHandler` and `AssetSearchIndexingExecutor` own important cross-module state transitions but currently do so with direct repository/entity access.
+- `ProcessingResultEventHandler` and `AssetSearchIndexingExecutor` still own important cross-module orchestration, but P3-BE2A moved their asset lifecycle/snapshot/searchability operations behind asset-owned application contracts.
 - `common` is not neutral: it contains identity product behavior, web advice, configuration, and health.
 
 ### Needs Later Confirmation
@@ -245,11 +275,11 @@ platform -> no product entities when practical
 common -> neutral API/error primitives only
 ```
 
-Concrete direction changes to defer until P3-BE2:
+Concrete direction changes after P3-BE2A:
 
 - replace `workspace -> AssetRepository` with an asset public count/guard API;
-- replace `processing -> AssetRepository` with an asset application command for processing results;
-- replace `search -> AssetRepository/AssetTranscriptRowSnapshotRepository` with asset visibility and transcript snapshot reader APIs;
+- completed in P3-BE2A: replace `processing -> AssetRepository/Asset` with an asset application command for processing results;
+- completed in P3-BE2A: replace affected `search -> AssetRepository/AssetTranscriptRowSnapshotRepository/Asset` flows with asset visibility, transcript snapshot, indexing source, and searchability command APIs;
 - move product event payload construction out of platform outbox or expose it through product module event factories;
 - split `common.identity` from neutral `common`;
 - split `TranscriptSearchIndexClient` adapter/query/mapping responsibilities only if architecture verification proves this coupling obstructs module boundaries.
@@ -305,16 +335,27 @@ Spring Modulith alone can express and verify module dependencies once public API
 - Completed: keep strict verification honest by not making `ApplicationModules.verify()` appear green through exclusions, open modules, or broad allow-lists.
 - Completed: do not change product behavior, schema, API, events, or runtime controls.
 
-### P3-BE2: Smallest Refactor Justified By Evidence
+### P3-BE2A: Asset Public Application Boundary
+
+- Completed: add public asset read models and services for indexing-source reads,
+  transcript context, searchability checks, processing-result application, and
+  searchability transitions.
+- Completed: migrate normal production `processing`, `search`, and `assistant`
+  consumers away from selected direct asset persistence/entity internals.
+- Completed: update the Modulith violation baseline after reviewing that module
+  roots stayed stable and changed messages reflect the intended asset boundary.
+- Still blocked: strict `ApplicationModules.verify()` because deferred edges
+  remain.
+
+### Later P3-BE2 Steps
 
 Potential first refactors, in order of least blast radius:
 
-1. Introduce asset public APIs for transcript snapshot reads/searchability and processing-result application.
-2. Replace `workspace -> AssetRepository` with an asset module query/guard.
-3. Replace `search -> AssetRepository` and transcript repository access with asset public APIs.
-4. Split identity from neutral `common` conceptually or via named interface.
-5. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
-6. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
+1. Replace `workspace -> AssetRepository` with an asset module query/guard.
+2. Split identity from neutral `common` conceptually or via named interface.
+3. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
+4. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
+5. Decide whether `search -> ProcessingJobRepository` belongs behind a product transcript-availability API.
 
 ### Future
 

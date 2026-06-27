@@ -13,7 +13,6 @@ import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -195,7 +194,7 @@ class AssetPersistenceServiceTest {
 
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId);
-        List<FastApiTranscriptRowResponse> upstreamRows = List.of(
+        List<AssetTranscriptRowInput> upstreamRows = List.of(
                 transcriptRow("row-2", "video-1", 2, "second"),
                 transcriptRow("row-1", "video-1", 1, "first")
         );
@@ -209,7 +208,15 @@ class AssetPersistenceServiceTest {
         ArgumentCaptor<List<AssetTranscriptRowSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
         verify(assetTranscriptRowSnapshotRepository).deleteByAssetId(assetId);
         verify(assetTranscriptRowSnapshotRepository).saveAll(snapshotsCaptor.capture());
-        verify(assetSearchIndexRequestService).requestIndexingIfEnabled(asset, savedRows);
+        verify(assetSearchIndexRequestService).requestIndexingIfEnabled(assetId, savedRows.stream()
+                .map(snapshot -> new AssetTranscriptRowView(
+                        snapshot.getTranscriptRowId(),
+                        snapshot.getVideoId(),
+                        snapshot.getSegmentIndex(),
+                        snapshot.getText(),
+                        snapshot.getCreatedAt()
+                ))
+                .toList());
 
         assertThat(savedRows).extracting(AssetTranscriptRowSnapshot::getSegmentIndex)
                 .containsExactly(1, 2);
@@ -307,13 +314,13 @@ class AssetPersistenceServiceTest {
         );
     }
 
-    private FastApiTranscriptRowResponse transcriptRow(
+    private AssetTranscriptRowInput transcriptRow(
             String transcriptRowId,
             String videoId,
             Integer segmentIndex,
             String text
     ) {
-        return new FastApiTranscriptRowResponse(
+        return new AssetTranscriptRowInput(
                 transcriptRowId,
                 videoId,
                 segmentIndex,

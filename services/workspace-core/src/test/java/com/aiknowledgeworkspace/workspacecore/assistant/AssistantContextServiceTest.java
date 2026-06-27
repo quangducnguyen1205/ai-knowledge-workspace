@@ -3,19 +3,19 @@ package com.aiknowledgeworkspace.workspacecore.assistant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContextResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -29,6 +29,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +37,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,13 +46,13 @@ class AssistantContextServiceTest {
     private SearchService searchService;
 
     @Mock
-    private AssetService assetService;
+    private AssetReadService assetReadService;
 
     private AssistantContextService assistantContextService;
 
     @BeforeEach
     void setUp() {
-        assistantContextService = new AssistantContextService(searchService, assetService);
+        assistantContextService = new AssistantContextService(searchService, assetReadService);
     }
 
     @AfterEach
@@ -73,19 +73,17 @@ class AssistantContextServiceTest {
         );
         when(searchService.search("dynamic programming", workspaceId, null))
                 .thenReturn(searchResponse(workspaceId, result(assetId, "row-2", 2)));
-        when(assetService.getAsset(assetId)).thenReturn(asset(assetId, workspaceId, AssetStatus.SEARCHABLE, "Lecture 2"));
-        when(assetService.getAssetTranscriptContext(assetId, "row-2", 1))
-                .thenReturn(new AssetTranscriptContextResponse(
+        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-2", 1))
+                .thenReturn(Optional.of(context(
                         assetId,
+                        "Lecture 2",
                         "row-2",
                         2,
                         1,
-                        List.of(
-                                row("row-1", 1, "first context row"),
-                                row("row-2", 2, "selected context row"),
-                                row("row-3", 3, "third context row")
-                        )
-                ));
+                        row("row-1", 1, "first context row"),
+                        row("row-2", 2, "selected context row"),
+                        row("row-3", 3, "third context row")
+                )));
 
         AssistantContextResponse response = assistantContextService.buildContext(request);
 
@@ -100,7 +98,7 @@ class AssistantContextServiceTest {
         assertThat(source.createdAt()).isEqualTo("2026-06-25T00:00:02Z");
         assertThat(source.text()).isEqualTo("first context row\nselected context row\nthird context row");
         assertThat(source.citation()).isEqualTo(new AssistantCitationResponse(assetId, "row-2", 2));
-        verify(assetService).getAssetTranscriptContext(assetId, "row-2", 1);
+        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-2", 1);
     }
 
     @Test
@@ -118,7 +116,7 @@ class AssistantContextServiceTest {
         ));
 
         assertThat(response.sources()).isEmpty();
-        verifyNoMoreInteractions(assetService);
+        verifyNoMoreInteractions(assetReadService);
     }
 
     @Test
@@ -158,8 +156,8 @@ class AssistantContextServiceTest {
         UUID assetId = UUID.randomUUID();
         when(searchService.search("stale", workspaceId, null))
                 .thenReturn(searchResponse(workspaceId, result(assetId, "row-1", 1)));
-        when(assetService.getAsset(assetId))
-                .thenReturn(asset(assetId, workspaceId, AssetStatus.TRANSCRIPT_READY, "Lecture"));
+        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1))
+                .thenReturn(Optional.empty());
 
         AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
                 workspaceId,
@@ -170,7 +168,7 @@ class AssistantContextServiceTest {
         ));
 
         assertThat(response.sources()).isEmpty();
-        verify(assetService, never()).getAssetTranscriptContext(any(), any(), any());
+        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1);
     }
 
     @Test
@@ -180,8 +178,8 @@ class AssistantContextServiceTest {
         UUID assetId = UUID.randomUUID();
         when(searchService.search("stale", requestedWorkspaceId, null))
                 .thenReturn(searchResponse(requestedWorkspaceId, result(assetId, "row-1", 1)));
-        when(assetService.getAsset(assetId))
-                .thenReturn(asset(assetId, otherWorkspaceId, AssetStatus.SEARCHABLE, "Other Lecture"));
+        when(assetReadService.findSearchableTranscriptContext(assetId, requestedWorkspaceId, "row-1", 1))
+                .thenReturn(Optional.empty());
 
         AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
                 requestedWorkspaceId,
@@ -192,7 +190,7 @@ class AssistantContextServiceTest {
         ));
 
         assertThat(response.sources()).isEmpty();
-        verify(assetService, never()).getAssetTranscriptContext(any(), any(), any());
+        verify(assetReadService).findSearchableTranscriptContext(assetId, requestedWorkspaceId, "row-1", 1);
     }
 
     @Test
@@ -208,16 +206,15 @@ class AssistantContextServiceTest {
                         2,
                         List.of(result(firstAssetId, "row-1", 1), result(secondAssetId, "row-2", 2))
                 ));
-        when(assetService.getAsset(firstAssetId))
-                .thenReturn(asset(firstAssetId, workspaceId, AssetStatus.SEARCHABLE, "First"));
-        when(assetService.getAssetTranscriptContext(firstAssetId, "row-1", 1))
-                .thenReturn(new AssetTranscriptContextResponse(
+        when(assetReadService.findSearchableTranscriptContext(firstAssetId, workspaceId, "row-1", 1))
+                .thenReturn(Optional.of(context(
                         firstAssetId,
+                        "First",
                         "row-1",
                         1,
                         1,
-                        List.of(row("row-1", 1, "first hit"))
-                ));
+                        row("row-1", 1, "first hit")
+                )));
 
         AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
                 workspaceId,
@@ -229,7 +226,7 @@ class AssistantContextServiceTest {
 
         assertThat(response.sources()).extracting(AssistantContextSourceResponse::assetId)
                 .containsExactly(firstAssetId);
-        verify(assetService, never()).getAsset(secondAssetId);
+        verify(assetReadService, never()).findSearchableTranscriptContext(eq(secondAssetId), any(), any(), anyInt());
     }
 
     @Test
@@ -244,14 +241,15 @@ class AssistantContextServiceTest {
                         1,
                         List.of(result(assetId, "row-2", 2))
                 ));
-        when(assetService.getAsset(assetId))
-                .thenReturn(asset(assetId, workspaceId, AssetStatus.SEARCHABLE, "Lecture"));
-        when(assetService.getAssetTranscript(assetId))
-                .thenReturn(List.of(
-                        row("row-1", 1, "neighbor"),
-                        row("row-2", 2, "hit only"),
-                        row("row-3", 3, "other neighbor")
-                ));
+        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-2", 0))
+                .thenReturn(Optional.of(context(
+                        assetId,
+                        "Lecture",
+                        "row-2",
+                        2,
+                        0,
+                        row("row-2", 2, "hit only")
+                )));
 
         AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
                 workspaceId,
@@ -263,7 +261,7 @@ class AssistantContextServiceTest {
 
         assertThat(response.sources()).hasSize(1);
         assertThat(response.sources().get(0).text()).isEqualTo("hit only");
-        verify(assetService, never()).getAssetTranscriptContext(any(), any(), any());
+        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-2", 0);
     }
 
     @Test
@@ -278,16 +276,15 @@ class AssistantContextServiceTest {
                         2,
                         List.of(result(assetId, "row-1", 1), result(assetId, "row-1", 1))
                 ));
-        when(assetService.getAsset(assetId))
-                .thenReturn(asset(assetId, workspaceId, AssetStatus.SEARCHABLE, "Lecture"));
-        when(assetService.getAssetTranscriptContext(assetId, "row-1", 1))
-                .thenReturn(new AssetTranscriptContextResponse(
+        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1))
+                .thenReturn(Optional.of(context(
                         assetId,
+                        "Lecture",
                         "row-1",
                         1,
                         1,
-                        List.of(row("row-1", 1, "same hit"))
-                ));
+                        row("row-1", 1, "same hit")
+                )));
 
         AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
                 workspaceId,
@@ -364,11 +361,13 @@ class AssistantContextServiceTest {
         );
         SearchService realSearchService = new SearchService(
                 workspaceService,
-                assetService,
-                assetRepository,
+                mock(AssetReadService.class),
                 mock(TranscriptSearchIndexClient.class)
         );
-        AssistantContextService realAssistantContextService = new AssistantContextService(realSearchService, assetService);
+        AssistantContextService realAssistantContextService = new AssistantContextService(
+                realSearchService,
+                mock(AssetReadService.class)
+        );
 
         assertThatThrownBy(() -> realAssistantContextService.buildContext(new AssistantContextRequest(
                 UUID.randomUUID(),
@@ -395,14 +394,26 @@ class AssistantContextServiceTest {
         );
     }
 
-    private Asset asset(UUID assetId, UUID workspaceId, AssetStatus status, String title) {
-        Asset asset = new Asset("lecture.mp4", title, status, new Workspace(workspaceId, "Workspace", "user-1", false));
-        ReflectionTestUtils.setField(asset, "id", assetId);
-        return asset;
+    private AssetTranscriptContext context(
+            UUID assetId,
+            String assetTitle,
+            String transcriptRowId,
+            Integer hitSegmentIndex,
+            int window,
+            AssetTranscriptRowView... rows
+    ) {
+        return new AssetTranscriptContext(
+                assetId,
+                assetTitle,
+                transcriptRowId,
+                hitSegmentIndex,
+                window,
+                List.of(rows)
+        );
     }
 
-    private AssetTranscriptRowResponse row(String id, Integer segmentIndex, String text) {
-        return new AssetTranscriptRowResponse(
+    private AssetTranscriptRowView row(String id, Integer segmentIndex, String text) {
+        return new AssetTranscriptRowView(
                 id,
                 "video-1",
                 segmentIndex,

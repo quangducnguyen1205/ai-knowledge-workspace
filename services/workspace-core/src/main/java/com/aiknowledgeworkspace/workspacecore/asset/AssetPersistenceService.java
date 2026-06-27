@@ -1,7 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
@@ -198,7 +197,7 @@ public class AssetPersistenceService {
     @Transactional
     public List<AssetTranscriptRowSnapshot> replaceTranscriptSnapshot(
             Asset asset,
-            List<FastApiTranscriptRowResponse> transcriptRows
+            List<AssetTranscriptRowInput> transcriptRows
     ) {
         assetTranscriptRowSnapshotRepository.deleteByAssetId(asset.getId());
 
@@ -216,7 +215,7 @@ public class AssetPersistenceService {
         List<AssetTranscriptRowSnapshot> sortedSnapshots = sortTranscriptSnapshots(
                 assetTranscriptRowSnapshotRepository.saveAll(snapshots)
         );
-        assetSearchIndexRequestService.requestIndexingIfEnabled(asset, sortedSnapshots);
+        assetSearchIndexRequestService.requestIndexingIfEnabled(asset.getId(), toTranscriptRowViews(sortedSnapshots));
         return sortedSnapshots;
     }
 
@@ -233,6 +232,18 @@ public class AssetPersistenceService {
                 .sorted(Comparator.comparing(
                         AssetTranscriptRowSnapshot::getSegmentIndex,
                         Comparator.nullsLast(Integer::compareTo)
+                ))
+                .toList();
+    }
+
+    private List<AssetTranscriptRowView> toTranscriptRowViews(List<AssetTranscriptRowSnapshot> snapshots) {
+        return snapshots.stream()
+                .map(snapshot -> new AssetTranscriptRowView(
+                        snapshot.getTranscriptRowId(),
+                        snapshot.getVideoId(),
+                        snapshot.getSegmentIndex(),
+                        snapshot.getText(),
+                        snapshot.getCreatedAt()
                 ))
                 .toList();
     }

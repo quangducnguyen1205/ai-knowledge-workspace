@@ -1,7 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
@@ -41,15 +40,15 @@ public class AssetSearchIndexRequestService {
 
     @Transactional
     public Optional<AssetSearchIndexJob> requestIndexingIfEnabled(
-            Asset asset,
-            List<AssetTranscriptRowSnapshot> transcriptRows
+            UUID assetId,
+            List<AssetTranscriptRowView> transcriptRows
     ) {
         if (!searchIndexingProperties.isAutoRequestEnabled()) {
             return Optional.empty();
         }
 
         String snapshotFingerprint = fingerprintService.fingerprint(transcriptRows);
-        return Optional.of(createAutomaticRequest(asset, snapshotFingerprint));
+        return Optional.of(createAutomaticRequest(assetId, snapshotFingerprint));
     }
 
     @Transactional
@@ -69,23 +68,23 @@ public class AssetSearchIndexRequestService {
         return searchIndexJobRepository.save(new AssetSearchIndexJob(assetId, snapshotFingerprint));
     }
 
-    private AssetSearchIndexJob createAutomaticRequest(Asset asset, String snapshotFingerprint) {
-        Optional<AssetSearchIndexJob> alreadyIndexed = findIndexedJob(asset.getId(), snapshotFingerprint);
+    private AssetSearchIndexJob createAutomaticRequest(UUID assetId, String snapshotFingerprint) {
+        Optional<AssetSearchIndexJob> alreadyIndexed = findIndexedJob(assetId, snapshotFingerprint);
         if (alreadyIndexed.isPresent()) {
             return alreadyIndexed.get();
         }
 
-        supersedeActiveJobsForOlderFingerprints(asset.getId(), snapshotFingerprint);
+        supersedeActiveJobsForOlderFingerprints(assetId, snapshotFingerprint);
 
         List<AssetSearchIndexJob> activeSameFingerprint = searchIndexJobRepository
-                .findByAssetIdAndSnapshotFingerprintAndStatusIn(asset.getId(), snapshotFingerprint, ACTIVE_STATUSES);
+                .findByAssetIdAndSnapshotFingerprintAndStatusIn(assetId, snapshotFingerprint, ACTIVE_STATUSES);
         if (!activeSameFingerprint.isEmpty()) {
             return activeSameFingerprint.get(0);
         }
 
-        AssetSearchIndexJob searchIndexJob = new AssetSearchIndexJob(asset.getId(), snapshotFingerprint);
+        AssetSearchIndexJob searchIndexJob = new AssetSearchIndexJob(assetId, snapshotFingerprint);
         OutboxEvent outboxEvent = outboxEventFactory.assetIndexingRequested(
-                asset.getId(),
+                assetId,
                 searchIndexJob.getId(),
                 snapshotFingerprint
         );

@@ -1,8 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -10,27 +10,27 @@ import org.springframework.util.StringUtils;
 public class TranscriptIndexDocumentMapper {
 
     public TranscriptIndexDocument toDocument(
-            Asset asset,
-            AssetTranscriptRowSnapshot transcriptRow,
+            AssetIndexingSource asset,
+            AssetTranscriptRowView transcriptRow,
             AssetStatus indexedAssetStatus
     ) {
         return new TranscriptIndexDocument(
-                asset.getId(),
-                asset.getWorkspaceId(),
-                asset.getTitle(),
-                transcriptRow.getTranscriptRowId(),
-                transcriptRow.getSegmentIndex(),
-                transcriptRow.getText(),
-                transcriptRow.getCreatedAt(),
+                asset.assetId(),
+                asset.workspaceId(),
+                asset.assetTitle(),
+                transcriptRow.id(),
+                transcriptRow.segmentIndex(),
+                transcriptRow.text(),
+                transcriptRow.createdAt(),
                 indexedAssetStatus
         );
     }
 
-    public String toDocumentId(Asset asset, AssetTranscriptRowSnapshot transcriptRow) {
+    public String toDocumentId(AssetIndexingSource asset, AssetTranscriptRowView transcriptRow) {
         // Keep document IDs stable so a re-index overwrites the same transcript row document.
-        String transcriptRowId = StringUtils.hasText(transcriptRow.getTranscriptRowId())
-                ? transcriptRow.getTranscriptRowId()
-                : "segment-" + transcriptRow.getSegmentIndex();
-        return asset.getId() + "-" + transcriptRowId;
+        String transcriptRowId = StringUtils.hasText(transcriptRow.id())
+                ? transcriptRow.id()
+                : "segment-" + transcriptRow.segmentIndex();
+        return asset.assetId() + "-" + transcriptRowId;
     }
 }

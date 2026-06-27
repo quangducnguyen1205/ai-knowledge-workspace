@@ -1,18 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContextResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchService;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -32,11 +26,11 @@ public class AssistantContextService {
     static final int MAX_SOURCE_TEXT_LENGTH = 2_000;
 
     private final SearchService searchService;
-    private final AssetService assetService;
+    private final AssetReadService assetReadService;
 
-    public AssistantContextService(SearchService searchService, AssetService assetService) {
+    public AssistantContextService(SearchService searchService, AssetReadService assetReadService) {
         this.searchService = searchService;
-        this.assetService = assetService;
+        this.assetReadService = assetReadService;
     }
 
     public AssistantContextResponse buildContext(AssistantContextRequest request) {
@@ -88,36 +82,19 @@ public class AssistantContextService {
             return Optional.empty();
         }
 
-        Asset asset;
-        try {
-            asset = assetService.getAsset(result.assetId());
-        } catch (AssetNotFoundException exception) {
-            return Optional.empty();
-        }
-        if (!workspaceId.equals(asset.getWorkspaceId()) || asset.getStatus() != AssetStatus.SEARCHABLE) {
-            return Optional.empty();
-        }
-
-        List<AssetTranscriptRowResponse> contextRows;
-        Integer hitSegmentIndex;
-        try {
-            if (contextWindow == 0) {
-                contextRows = loadSingleHitRow(result.assetId(), transcriptRowId);
-                hitSegmentIndex = contextRows.get(0).segmentIndex();
-            } else {
-                AssetTranscriptContextResponse contextResponse = assetService.getAssetTranscriptContext(
-                        result.assetId(),
-                        transcriptRowId,
-                        contextWindow
-                );
-                contextRows = contextResponse.rows();
-                hitSegmentIndex = contextResponse.hitSegmentIndex();
-            }
-        } catch (TranscriptRowNotFoundException | TranscriptUnavailableException exception) {
+        Optional<AssetTranscriptContext> context = assetReadService.findSearchableTranscriptContext(
+                result.assetId(),
+                workspaceId,
+                transcriptRowId,
+                contextWindow
+        );
+        if (context.isEmpty()) {
             return Optional.empty();
         }
 
-        AssetTranscriptRowResponse hitRow = findHitRow(contextRows, transcriptRowId, hitSegmentIndex)
+        AssetTranscriptContext contextValue = context.get();
+        List<AssetTranscriptRowView> contextRows = contextValue.rows();
+        AssetTranscriptRowView hitRow = findHitRow(contextRows, transcriptRowId, contextValue.hitSegmentIndex())
                 .orElseGet(() -> contextRows.get(0));
         String stableTranscriptRowId = resolveTranscriptRowId(hitRow.id(), hitRow.segmentIndex());
         if (!StringUtils.hasText(stableTranscriptRowId)) {
@@ -125,31 +102,18 @@ public class AssistantContextService {
         }
 
         return Optional.of(new AssistantContextSourceResponse(
-                asset.getId(),
-                asset.getTitle(),
+                contextValue.assetId(),
+                contextValue.assetTitle(),
                 stableTranscriptRowId,
                 hitRow.segmentIndex(),
                 hitRow.createdAt(),
                 boundText(joinContextText(contextRows)),
-                new AssistantCitationResponse(asset.getId(), stableTranscriptRowId, hitRow.segmentIndex())
+                new AssistantCitationResponse(contextValue.assetId(), stableTranscriptRowId, hitRow.segmentIndex())
         ));
     }
 
-    private List<AssetTranscriptRowResponse> loadSingleHitRow(UUID assetId, String transcriptRowId) {
-        List<AssetTranscriptRowResponse> sortedRows = new ArrayList<>(assetService.getAssetTranscript(assetId));
-        sortedRows.sort(Comparator.comparing(
-                AssetTranscriptRowResponse::segmentIndex,
-                Comparator.nullsLast(Integer::compareTo)
-        ));
-        return sortedRows.stream()
-                .filter(row -> matchesTranscriptRow(row, transcriptRowId))
-                .findFirst()
-                .map(List::of)
-                .orElseThrow(() -> new TranscriptRowNotFoundException(assetId, transcriptRowId));
-    }
-
-    private Optional<AssetTranscriptRowResponse> findHitRow(
-            List<AssetTranscriptRowResponse> rows,
+    private Optional<AssetTranscriptRowView> findHitRow(
+            List<AssetTranscriptRowView> rows,
             String transcriptRowId,
             Integer hitSegmentIndex
     ) {
@@ -159,7 +123,7 @@ public class AssistantContextService {
                 .findFirst();
     }
 
-    private boolean matchesTranscriptRow(AssetTranscriptRowResponse row, String transcriptRowId) {
+    private boolean matchesTranscriptRow(AssetTranscriptRowView row, String transcriptRowId) {
         if (StringUtils.hasText(row.id())) {
             return row.id().equals(transcriptRowId);
         }
@@ -167,9 +131,9 @@ public class AssistantContextService {
                 && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
     }
 
-    private String joinContextText(List<AssetTranscriptRowResponse> rows) {
+    private String joinContextText(List<AssetTranscriptRowView> rows) {
         return rows.stream()
-                .map(AssetTranscriptRowResponse::text)
+                .map(AssetTranscriptRowView::text)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .reduce((left, right) -> left + "\n" + right)

@@ -875,13 +875,16 @@ class AssetServiceTest {
         when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(fastApiProcessingClient.getTranscript("video-3b")).thenReturn(upstreamRows);
-        when(assetPersistenceService.replaceTranscriptSnapshot(asset, upstreamRows)).thenReturn(persistedRows);
+        List<AssetTranscriptRowInput> transcriptRows = upstreamRows.stream()
+                .map(this::toAssetTranscriptRowInput)
+                .toList();
+        when(assetPersistenceService.replaceTranscriptSnapshot(asset, transcriptRows)).thenReturn(persistedRows);
 
         List<AssetTranscriptRowResponse> response = assetService.getAssetTranscript(assetId);
 
         assertThat(response).extracting(AssetTranscriptRowResponse::id)
                 .containsExactly("row-1", "row-2");
-        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, upstreamRows);
+        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, transcriptRows);
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
     }
 
@@ -1132,7 +1135,8 @@ class AssetServiceTest {
                 new FastApiTranscriptRowResponse("row-missing-segment", "video-7", null, "Still bad", "2026-04-12T00:00:01Z"),
                 usableRow
         ));
-        when(assetPersistenceService.replaceTranscriptSnapshot(asset, List.of(usableRow))).thenReturn(List.of(
+        List<AssetTranscriptRowInput> usableRows = List.of(toAssetTranscriptRowInput(usableRow));
+        when(assetPersistenceService.replaceTranscriptSnapshot(asset, usableRows)).thenReturn(List.of(
                 snapshotRow(assetId, "row-1", "video-7", 1, "Useful transcript row")
         ));
 
@@ -1140,7 +1144,7 @@ class AssetServiceTest {
 
         assertThat(response.rows()).hasSize(1);
         assertThat(response.rows().get(0).id()).isEqualTo("row-1");
-        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, List.of(usableRow));
+        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, usableRows);
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
     }
 
@@ -1222,6 +1226,16 @@ class AssetServiceTest {
                 segmentIndex,
                 text,
                 "2026-04-12T00:00:00Z"
+        );
+    }
+
+    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
+        return new AssetTranscriptRowInput(
+                transcriptRow.id(),
+                transcriptRow.videoId(),
+                transcriptRow.segmentIndex(),
+                transcriptRow.text(),
+                transcriptRow.createdAt()
         );
     }
 

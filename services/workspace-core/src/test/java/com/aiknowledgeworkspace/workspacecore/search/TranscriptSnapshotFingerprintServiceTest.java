@@ -2,9 +2,8 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class TranscriptSnapshotFingerprintServiceTest {
@@ -13,7 +12,7 @@ class TranscriptSnapshotFingerprintServiceTest {
 
     @Test
     void sameOrderedRowsProduceSameFingerprint() {
-        List<AssetTranscriptRowSnapshot> rows = List.of(
+        List<AssetTranscriptRowView> rows = List.of(
                 row(0, "first"),
                 row(1, "second")
         );
@@ -46,9 +45,8 @@ class TranscriptSnapshotFingerprintServiceTest {
                 .isNotEqualTo(fingerprintService.fingerprint(List.of(row(1, "second"), row(0, "first"))));
     }
 
-    private AssetTranscriptRowSnapshot row(int segmentIndex, String text) {
-        return new AssetTranscriptRowSnapshot(
-                UUID.randomUUID(),
+    private AssetTranscriptRowView row(int segmentIndex, String text) {
+        return new AssetTranscriptRowView(
                 "ignored-row-id-" + segmentIndex,
                 "video-1",
                 segmentIndex,

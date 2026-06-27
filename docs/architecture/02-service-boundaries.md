@@ -19,6 +19,18 @@ block strict `ApplicationModules.verify()`. P3-BE2 should target the smallest
 boundary extraction justified by that evidence, starting with asset public APIs
 for transcript/searchability reads and processing-result application.
 
+P3-BE2A `[ĐÃ XÁC MINH TỪ CODE]` establishes the first of those public asset
+application boundaries. Processing result handling now delegates asset terminal
+state and canonical transcript snapshot replacement to an asset-owned command;
+search reads indexable transcript/searchability state and marks successful
+indexing through asset-owned contracts; assistant context reads transcript
+context through an asset public read API. This narrows direct persistence/entity
+coupling without changing public API, event, schema, search, processing, or
+assistant behavior. Strict Modulith verification is still not green because
+deferred edges remain, including `workspace -> asset repository`, `asset ->
+processing/search`, outbox product-event construction, `common.web` exception
+coupling, and `search -> processing repository`.
+
 ## Current Boundary Diagram
 
 ```mermaid
@@ -62,6 +74,8 @@ flowchart LR
 - Client-facing search API and result shaping
 - Product-facing transcript reads and transcript-context responses
 - Local transcript snapshot persistence
+- Asset-owned public application contracts for processing-result application,
+  transcript/indexing-source reads, and searchability state transitions
 - Explicit transcript indexing into Elasticsearch
 - PostgreSQL-owned search indexing jobs and metadata-only indexing outbox intent
 - Disabled-by-default indexing listener foundation for `asset.indexing.requested.v1`

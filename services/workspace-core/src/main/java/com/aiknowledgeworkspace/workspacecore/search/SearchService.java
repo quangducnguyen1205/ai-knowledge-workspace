@@ -1,16 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetDetails;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -20,19 +17,16 @@ public class SearchService {
     private static final int MAX_SEARCHABLE_ASSET_TERMS = 1_000;
 
     private final WorkspaceService workspaceService;
-    private final AssetService assetService;
-    private final AssetRepository assetRepository;
+    private final AssetReadService assetReadService;
     private final TranscriptSearchIndexClient transcriptSearchIndexClient;
 
     public SearchService(
             WorkspaceService workspaceService,
-            AssetService assetService,
-            AssetRepository assetRepository,
+            AssetReadService assetReadService,
             TranscriptSearchIndexClient transcriptSearchIndexClient
     ) {
         this.workspaceService = workspaceService;
-        this.assetService = assetService;
-        this.assetRepository = assetRepository;
+        this.assetReadService = assetReadService;
         this.transcriptSearchIndexClient = transcriptSearchIndexClient;
     }
 
@@ -66,13 +60,9 @@ public class SearchService {
             return null;
         }
 
-        Asset asset = assetService.getAsset(assetId);
-        if (!workspaceId.equals(asset.getWorkspaceId())) {
+        AssetDetails asset = assetReadService.getAuthorizedAssetDetails(assetId);
+        if (!workspaceId.equals(asset.workspaceId())) {
             throw new AssetNotFoundException();
-        }
-
-        if (asset.getStatus() != AssetStatus.SEARCHABLE) {
-            return assetId;
         }
 
         return assetId;
@@ -80,17 +70,11 @@ public class SearchService {
 
     private List<UUID> resolveEligibleAssetIds(UUID workspaceId, UUID assetId) {
         if (assetId != null) {
-            Asset asset = assetService.getAsset(assetId);
-            return asset.getStatus() == AssetStatus.SEARCHABLE ? List.of(assetId) : List.of();
+            AssetDetails asset = assetReadService.getAuthorizedAssetDetails(assetId);
+            return asset.searchable() ? List.of(assetId) : List.of();
         }
 
-        List<UUID> eligibleAssetIds = assetRepository.findByWorkspace_IdAndStatus(
-                        workspaceId,
-                        AssetStatus.SEARCHABLE,
-                        Sort.unsorted()
-                ).stream()
-                .map(Asset::getId)
-                .toList();
+        List<UUID> eligibleAssetIds = assetReadService.findSearchableAssetIdsInWorkspace(workspaceId);
         if (eligibleAssetIds.size() > MAX_SEARCHABLE_ASSET_TERMS) {
             throw new InvalidSearchRequestException(
                     "SEARCH_SCOPE_TOO_LARGE",

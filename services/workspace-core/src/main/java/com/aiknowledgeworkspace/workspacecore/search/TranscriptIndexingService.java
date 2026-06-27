@@ -1,16 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
-import java.util.List;
+import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -18,8 +18,8 @@ import org.springframework.stereotype.Service;
 public class TranscriptIndexingService {
 
     private final ProcessingJobRepository processingJobRepository;
-    private final AssetService assetService;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetReadService assetReadService;
+    private final AssetSearchabilityService assetSearchabilityService;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final AssetSearchIndexRequestService searchIndexRequestService;
     private final AssetSearchIndexJobRepository searchIndexJobRepository;
@@ -28,8 +28,8 @@ public class TranscriptIndexingService {
 
     public TranscriptIndexingService(
             ProcessingJobRepository processingJobRepository,
-            AssetService assetService,
-            AssetPersistenceService assetPersistenceService,
+            AssetReadService assetReadService,
+            AssetSearchabilityService assetSearchabilityService,
             TranscriptSnapshotFingerprintService fingerprintService,
             AssetSearchIndexRequestService searchIndexRequestService,
             AssetSearchIndexJobRepository searchIndexJobRepository,
@@ -37,8 +37,8 @@ public class TranscriptIndexingService {
             AssetIndexingEventParser indexingEventParser
     ) {
         this.processingJobRepository = processingJobRepository;
-        this.assetService = assetService;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetReadService = assetReadService;
+        this.assetSearchabilityService = assetSearchabilityService;
         this.fingerprintService = fingerprintService;
         this.searchIndexRequestService = searchIndexRequestService;
         this.searchIndexJobRepository = searchIndexJobRepository;
@@ -47,13 +47,21 @@ public class TranscriptIndexingService {
     }
 
     public AssetIndexResponse indexAssetTranscript(UUID assetId) {
-        Asset asset = assetService.getAsset(assetId);
         ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
                 .orElseThrow(ProcessingJobNotFoundException::new);
+        if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
+            throw new TranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_READY",
+                    "Transcript is not ready until processing reaches terminal success"
+            );
+        }
 
-        List<AssetTranscriptRowSnapshot> transcriptRows = assetService.loadUsableTranscriptSnapshot(asset, processingJob);
-        String snapshotFingerprint = fingerprintService.fingerprint(transcriptRows);
-        AssetSearchIndexJob indexingJob = searchIndexRequestService.createExplicitJob(asset.getId(), snapshotFingerprint);
+        AssetIndexingSource indexingSource = assetReadService.loadAuthorizedIndexingSourceForCompletedProcessing(
+                assetId,
+                processingJob.getFastapiVideoId()
+        );
+        String snapshotFingerprint = fingerprintService.fingerprint(indexingSource.transcriptRows());
+        AssetSearchIndexJob indexingJob = searchIndexRequestService.createExplicitJob(assetId, snapshotFingerprint);
 
         try {
             AssetSearchIndexExecutionResult result = searchIndexingExecutor.indexJob(indexingJob.getId());
@@ -61,11 +69,11 @@ public class TranscriptIndexingService {
                 throw new ElasticsearchIntegrationException("Asset transcript indexing did not complete: " + result.status());
             }
         } catch (ElasticsearchIntegrationException exception) {
-            assetPersistenceService.updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+            assetSearchabilityService.markTranscriptReady(assetId);
             throw exception;
         }
 
-        return new AssetIndexResponse(asset.getId(), AssetStatus.SEARCHABLE, transcriptRows.size());
+        return new AssetIndexResponse(assetId, AssetStatus.SEARCHABLE, indexingSource.transcriptRows().size());
     }
 
     public AssetIndexingHandleResult handleIndexingEvent(String rawEventJson) {

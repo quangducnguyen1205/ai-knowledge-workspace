@@ -1,12 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetProcessingResultApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowInput;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -29,28 +28,25 @@ public class ProcessingResultEventHandler {
 
     private final ProcessingResultEventParser eventParser;
     private final ConsumedProcessingResultEventRepository consumedEventRepository;
-    private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
     private final FastApiProcessingClient fastApiProcessingClient;
     private final TranscriptArtifactValidator transcriptArtifactValidator;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetProcessingResultApplicationService assetProcessingResultApplicationService;
 
     public ProcessingResultEventHandler(
             ProcessingResultEventParser eventParser,
             ConsumedProcessingResultEventRepository consumedEventRepository,
-            AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
             FastApiProcessingClient fastApiProcessingClient,
             TranscriptArtifactValidator transcriptArtifactValidator,
-            AssetPersistenceService assetPersistenceService
+            AssetProcessingResultApplicationService assetProcessingResultApplicationService
     ) {
         this.eventParser = eventParser;
         this.consumedEventRepository = consumedEventRepository;
-        this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.fastApiProcessingClient = fastApiProcessingClient;
         this.transcriptArtifactValidator = transcriptArtifactValidator;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetProcessingResultApplicationService = assetProcessingResultApplicationService;
     }
 
     @Transactional
@@ -153,43 +149,27 @@ public class ProcessingResultEventHandler {
 
     private void applyTranscriptReady(ProcessingResultEventEnvelope event) {
         TranscriptReadyPayload payload = (TranscriptReadyPayload) event.payload();
-        Asset asset = loadAsset(event.aggregateId());
-        ProcessingJob processingJob = loadProcessingJob(asset.getId(), event.causationEventId());
+        ProcessingJob processingJob = loadProcessingJob(event.aggregateId(), event.causationEventId());
 
         List<FastApiTranscriptRowResponse> artifactRows = fastApiProcessingClient.getTranscriptArtifactRows(
                 payload.processingRequestId().toString()
         );
         List<FastApiTranscriptRowResponse> validatedRows = transcriptArtifactValidator.validate(artifactRows);
 
-        assetPersistenceService.replaceTranscriptSnapshot(asset, validatedRows);
+        applyAssetTranscriptReady(event.aggregateId(), validatedRows);
         processingJob.setProcessingJobStatus(ProcessingJobStatus.SUCCEEDED);
         processingJob.setRawUpstreamTaskState("transcript.ready");
         processingJobRepository.save(processingJob);
-
-        if (asset.getStatus() != AssetStatus.SEARCHABLE) {
-            asset.setStatus(AssetStatus.TRANSCRIPT_READY);
-            assetRepository.save(asset);
-        }
     }
 
     private void applyProcessingFailed(ProcessingResultEventEnvelope event) {
         AssetProcessingFailedPayload payload = (AssetProcessingFailedPayload) event.payload();
-        Asset asset = loadAsset(event.aggregateId());
-        ProcessingJob processingJob = loadProcessingJob(asset.getId(), event.causationEventId());
+        ProcessingJob processingJob = loadProcessingJob(event.aggregateId(), event.causationEventId());
 
         processingJob.setProcessingJobStatus(ProcessingJobStatus.FAILED);
         processingJob.setRawUpstreamTaskState(safeRawUpstreamState(payload));
         processingJobRepository.save(processingJob);
-
-        if (asset.getStatus() != AssetStatus.FAILED) {
-            asset.setStatus(AssetStatus.FAILED);
-            assetRepository.save(asset);
-        }
-    }
-
-    private Asset loadAsset(UUID assetId) {
-        return assetRepository.findById(assetId)
-                .orElseThrow(() -> new ProcessingResultEventApplyException("Asset was not found for result event"));
+        applyAssetProcessingFailed(event.aggregateId());
     }
 
     private ProcessingJob loadProcessingJob(UUID assetId, UUID processingRequestEventId) {
@@ -197,6 +177,37 @@ public class ProcessingResultEventHandler {
                 .orElseThrow(() -> new ProcessingResultEventApplyException(
                         "Processing job was not found for result event request correlation"
                 ));
+    }
+
+    private void applyAssetTranscriptReady(UUID assetId, List<FastApiTranscriptRowResponse> transcriptRows) {
+        try {
+            assetProcessingResultApplicationService.applyTranscriptReady(
+                    assetId,
+                    transcriptRows.stream()
+                            .map(this::toAssetTranscriptRowInput)
+                            .toList()
+            );
+        } catch (AssetNotFoundException exception) {
+            throw new ProcessingResultEventApplyException("Asset was not found for result event", exception);
+        }
+    }
+
+    private void applyAssetProcessingFailed(UUID assetId) {
+        try {
+            assetProcessingResultApplicationService.applyProcessingFailed(assetId);
+        } catch (AssetNotFoundException exception) {
+            throw new ProcessingResultEventApplyException("Asset was not found for result event", exception);
+        }
+    }
+
+    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
+        return new AssetTranscriptRowInput(
+                transcriptRow.id(),
+                transcriptRow.videoId(),
+                transcriptRow.segmentIndex(),
+                transcriptRow.text(),
+                transcriptRow.createdAt()
+        );
     }
 
     private String safeRawUpstreamState(AssetProcessingFailedPayload payload) {

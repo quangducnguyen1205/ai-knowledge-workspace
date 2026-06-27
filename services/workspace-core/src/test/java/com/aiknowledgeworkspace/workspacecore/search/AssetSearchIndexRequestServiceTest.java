@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
@@ -60,7 +60,7 @@ class AssetSearchIndexRequestServiceTest {
     void autoRequestIsDisabledByDefault() {
         Asset asset = asset(UUID.randomUUID());
 
-        Optional<AssetSearchIndexJob> result = service().requestIndexingIfEnabled(asset, List.of(row(asset.getId(), 0, "Text")));
+        Optional<AssetSearchIndexJob> result = service().requestIndexingIfEnabled(asset.getId(), List.of(row(0, "Text")));
 
         assertThat(result).isEmpty();
         verify(searchIndexJobRepository, never()).save(any());
@@ -71,9 +71,9 @@ class AssetSearchIndexRequestServiceTest {
     void autoRequestCreatesIndexingJobAndMetadataOnlyOutboxEvent() throws Exception {
         properties.setAutoRequestEnabled(true);
         Asset asset = asset(UUID.randomUUID());
-        List<AssetTranscriptRowSnapshot> rows = List.of(row(asset.getId(), 0, "Secret transcript text"));
+        List<AssetTranscriptRowView> rows = List.of(row(0, "Secret transcript text"));
 
-        AssetSearchIndexJob job = service().requestIndexingIfEnabled(asset, rows).orElseThrow();
+        AssetSearchIndexJob job = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
         ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxEventRepository).save(outboxCaptor.capture());
@@ -99,7 +99,7 @@ class AssetSearchIndexRequestServiceTest {
     void duplicateActiveRequestForSameFingerprintDoesNotCreateSecondOutboxIntent() {
         properties.setAutoRequestEnabled(true);
         Asset asset = asset(UUID.randomUUID());
-        List<AssetTranscriptRowSnapshot> rows = List.of(row(asset.getId(), 0, "Text"));
+        List<AssetTranscriptRowView> rows = List.of(row(0, "Text"));
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(rows);
         AssetSearchIndexJob existingJob = new AssetSearchIndexJob(UUID.randomUUID(), asset.getId(), fingerprint);
 
@@ -109,7 +109,7 @@ class AssetSearchIndexRequestServiceTest {
                 List.of(AssetSearchIndexJobStatus.PENDING, AssetSearchIndexJobStatus.INDEXING)
         )).thenReturn(List.of(existingJob));
 
-        AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset, rows).orElseThrow();
+        AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
         assertThat(result).isSameAs(existingJob);
         verify(outboxEventRepository, never()).save(any());
@@ -141,7 +141,7 @@ class AssetSearchIndexRequestServiceTest {
     void indexedSameFingerprintDoesNotCreateAutomaticOutboxIntent() {
         properties.setAutoRequestEnabled(true);
         Asset asset = asset(UUID.randomUUID());
-        List<AssetTranscriptRowSnapshot> rows = List.of(row(asset.getId(), 0, "Text"));
+        List<AssetTranscriptRowView> rows = List.of(row(0, "Text"));
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(rows);
         AssetSearchIndexJob indexedJob = new AssetSearchIndexJob(UUID.randomUUID(), asset.getId(), fingerprint);
         indexedJob.markIndexing();
@@ -153,7 +153,7 @@ class AssetSearchIndexRequestServiceTest {
                 AssetSearchIndexJobStatus.INDEXED
         )).thenReturn(Optional.of(indexedJob));
 
-        AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset, rows).orElseThrow();
+        AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
         assertThat(result).isSameAs(indexedJob);
         verify(outboxEventRepository, never()).save(any());
@@ -170,7 +170,7 @@ class AssetSearchIndexRequestServiceTest {
                 List.of(AssetSearchIndexJobStatus.PENDING, AssetSearchIndexJobStatus.INDEXING)
         )).thenReturn(List.of(oldJob));
 
-        service().requestIndexingIfEnabled(asset, List.of(row(asset.getId(), 0, "New text")));
+        service().requestIndexingIfEnabled(asset.getId(), List.of(row(0, "New text")));
 
         assertThat(oldJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         verify(searchIndexJobRepository).save(oldJob);
@@ -193,9 +193,8 @@ class AssetSearchIndexRequestServiceTest {
         return asset;
     }
 
-    private AssetTranscriptRowSnapshot row(UUID assetId, int segmentIndex, String text) {
-        return new AssetTranscriptRowSnapshot(
-                assetId,
+    private AssetTranscriptRowView row(int segmentIndex, String text) {
+        return new AssetTranscriptRowView(
                 "row-" + segmentIndex,
                 "video-1",
                 segmentIndex,

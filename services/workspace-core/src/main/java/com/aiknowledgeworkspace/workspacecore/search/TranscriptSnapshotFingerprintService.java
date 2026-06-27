@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -14,12 +14,12 @@ public class TranscriptSnapshotFingerprintService {
 
     private static final byte FIELD_SEPARATOR = 0x1f;
 
-    public String fingerprint(List<AssetTranscriptRowSnapshot> rows) {
+    public String fingerprint(List<AssetTranscriptRowView> rows) {
         MessageDigest digest = sha256();
         updateInt(digest, rows.size());
-        for (AssetTranscriptRowSnapshot row : rows) {
-            updateIntegerField(digest, row.getSegmentIndex());
-            updateStringField(digest, row.getText());
+        for (AssetTranscriptRowView row : rows) {
+            updateIntegerField(digest, row.segmentIndex());
+            updateStringField(digest, row.text());
         }
         return HexFormat.of().formatHex(digest.digest());
     }

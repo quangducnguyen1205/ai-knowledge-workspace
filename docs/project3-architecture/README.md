@@ -65,6 +65,17 @@ removed gradually. Strict `ApplicationModules.verify()` is intentionally not
 green yet, and no Spring Modulith runtime feature or production behavior was
 added.
 
+P3-BE2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first production-code modularity
+refactor: a public asset application boundary for processing-result application,
+canonical transcript/indexing-source reads, transcript context, and
+searchability state transitions. Processing, search, and assistant now consume
+those asset contracts instead of selected direct asset persistence/entity
+internals. The refactor preserves REST/event/schema/runtime behavior and keeps
+the Modulith baseline as an honest ratchet; strict verification is still blocked
+by deferred edges such as workspace delete guards, asset-to-processing/search
+cycles, outbox product-event construction, common web exception coupling, and
+search's processing repository dependency.
+
 Frontend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace-fe`. It confirms a React/Vite product UI that calls the Spring Boot API boundary and does not call FastAPI, LLM providers, or infrastructure directly.
 
 FastAPI repository reference: `/Users/nqd2005/Projects/DemoFastAPI` is the current internal processing repository reference. P3-BE1 only corrected this stale repository note after confirming the path exists; it did not perform a new FastAPI code inspection or add a new runtime claim.
