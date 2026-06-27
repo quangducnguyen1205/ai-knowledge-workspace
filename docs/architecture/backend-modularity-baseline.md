@@ -1,6 +1,6 @@
 # Backend Modularity Baseline
 
-Status: P3-BE0 audit baseline. This document is evidence from the current Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas, or event contracts.
+Status: P3-BE0 audit baseline plus P3-BE1 Spring Modulith verification ratchet. This document is evidence from the current Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas, or event contracts.
 
 ## Scope And Non-Goals
 
@@ -11,10 +11,41 @@ Non-goals:
 - no microservice split;
 - no broad clean-architecture or hexagonal rewrite;
 - no Java package reorganization in this phase;
-- no Spring Modulith, ArchUnit, jMolecules, or dependency addition in this phase;
+- no runtime Spring Modulith feature, ArchUnit, jMolecules, or production dependency addition;
 - no database schema, Flyway, API, Kafka event, outbox, auth, processing, search, or assistant behavior change.
 
-The current backend is one Maven module, `services/workspace-core/pom.xml`, on Spring Boot `3.3.5` and Java `21`. The production Java tree contains about `9,216` lines across the Spring application root `com.aiknowledgeworkspace.workspacecore`.
+The current backend is one Maven module, `services/workspace-core/pom.xml`, on Spring Boot `3.3.5` and Java `21`. P3-BE1 adds only Spring Modulith `1.2.5` as test-scoped architecture inspection support through the Spring Modulith BOM plus `spring-modulith-starter-test`. The production Java tree contains about `9,216` lines across the Spring application root `com.aiknowledgeworkspace.workspacecore`.
+
+## P3-BE1 Verification Baseline
+
+P3-BE1 `[ĐÃ XÁC MINH TỪ CODE]` adds `BackendModularityBaselineTest` under
+`services/workspace-core/src/test/java/.../architecture/`. The test uses:
+
+```java
+ApplicationModules.of(WorkspaceCoreApplication.class)
+```
+
+with Spring Modulith's default direct-package detection. It does not use custom
+detection, broad allow-lists, open modules, module exclusions, `@ApplicationModule`,
+`@NamedInterface`, or `allowedDependencies`.
+
+The test has two checks:
+
+- the detected direct package roots remain:
+  `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`,
+  `search`, `storage`, and `workspace`;
+- the real `detectViolations()` output matches the committed baseline resource
+  `services/workspace-core/src/test/resources/architecture/spring-modulith-violations-baseline.txt`.
+
+This is a ratchet. A future failure means module detection changed or the
+violation report changed. That can be good or bad, but it must be reviewed
+intentionally instead of silently drifting in CI.
+
+Strict `ApplicationModules.verify()` is intentionally not green yet. The
+committed baseline currently records `137` violation messages, including
+dependency cycles and non-exposed type dependencies. Those messages are expected
+while P3-BE2 extracts the smallest useful public APIs, especially asset public
+APIs for transcript/searchability reads and processing-result application.
 
 ## Current Package Inventory
 
@@ -233,16 +264,13 @@ Initial public APIs should be small Java service contracts or named interfaces, 
 ## Spring Modulith Adoption Assessment
 
 1. The application root package `com.aiknowledgeworkspace.workspacecore` and its direct subpackages are syntactically compatible with Spring Modulith default module detection.
-2. Default detection would likely create modules for `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
-3. A default `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` should not be expected to pass today because confirmed cycles exist among `asset`, `processing`, `search`, and `workspace`, and because `common` and `outbox` depend on product packages.
-4. An explicit strategy will likely be required in P3-BE1:
-   - either define allowed dependencies/named interfaces for current roots before verification;
-   - or start with a focused verification baseline that documents current violations and gates only newly introduced ones;
-   - or temporarily exclude/reclassify technical packages such as `common.web`, `common.config`, `integration`, `storage`, and parts of `outbox` until a platform package shape exists.
+2. P3-BE1 confirmed default detection creates modules for `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
+3. A default `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` is intentionally not used as a passing test today because confirmed cycles exist among `asset`, `processing`, `search`, and `workspace`, and because `common` and `outbox` still depend on product packages.
+4. P3-BE1 chooses a focused verification baseline that documents current violations and gates unreviewed drift. It does not define allowed dependencies/named interfaces, temporarily exclude product modules, mark modules open, or reclassify technical packages.
 5. Candidate first product module roots: `assistant`, `workspace`, `asset`, `processing`, `search`.
 6. Candidate technical/platform roots: `outbox`, `storage`, `integration.fastapi`, `common.config`, `common.web`, `common.health`.
-7. Maven review for P3-BE1 should happen in `services/workspace-core/pom.xml`, which currently has Spring Boot starter parent version management and no Spring Modulith or ArchUnit dependency.
-8. Smallest likely future test shape:
+7. Maven review for P3-BE1 happened in `services/workspace-core/pom.xml`: Spring Modulith `1.2.5` is imported through the Spring Modulith BOM and only `spring-modulith-starter-test` is added with test scope.
+8. Future strict verification target:
 
 ```java
 @Test
@@ -251,7 +279,7 @@ void verifiesApplicationModules() {
 }
 ```
 
-That test is conceptual only in this phase. P3-BE1 must decide whether to add it as strict verification immediately or as a documented baseline with expected current violations.
+That strict test remains a target, not a current passing test. It should be added only after the known cycles and boundary leaks are removed or narrowed through intentional module APIs.
 
 Spring Modulith alone can express and verify module dependencies once public APIs/named interfaces are clear. ArchUnit is not needed now. ArchUnit may complement Spring Modulith later for more specific rules, for example:
 
@@ -264,19 +292,20 @@ Spring Modulith alone can express and verify module dependencies once public API
 
 ### P3-BE1: Minimum Architecture Verification Baseline
 
-- Add Spring Modulith dependency/test only after choosing whether current violations are allowed, excluded, or expected baseline failures.
-- Prefer a single verification test and package-level module annotations/named interfaces over package moves.
-- Record exact current violation output if verification cannot pass safely.
-- Do not change product behavior, schema, API, events, or runtime controls.
+- Completed: add Spring Modulith test-only dependency support.
+- Completed: add default-detection module-root assertion.
+- Completed: record exact current `detectViolations()` output as a committed baseline ratchet.
+- Completed: keep strict verification honest by not making `ApplicationModules.verify()` appear green through exclusions, open modules, or broad allow-lists.
+- Completed: do not change product behavior, schema, API, events, or runtime controls.
 
 ### P3-BE2: Smallest Refactor Justified By Evidence
 
 Potential first refactors, in order of least blast radius:
 
-1. Split identity from neutral `common` conceptually or via named interface.
-2. Introduce asset public APIs for transcript snapshot reads/searchability and processing-result application.
-3. Replace `workspace -> AssetRepository` with an asset module query/guard.
-4. Replace `search -> AssetRepository` and transcript repository access with asset public APIs.
+1. Introduce asset public APIs for transcript snapshot reads/searchability and processing-result application.
+2. Replace `workspace -> AssetRepository` with an asset module query/guard.
+3. Replace `search -> AssetRepository` and transcript repository access with asset public APIs.
+4. Split identity from neutral `common` conceptually or via named interface.
 5. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
 6. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
 

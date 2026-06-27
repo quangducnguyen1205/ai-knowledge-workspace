@@ -57,9 +57,17 @@ implementation unchanged and identifies `workspace`, `asset`, `processing`,
 `search`, `assistant`, identity/authentication, platform/infrastructure, and
 common technical concerns as candidate module boundaries for later verification.
 
+P3-BE1 `[ĐÃ XÁC MINH TỪ CODE]` adds a Spring Modulith test-only verification
+baseline using default direct-package detection. The committed violation
+baseline is a ratchet: it catches new accidental module leaks while the known
+asset/processing/search/workspace cycles and common/outbox ownership issues are
+removed gradually. Strict `ApplicationModules.verify()` is intentionally not
+green yet, and no Spring Modulith runtime feature or production behavior was
+added.
+
 Frontend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace-fe`. It confirms a React/Vite product UI that calls the Spring Boot API boundary and does not call FastAPI, LLM providers, or infrastructure directly.
 
-FastAPI repository note: the requested `/Users/nqd2005/Projects/DemoFastAPI` path was not present locally during inspection. The inspected processing reference was `/Users/nqd2005/Projects/DemoFirstBackend`, which identifies itself as the AI Knowledge Workspace processing service and uses FastAPI, Celery, PostgreSQL, Redis, ffmpeg, and Whisper.
+FastAPI repository reference: `/Users/nqd2005/Projects/DemoFastAPI` is the current internal processing repository reference. P3-BE1 only corrected this stale repository note after confirming the path exists; it did not perform a new FastAPI code inspection or add a new runtime claim.
 
 The Viettel project/image was used only as a visual and architectural learning reference, not as a source for Project3 business labels.
 

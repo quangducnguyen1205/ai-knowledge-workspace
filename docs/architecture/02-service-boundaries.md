@@ -10,6 +10,15 @@ current Spring package roots, dependency directions, confirmed boundary risks,
 and a staged Spring Modulith/ArchUnit adoption path before any Java package
 refactor or dependency addition.
 
+P3-BE1 adds the first test-enforced Spring Modulith baseline without changing
+production behavior. It uses default direct-package detection and compares the
+real `detectViolations()` report to a committed baseline resource. That baseline
+is intentionally a ratchet, not a green strict verification: the known
+asset/processing/search/workspace cycle and common/outbox ownership issues still
+block strict `ApplicationModules.verify()`. P3-BE2 should target the smallest
+boundary extraction justified by that evidence, starting with asset public APIs
+for transcript/searchability reads and processing-result application.
+
 ## Current Boundary Diagram
 
 ```mermaid
