@@ -74,7 +74,7 @@ identified. Asset remains owner of asset lifecycle, canonical transcript
 snapshots, transcript context, and searchability state. Search still owns
 indexing jobs and Elasticsearch writes; processing still owns result-event
 idempotency, processing jobs, FastAPI artifact retrieval, and result orchestration;
-assistant remains retrieval-only.
+assistant owns context packing plus the public grounded answer orchestration.
 
 The Modulith baseline changed intentionally after this refactor. Module roots are
 unchanged, strict `ApplicationModules.verify()` is still not green, and the
@@ -92,6 +92,13 @@ ownership remains internal to the asset module. The module-level `workspace ->
 asset` dependency remains intentional, and the same `161`-message Modulith
 baseline remains a ratchet.
 
+P3-F2A.1 `[ĐÃ XÁC MINH TỪ CODE]` exposes only the assistant-specific FastAPI
+transport records and client as the named `integration::assistant` Modulith API.
+The HTTP `FastApiAssistantClientImpl` lives under `integration.fastapi.assistant.internal`,
+so the assistant module no longer depends on non-exposed FastAPI assistant
+types. The baseline remains `161` messages; strict verification is still blocked
+by older deferred edges.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
@@ -99,9 +106,9 @@ Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 | Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
 |---|---:|---|---|---|---|---|---|
 | `asset` | 35 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints, and public application contracts for processing-result apply, indexing-source reads, searchability state, transcript context, and workspace usage. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetReadService`, `AssetProcessingResultApplicationService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs, immutable asset read contracts; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
-| `assistant` | 7 | Retrieval-only assistant context pack API. | `AssistantContextController` | `AssistantContextService` | none | DTOs for request, source, citation, response; reuses search and asset context services. | Domain/application-specific. |
+| `assistant` | 13 | Assistant context pack API and grounded answer orchestration. | `AssistantContextController`, `AssistantAnswerController` | `AssistantContextService`, `AssistantAnswerService` | none | DTOs for context/answer request, source, citation, response; reuses search and asset context services; calls the named `integration::assistant` FastAPI contract for answer generation. | Domain/application-specific. |
 | `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
-| `integration` | 8 | FastAPI client boundary and FastAPI DTOs/exceptions. | none | `FastApiProcessingClientImpl` component | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses. | Technical adapter, provider-specific. |
+| `integration` | 14 | FastAPI client boundary, assistant FastAPI named interface, processing FastAPI DTOs/exceptions, and HTTP implementations. | none | `FastApiProcessingClientImpl`, internal `FastApiAssistantClientImpl` components | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses; exposes only assistant answer transport records/client via `integration::assistant`. | Technical adapter, provider-specific. |
 | `outbox` | 16 | Durable outbox event model, event factory, relay state machine, Kafka/logging/failing publishers, Kafka topic settings. | none | `OutboxRelayService` | `OutboxEventRepository`; entity `OutboxEvent` | Owns `asset.processing.requested` and `asset.indexing.requested` payload records and relay status transitions. | Technical platform with product event-contract knowledge. |
 | `processing` | 30 | Processing job entity/state, trigger mode config, request relay scheduler, result event parsing/application, result listener, recovery/smoke commands. | none | `ProcessingResultEventHandler`, `ProcessingRecoveryService`, request relay scheduler | `ProcessingJobRepository`; entity `ProcessingJob`; `ConsumedProcessingResultEventRepository`; entity `ConsumedProcessingResultEvent` | Kafka listener for `asset.processing.result.v1`, result envelope/payload contracts, transcript artifact validation. | Domain/application integration. |
 | `search` | 31 | Search API, Elasticsearch client, transcript index documents/mapping, indexing jobs, indexing event parser/listener, explicit indexing, indexing relay/smoke. | `SearchController` | `SearchService`, `TranscriptIndexingService`, `AssetSearchIndexRequestService`, `AssetSearchIndexingExecutor`, relay scheduler | `AssetSearchIndexJobRepository`; entity `AssetSearchIndexJob` | Kafka listener for `asset.indexing.requested.v1`; Elasticsearch `RestClient` write/search path. | Domain/application plus technical adapter. |
@@ -151,7 +158,8 @@ The table below records meaningful cross-package dependencies in production code
 | `outbox` | `asset`, `workspace`, `storage` | Event factory accepts entities/value records to build payloads. | Violation candidate for strict platform module; outbox platform currently contains product event construction. | `outbox/OutboxEventFactory.java:3-5`, `outbox/OutboxEventFactory.java:28-67` |
 | `common.web` | all domain packages | Global exception handler imports domain exceptions and infrastructure exceptions. | Confirmed boundary-leak risk for default Modulith verification; common technical code depends inward on all modules. | `common/web/ApiExceptionHandler.java:3-28` |
 | `common.identity` | `workspace` | OIDC first-login provisioning uses workspace repository/properties. | Questionable but intentional product flow; should become identity -> workspace public API. | `common/identity/TransactionalOidcUserCreationExecutor.java:3-5` |
-| `integration.fastapi` | Spring `RestClient` | External HTTP adapter. | Acceptable technical adapter. | `integration/fastapi/FastApiProcessingClientImpl.java` |
+| `assistant` | `integration.fastapi.assistant` | Calls the explicit named FastAPI assistant transport API for grounded answer generation. | Acceptable after P3-F2A.1; only the assistant-specific client and transport records are exposed, while HTTP implementation remains internal. | `assistant/AssistantAnswerService.java`, `integration/fastapi/assistant/package-info.java` |
+| `integration.fastapi` | Spring `RestClient` | External HTTP adapter. | Acceptable technical adapter. | `integration/fastapi/FastApiProcessingClientImpl.java`, `integration/fastapi/assistant/internal/FastApiAssistantClientImpl.java` |
 | `storage` | AWS S3 SDK | MinIO/S3 adapter. | Acceptable technical adapter. | `storage/ObjectStorageConfig.java`, `storage/S3ObjectStorageClient.java` |
 
 ## Boundary Strengths Already Present
@@ -162,7 +170,7 @@ The table below records meaningful cross-package dependencies in production code
 - PostgreSQL ownership remains explicit: JPA entities/repositories own asset, workspace, processing, outbox, consumed-result, indexing-job, transcript snapshot, and user-account state.
 - Kafka and Elasticsearch are accessed through adapter/service boundaries (`OutboxMessagePublisher`, `KafkaOutboxMessagePublisher`, `TranscriptSearchIndexClient`, listeners).
 - Manual and automatic relays are scoped by event type, not broad arbitrary outbox scans.
-- Assistant P3-F1 is a retrieval-only boundary and has no provider, embedding, or chat persistence dependency.
+- Assistant answer orchestration uses bounded context and the named FastAPI assistant contract; it still has no embedding, chat persistence, generic provider framework, or direct browser-to-FastAPI path.
 
 ## Boundary-Leak Risks
 
@@ -237,10 +245,10 @@ These candidate boundaries are review frames, not instructions to move packages 
 
 ### `assistant`
 
-- Provided API: `POST /api/assistant/context` retrieval-only context pack.
-- Internal implementation: request normalization, source/citation shaping, dedupe/bounds.
-- Required dependencies: search public API and asset transcript-context public API.
-- Dependencies to remove or narrow: current direct use of `Asset`/`AssetStatus` could move behind a smaller transcript-context/visibility contract.
+- Provided API: `POST /api/assistant/context` context pack and `POST /api/assistant/answer` grounded answer.
+- Internal implementation: request normalization, source/citation shaping, dedupe/bounds, Spring-owned source IDs, and final citation validation.
+- Required dependencies: search public API, asset transcript-context public API, and the named `integration::assistant` FastAPI transport API.
+- Dependencies to remove or narrow: remaining search/asset named interfaces should be made explicit in later phases.
 - Current package root: currently the cleanest candidate module root.
 - Package-private practicality: service internals can be hidden later; DTO/controller stay public API.
 
@@ -369,6 +377,18 @@ Spring Modulith alone can express and verify module dependencies once public API
 - Completed: update the Modulith baseline after reviewing that module roots and
   message counts stayed stable and the changed lines represent the intentional
   `workspace -> asset public API` dependency.
+- Still blocked: strict `ApplicationModules.verify()` because deferred edges
+  remain.
+
+### P3-F2A.1: Assistant FastAPI Contract Export
+
+- Completed: move the assistant FastAPI transport records and client into the
+  named `integration::assistant` API.
+- Completed: keep `FastApiAssistantClientImpl` and HTTP exception translation
+  under `integration.fastapi.assistant.internal`.
+- Completed: update the Modulith baseline after reviewing that the F2A
+  assistant-to-non-exposed-integration messages disappeared and the count
+  returned to `161`.
 - Still blocked: strict `ApplicationModules.verify()` because deferred edges
   remain.
 

@@ -1,10 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantSourceRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantSourceRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -66,7 +65,7 @@ public class AssistantAnswerService {
                     context.query(),
                     internalSources
             ));
-        } catch (FastApiIntegrationException exception) {
+        } catch (RuntimeException exception) {
             throw new AssistantProviderUnavailableException(PROVIDER_UNAVAILABLE_MESSAGE, exception);
         }
 

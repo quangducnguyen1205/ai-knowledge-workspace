@@ -1,5 +1,11 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.internal;
 
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;

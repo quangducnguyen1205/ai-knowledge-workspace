@@ -3,7 +3,7 @@
 # This is a ratchet, not proof of a clean modular architecture.
 # Do not regenerate automatically; update only after intentional architecture review.
 detected-modules=asset,assistant,common,integration,outbox,processing,search,storage,workspace
-violation-message-count=176
+violation-message-count=161
 
 ---
 Cycle detected: Slice asset ->
@@ -3464,66 +3464,6 @@ Method <com.aiknowledgeworkspace.workspacecore.asset.AssetService.validateUpstre
 ---
 Module 'asset' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException within module 'integration'!
 Method <com.aiknowledgeworkspace.workspacecore.asset.AssetService.validateUpstreamUploadResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse)> calls constructor <com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException.<init>(java.lang.String)> in (AssetService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerRequest within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.answer(com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerRequest)> calls constructor <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerRequest.<init>(java.lang.String, java.util.List)> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-FastApiAssistantAnswerResponse declares parameter FastApiAssistantAnswerResponse.toPublicResponse(FastApiAssistantAnswerResponse, Map) in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.answer()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.answer()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.citedSourceIds()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.citedSourceIds()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.insufficientContext()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.insufficientContext()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse.insufficientContext()> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.toPublicResponse(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse, java.util.Map)> has parameter of type <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient within module 'integration'!
-AssistantAnswerService declares constructor AssistantAnswerService(AssistantContextService, FastApiAssistantClient) in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient within module 'integration'!
-Constructor <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.<init>(com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextService, com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient)> has parameter of type <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient within module 'integration'!
-Field <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.fastApiAssistantClient> has type <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.answer(com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerRequest)> calls method <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient.answer(com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerRequest)> in (AssistantAnswerService.java)
-
----
-Module 'assistant' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantSourceRequest within module 'integration'!
-Method <com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerService.answer(com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerRequest)> calls constructor <com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantSourceRequest.<init>(java.lang.String, java.util.UUID, java.lang.String, java.lang.String, java.lang.Integer, java.lang.String, java.lang.String)> in (AssistantAnswerService.java)
 
 ---
 Module 'common' depends on non-exposed type com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException within module 'integration'!

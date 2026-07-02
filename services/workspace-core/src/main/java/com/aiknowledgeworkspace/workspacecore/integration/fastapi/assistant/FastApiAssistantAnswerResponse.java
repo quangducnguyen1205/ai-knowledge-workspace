@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant;
 
 import java.util.List;
 

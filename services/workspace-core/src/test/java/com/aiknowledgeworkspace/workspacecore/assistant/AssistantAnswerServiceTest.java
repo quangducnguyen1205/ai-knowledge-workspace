@@ -11,10 +11,9 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiAssistantClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchService;
@@ -189,7 +188,7 @@ class AssistantAnswerServiceTest {
         UUID assetId = UUID.randomUUID();
         oneApprovedSource(workspaceId, assetId);
         when(fastApiAssistantClient.answer(any()))
-                .thenThrow(new FastApiIntegrationException("FastAPI returned HTTP 503 while trying to generate"));
+                .thenThrow(new RuntimeException("FastAPI returned HTTP 503 while trying to generate"));
 
         assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
                 workspaceId,
