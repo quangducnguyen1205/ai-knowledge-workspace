@@ -9,6 +9,8 @@ public class FastApiProperties {
     private String baseUrl = "http://localhost:8000";
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(30);
+    private String assistantAnswerPath = "/internal/assistant/answer";
+    private Duration assistantReadTimeout = Duration.ofSeconds(30);
 
     public String getBaseUrl() {
         return baseUrl;
@@ -32,5 +34,21 @@ public class FastApiProperties {
 
     public void setReadTimeout(Duration readTimeout) {
         this.readTimeout = readTimeout;
+    }
+
+    public String getAssistantAnswerPath() {
+        return assistantAnswerPath;
+    }
+
+    public void setAssistantAnswerPath(String assistantAnswerPath) {
+        this.assistantAnswerPath = assistantAnswerPath;
+    }
+
+    public Duration getAssistantReadTimeout() {
+        return assistantReadTimeout;
+    }
+
+    public void setAssistantReadTimeout(Duration assistantReadTimeout) {
+        this.assistantReadTimeout = assistantReadTimeout;
     }
 }

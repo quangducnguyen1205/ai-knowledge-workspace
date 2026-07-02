@@ -163,6 +163,8 @@ Frontend must not call LLM providers directly. That would bypass product authori
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` implements only the first Spring-owned retrieval boundary: `POST /api/assistant/context` returns a deterministic, bounded context pack with source citations after existing workspace/asset/searchability checks. It does not call the FastAPI LLM adapter, invoke any provider, generate an answer, create embeddings, persist chat history, or add token accounting. Later LLM orchestration must consume context through this Spring-owned policy boundary rather than bypassing product authorization.
 
+P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first real grounded answer foundation without broadening the architecture. `POST /api/assistant/answer` stays in Spring, reuses the existing assistant context flow, sends only Spring-approved bounded sources to FastAPI, and validates returned cited source IDs before responding to the browser. FastAPI exposes one internal `POST /internal/assistant/answer` adapter and one disabled-by-default Ollama path. Runtime behavior with native macOS Ollama and `qwen3:1.7b` is `[CẦN XÁC MINH]`; no model download, service startup, streaming, history, embeddings, external provider, Kafka/outbox assistant flow, retry topic, or DLQ is added.
+
 ## Kafka And Celery
 
 Kafka and Celery both support asynchronous work, but they sit at different boundaries.
@@ -251,11 +253,12 @@ Elasticsearch is derived. Product PostgreSQL remains the truth for transcript sn
 2. Frontend calls Spring Boot through Nginx.
 3. Spring Boot AI Assistant API / Context Orchestrator validates JWT and user/workspace scope.
 4. Spring Boot retrieves authorized context from Product PostgreSQL and Elasticsearch.
-5. Later phases can pass that context to the internal FastAPI LLM Adapter / Prompt Executor.
-6. Later phases can return an LLM answer to the frontend through Spring.
-7. Later phases may optionally store conversation/audit/history in Product PostgreSQL if product requirements need it.
+5. Spring Boot passes only the bounded source entries and Spring-issued source IDs to the internal FastAPI assistant adapter.
+6. FastAPI calls the configured Ollama runtime only when the assistant adapter is explicitly enabled.
+7. FastAPI returns normalized `answer`, `citedSourceIds`, and `insufficientContext`.
+8. Spring validates citations against the exact supplied source IDs and returns the browser response.
 
-Possible providers include Ollama/local model, OpenAI/OpenRouter adapter, or other LLM providers. They are implementation choices behind the adapter, not product-state owners.
+This foundation intentionally has one provider path: FastAPI -> Ollama. OpenAI/OpenRouter, provider factories, model switching, streaming, conversation history, persistence, embeddings, Kafka/outbox, retries, retry topics, and DLQ handling remain out of scope.
 
 ### 5. Observability
 

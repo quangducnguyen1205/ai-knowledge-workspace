@@ -9,6 +9,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.assistant.AssistantProviderUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthModeUnavailableException;
@@ -48,6 +49,14 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleFastApiIntegration(FastApiIntegrationException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ApiErrorResponse("FASTAPI_INTEGRATION_ERROR", exception.getMessage()));
+    }
+
+    @ExceptionHandler(AssistantProviderUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleAssistantProviderUnavailable(
+            AssistantProviderUnavailableException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse("ASSISTANT_PROVIDER_UNAVAILABLE", exception.getMessage()));
     }
 
     @ExceptionHandler(ElasticsearchConnectivityException.class)

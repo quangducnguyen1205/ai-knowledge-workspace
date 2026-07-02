@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.common.config;
 
+import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -10,12 +11,29 @@ public class FastApiClientConfig {
 
     @Bean("fastApiRestClient")
     RestClient fastApiRestClient(FastApiProperties properties) {
+        return buildRestClient(
+                properties.getBaseUrl(),
+                properties.getConnectTimeout(),
+                properties.getReadTimeout()
+        );
+    }
+
+    @Bean("fastApiAssistantRestClient")
+    RestClient fastApiAssistantRestClient(FastApiProperties properties) {
+        return buildRestClient(
+                properties.getBaseUrl(),
+                properties.getConnectTimeout(),
+                properties.getAssistantReadTimeout()
+        );
+    }
+
+    private RestClient buildRestClient(String baseUrl, Duration connectTimeout, Duration readTimeout) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeout().toMillis()));
-        requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeout().toMillis()));
+        requestFactory.setConnectTimeout(Math.toIntExact(connectTimeout.toMillis()));
+        requestFactory.setReadTimeout(Math.toIntExact(readTimeout.toMillis()));
 
         return RestClient.builder()
-                .baseUrl(properties.getBaseUrl())
+                .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
                 .build();
     }

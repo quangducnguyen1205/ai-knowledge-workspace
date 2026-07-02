@@ -87,6 +87,9 @@ flowchart LR
 - Explicit transcript indexing into Elasticsearch
 - PostgreSQL-owned search indexing jobs and metadata-only indexing outbox intent
 - Disabled-by-default indexing listener foundation for `asset.indexing.requested.v1`
+- Public assistant context and answer APIs, including workspace scope,
+  retrieval policy, source bounds, Spring-issued citation identity, and final
+  citation validation
 
 ### Intentionally Keeps Out Of Scope For Now
 
@@ -109,6 +112,8 @@ flowchart LR
 - Processing status and processing result payloads
 - Processing artifact rows until Spring retrieves and validates them into a product transcript snapshot
 - Any internal AI/media-processing details still used on that side
+- Disabled-by-default internal assistant answer generation adapter for
+  Spring-supplied context
 
 ### Does Not Own
 
@@ -120,6 +125,8 @@ flowchart LR
 - Long-term product search contract
 - Durable raw-media ownership or product metadata
 - Product outbox state
+- Assistant context retrieval, source scope, citation authority, or final
+  answer validity decisions
 
 ## Elasticsearch Search Layer
 
@@ -202,6 +209,8 @@ P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete opt-in automatic chain fr
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds a Spring-owned retrieval-only assistant context endpoint at `POST /api/assistant/context`. It authenticates through the existing current-user mechanism, validates workspace and optional asset scope through existing product services, reuses the PostgreSQL-gated search API path, and reads canonical transcript context from Spring-owned snapshots. The response is a bounded context pack with source citations only; it does not call FastAPI, invoke an LLM provider, generate an answer, persist chat history, or add embeddings/vector storage.
 
+P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first grounded answer code path: Browser calls Spring `POST /api/assistant/answer`; Spring reuses the existing assistant context retrieval path, assigns stable source IDs, calls the internal FastAPI assistant endpoint, validates every returned cited source ID against the supplied source IDs, and returns a structured answer. FastAPI is only an internal Ollama adapter and is disabled by default. Runtime behavior with native macOS Ollama and `qwen3:1.7b` remains `[CẦN XÁC MINH]`; this phase does not install/download/run Ollama, start services, add streaming/history/embeddings, or introduce Kafka/outbox assistant flow.
+
 Listener offset policy is intentionally simple. `APPLIED` results, duplicate already-applied results, durable `FAILED` handler outcomes, and known malformed/unsupported result events acknowledge the Kafka offset immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown without acknowledgement so Kafka can redeliver the record. Immediate acknowledgement reduces unnecessary redelivery of earlier successfully handled records from the same poll, but the delivery model remains at-least-once overall. The default consumer group is `workspace-processing-result-v1`, and default offset reset is `latest`; local controlled runs should start the listener before publishing result events. Durable `FAILED` result rows can be retried only through the explicit operator command for one selected result event ID and retained metadata-only envelope.
 
 Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in `PUBLISHING` can be requeued only when the exact outbox event ID is provided and the row is older than the configured minimum publishing age. The command does not publish the event; an operator must invoke the existing scoped relay separately. There is no broad stale-row scan or scheduled repair loop.
@@ -245,6 +254,7 @@ Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in 
 - PostgreSQL consumed-result rows are durable Spring-side idempotency state; Kafka offsets are not product state.
 - PostgreSQL indexing jobs are durable product-side indexing state; Elasticsearch documents are derived data.
 - Kafka transports events; it does not own product state, authorization, asset metadata, or transcript snapshots.
+- Ollama is an inference runtime only. It does not decide workspace scope, source scope, citation validity, or product state.
 - Current-user entry and ownership enforcement now exist in explicit individual-first form, but broader auth/collaboration concerns remain out of scope.
 
 Phase P3-C1 adds the Keycloak JWT identity foundation behind `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`. The default remains `legacy_session`, so existing Project 2 register/login/session behavior still works without Keycloak configuration. In JWT mode, Spring validates bearer tokens as a resource server, provisions or resolves a local product user by provider plus OIDC `sub`, creates the default workspace through Spring-owned PostgreSQL state, and rejects session-only product API requests. Email is copied only as safe profile data; it is not the durable identity key. Keycloak roles are not workspace authorization authority in this phase, and no token values are persisted.

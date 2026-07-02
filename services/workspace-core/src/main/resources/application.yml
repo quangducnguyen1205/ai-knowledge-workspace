@@ -93,6 +93,8 @@ integration:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
     connect-timeout: ${FASTAPI_CONNECT_TIMEOUT:5s}
     read-timeout: ${FASTAPI_READ_TIMEOUT:30s}
+    assistant-answer-path: ${FASTAPI_ASSISTANT_ANSWER_PATH:/internal/assistant/answer}
+    assistant-read-timeout: ${FASTAPI_ASSISTANT_READ_TIMEOUT:30s}
   elasticsearch:
     base-url: ${ELASTICSEARCH_BASE_URL:http://localhost:9201}
     connect-timeout: ${ELASTICSEARCH_CONNECT_TIMEOUT:3s}

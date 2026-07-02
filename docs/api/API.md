@@ -637,6 +637,108 @@ Common failure cases:
 - HTTP `503` if Elasticsearch is unavailable
 - HTTP `502` if Elasticsearch returns an integration error
 
+### `POST /api/assistant/context`
+
+Builds a bounded, citation-ready context pack for the assistant without generating an answer.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `workspaceId` required
+  - `query` required
+  - `assetId` optional
+  - `maxSources` optional, default `5`, allowed `1..10`
+  - `contextWindow` optional, default `1`, allowed `0..5`
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `workspaceId`
+  - `query`
+  - `sources[]`
+
+Each source contains:
+
+- `assetId`
+- `assetTitle`
+- `transcriptRowId`
+- `segmentIndex`
+- `createdAt`
+- `text`
+- `citation`
+
+Current behavior:
+
+- Spring owns authentication, workspace/asset scope, retrieval policy, context bounds, and citation identity.
+- The endpoint reuses the existing Spring search path and Product PostgreSQL transcript snapshots.
+- Only assets already eligible for search are exposed.
+- It does not call FastAPI, invoke Ollama, generate an answer, persist chat history, or create embeddings.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_ASSISTANT_QUERY"` if `query` is missing, blank, or over `500` characters
+- HTTP `400` with `code = "INVALID_ASSISTANT_MAX_SOURCES"` if `maxSources` is outside `1..10`
+- HTTP `400` with `code = "INVALID_ASSISTANT_CONTEXT_WINDOW"` if `contextWindow` is outside `0..5`
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if `workspaceId` does not exist or is not owned by the current user
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if `assetId` does not exist, is not owned by the current user, or is outside the workspace
+- HTTP `503` if Elasticsearch is unavailable
+- HTTP `502` if Elasticsearch returns an integration error
+
+### `POST /api/assistant/answer`
+
+Generates one grounded, non-streaming assistant answer through the internal FastAPI assistant adapter.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `workspaceId` required
+  - `question` required
+  - `assetId` optional
+  - `maxSources` optional, default inherited from the context flow
+  - `contextWindow` optional, default inherited from the context flow
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `answer`
+  - `citations[]`
+  - `insufficientContext`
+
+Each citation contains Spring-owned metadata only:
+
+- `sourceId`
+- `assetId`
+- `assetTitle`
+- `transcriptRowId`
+- `segmentIndex`
+- `createdAt`
+
+Current behavior:
+
+- Spring first builds bounded authorized context through the same assistant/search/asset flow used by `POST /api/assistant/context`.
+- Spring creates stable `sourceId` values for the exact source entries sent to FastAPI.
+- The browser cannot submit raw context text or authoritative source IDs.
+- FastAPI receives only the normalized question and Spring-approved source entries.
+- FastAPI returns only `answer`, `citedSourceIds`, and `insufficientContext`; provider-specific fields are not exposed.
+- Spring validates every cited source ID against the exact source IDs it supplied to FastAPI.
+- A non-insufficient answer must cite at least one valid supplied source.
+- An insufficient-context answer may return no citations.
+- Unknown or malformed cited source IDs fail closed with the assistant provider-unavailable error shape; Spring does not fabricate citations.
+- This phase adds only the code contract and disabled-by-default provider path. It does not install or run Ollama, download a model, add streaming, persist chat history, create embeddings, use Kafka/outbox, or add an external provider.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_ASSISTANT_QUESTION"` if `question` is missing, blank, or over `500` characters
+- HTTP `400` with existing assistant context validation codes if context-selection inputs are invalid
+- HTTP `404` with existing workspace/asset not-found codes if scope validation fails
+- HTTP `503` with `code = "ASSISTANT_PROVIDER_UNAVAILABLE"` if FastAPI/Ollama is disabled, unavailable, returns a non-2xx response, times out, or returns an invalid answer contract
+- HTTP `503` if Elasticsearch is unavailable while retrieving context
+- HTTP `502` if Elasticsearch returns an integration error while retrieving context
+
 ## Error Shape Notes
 
 Structured error responses currently use:
@@ -653,6 +755,7 @@ Current structured error codes:
 
 - `FASTAPI_CONNECTIVITY_ERROR`
 - `FASTAPI_INTEGRATION_ERROR`
+- `ASSISTANT_PROVIDER_UNAVAILABLE`
 - `ELASTICSEARCH_UNAVAILABLE`
 - `ELASTICSEARCH_INTEGRATION_ERROR`
 - `INVALID_WORKSPACE_NAME`
@@ -662,6 +765,10 @@ Current structured error codes:
 - `INVALID_WORKSPACE_ID`
 - `INVALID_UPLOAD_FILE`
 - `INVALID_SEARCH_QUERY`
+- `INVALID_ASSISTANT_QUERY`
+- `INVALID_ASSISTANT_QUESTION`
+- `INVALID_ASSISTANT_MAX_SOURCES`
+- `INVALID_ASSISTANT_CONTEXT_WINDOW`
 - `INVALID_TRANSCRIPT_CONTEXT_WINDOW`
 - `TRANSCRIPT_NOT_READY`
 - `TRANSCRIPT_NOT_USABLE`
