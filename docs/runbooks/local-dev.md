@@ -145,7 +145,11 @@ For a full automatic processing-to-search smoke, enable all separate opt-in cont
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/context` as a local retrieval-only assistant context pack endpoint. Send JSON with `workspaceId`, `query`, optional `assetId`, optional `maxSources`, and optional `contextWindow`. Defaults are `maxSources=5` and `contextWindow=1`; bounds are `maxSources 1..10`, `contextWindow 0..5`, and query length at most `500` characters. The endpoint returns cited source context only and reuses existing search/context authorization; it does not call FastAPI, invoke an LLM provider, generate an answer, persist chat history, or add embeddings.
 
-P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/answer` as the first non-streaming grounded answer code path. Send JSON with `workspaceId`, `question`, optional `assetId`, optional `maxSources`, and optional `contextWindow`. Spring reuses the same bounded assistant context flow, sends only Spring-issued source IDs and bounded source text to FastAPI, validates returned `citedSourceIds`, and returns `answer`, `citations`, and `insufficientContext`. Provider/runtime behavior is `[CẦN XÁC MINH]`: the FastAPI Ollama path is disabled by default, no Ollama model is installed or pulled, and no Spring/FastAPI/Ollama smoke is part of this phase.
+P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/answer` as the first non-streaming grounded answer code path. Send JSON with `workspaceId`, `question`, optional `assetId`, optional `maxSources`, and optional `contextWindow`. Spring reuses the same bounded assistant context flow, sends only Spring-issued source IDs and bounded source text to FastAPI, validates returned `citedSourceIds`, and returns `answer`, `citations`, and `insufficientContext`.
+
+P3-F2B.1 `[ĐÃ SMOKE THỰC TẾ]` verified one controlled local Spring -> FastAPI -> native Ollama -> Spring grounded-answer run. The local runtime used Ollama `0.31.1` with `qwen3:1.7b`. The public answer request returned HTTP 200 with a nonblank answer, `insufficientContext=false`, and valid citations after Spring-side citation validation. Spring remained owner of authorization, bounded context selection, source IDs, and final citation validation; FastAPI remained an internal adapter; and the browser path did not call FastAPI or Ollama directly. The observed single request latency was about 12.3 seconds and is not a benchmark or production-readiness claim.
+
+When using `POST /api/assistant/context` as a diagnostic preflight for `POST /api/assistant/answer`, use the exact same retrieval query text as the answer request if comparing source IDs externally. A short anchor query and a full answer question may retrieve different valid bounded source packs. Spring-side citation validation against the exact answer context is the authoritative product check.
 
 Current Spring-to-FastAPI assistant adapter defaults:
 
@@ -159,7 +163,7 @@ Current FastAPI assistant-side defaults live in Repo A and are intentionally dis
 - `ASSISTANT_OLLAMA_MODEL=qwen3:1.7b`
 - `ASSISTANT_OLLAMA_TIMEOUT_SECONDS=15`
 
-Do not treat these settings as a runtime claim. Ollama is expected to run natively on the macOS host later; this phase does not add an Ollama Docker service, model volume, model download, streaming mode, chat persistence, embeddings, or Kafka/outbox assistant flow.
+Ollama runs natively on the macOS host for the verified local smoke; FastAPI reaches it from Docker through `host.docker.internal`. This setup does not add an Ollama Docker service, model volume, streaming mode, chat persistence, embeddings, external provider, Kafka/outbox assistant flow, retry, DLQ, reindex, rebuild, or reconciliation workflow.
 
 Current outbox-relay defaults:
 

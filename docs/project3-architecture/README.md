@@ -163,7 +163,9 @@ Frontend must not call LLM providers directly. That would bypass product authori
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` implements only the first Spring-owned retrieval boundary: `POST /api/assistant/context` returns a deterministic, bounded context pack with source citations after existing workspace/asset/searchability checks. It does not call the FastAPI LLM adapter, invoke any provider, generate an answer, create embeddings, persist chat history, or add token accounting. Later LLM orchestration must consume context through this Spring-owned policy boundary rather than bypassing product authorization.
 
-P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first real grounded answer foundation without broadening the architecture. `POST /api/assistant/answer` stays in Spring, reuses the existing assistant context flow, sends only Spring-approved bounded sources to FastAPI, and validates returned cited source IDs before responding to the browser. FastAPI exposes one internal `POST /internal/assistant/answer` adapter and one disabled-by-default Ollama path. Runtime behavior with native macOS Ollama and `qwen3:1.7b` is `[CẦN XÁC MINH]`; no model download, service startup, streaming, history, embeddings, external provider, Kafka/outbox assistant flow, retry topic, or DLQ is added.
+P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first real grounded answer foundation without broadening the architecture. `POST /api/assistant/answer` stays in Spring, reuses the existing assistant context flow, sends only Spring-approved bounded sources to FastAPI, and validates returned cited source IDs before responding to the browser. FastAPI exposes one internal `POST /internal/assistant/answer` adapter and one disabled-by-default Ollama path.
+
+P3-F2B.1 `[ĐÃ SMOKE THỰC TẾ]` verifies that foundation through one controlled local Spring -> FastAPI -> native Ollama -> Spring run. The local runtime used Ollama `0.31.1` and `qwen3:1.7b`; Spring still owned authorization, bounded context selection, source identity, and final citation validation; and the browser-shaped public response returned HTTP 200 with a nonblank answer, `insufficientContext=false`, and valid citations. FastAPI remained an internal adapter and the browser did not call FastAPI or Ollama. The observed one-request latency was about 12.3 seconds and is not a benchmark, load-capacity claim, production-readiness claim, or semantic answer-quality evaluation. No streaming, history, persistence, embeddings, external provider, Kafka/outbox assistant flow, retry topic, DLQ, reindex, rebuild, or reconciliation workflow is added.
 
 ## Kafka And Celery
 
@@ -259,6 +261,8 @@ Elasticsearch is derived. Product PostgreSQL remains the truth for transcript sn
 8. Spring validates citations against the exact supplied source IDs and returns the browser response.
 
 This foundation intentionally has one provider path: FastAPI -> Ollama. OpenAI/OpenRouter, provider factories, model switching, streaming, conversation history, persistence, embeddings, Kafka/outbox, retries, retry topics, and DLQ handling remain out of scope.
+
+P3-F2B.1 confirms the local runtime chain with native host Ollama `0.31.1` and `qwen3:1.7b`. Citation validity is enforced by Spring against the exact bounded source IDs supplied to FastAPI for the answer request. Diagnostic calls to `POST /api/assistant/context` are request-specific: if an external harness compares source IDs with `POST /api/assistant/answer`, it must use the exact same retrieval query text as the answer request. A short anchor query and a full answer question can legitimately retrieve different bounded source packs.
 
 ### 5. Observability
 
