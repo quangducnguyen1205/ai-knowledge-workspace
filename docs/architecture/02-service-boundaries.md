@@ -213,6 +213,47 @@ P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first grounded answer code path: Br
 
 P3-F2B.1 `[ĐÃ SMOKE THỰC TẾ]` verifies one controlled local grounded-answer runtime path: Spring public API -> authorized bounded context -> internal FastAPI adapter -> native macOS Ollama `0.31.1` with `qwen3:1.7b` -> FastAPI structured response -> Spring citation validation -> browser-shaped response. The verified public result was HTTP 200 with a nonblank answer, `insufficientContext=false`, and valid citations. Spring remained owner of authorization, bounded context selection, source identity, and final citation validation; FastAPI remained an internal adapter, and the browser did not call FastAPI or Ollama. The observed single-request latency was about 12.3 seconds, which is not a benchmark or performance claim. No streaming, history, persistence, embeddings, external provider, Kafka/outbox assistant flow, retry, DLQ, reindex, rebuild, or reconciliation workflow was added.
 
+## Assistant Language Boundary
+
+V1 assistant quality is English-first:
+
+```text
+English video/audio
+-> English transcript
+-> English query
+-> English retrieval
+-> English answer
+```
+
+This is the supported evaluation baseline, not an API-level language gate. Unsupported-language requests are not necessarily blocked by the current endpoints, but Vietnamese audio, Vietnamese queries over English transcripts, and Vietnamese answer generation are outside the V1 quality contract until separate evidence exists. Do not describe the current ASR path as technically English-only; the boundary statement is about product support and evaluation scope.
+
+Language behavior is split into independent concerns:
+
+- source language;
+- transcript language;
+- query language;
+- answer language;
+- UI language.
+
+V1 evaluates the English-aligned combination. Future Vietnamese support is a future capability that must preserve the existing source and citation boundary:
+
+- the canonical transcript and original source linkage remain intact;
+- translated text, multilingual search representations, embeddings, summaries, and language-specific indexes are derived and rebuildable artifacts;
+- translated or multilingual representations must not overwrite the canonical English transcript;
+- answer citations must still trace back to the original source transcript;
+- Spring owns workspace scope, retrieval policy, language policy, source selection, source identity, and citation validation;
+- FastAPI and model providers remain internal adapters and do not decide language policy, workspace scope, retrieval/index behavior, or citation validity;
+- frontend clients must not choose retrieval, index, model-provider, or language-policy behavior directly;
+- future language capabilities must preserve the English API behavior and existing citation semantics.
+
+Assistant evaluation follows the same boundary. English baseline cases use English transcript + English query + English answer. Cross-language cases, such as Vietnamese query over English transcript, are exploratory diagnostics unless explicitly promoted into a supported language-quality suite. Future Vietnamese audio cases need their own suite and evidence. Recent Vietnamese-query F2C evidence is useful for diagnosing ranking and bounded context coverage, but it is not English-first V1 acceptance evidence.
+
+The next narrow evaluation action is to run an English equivalent of F2C-05 before changing retrieval policy:
+
+> According to the provided transcript excerpts, what new iOS feature did the speaker ask Codex to build?
+
+The expected evidence is `segmentIndex 2`, with an answer equivalent to a new iOS screen showing NASA's Astronomy Picture of the Day. This is a planned English-baseline follow-up only; it is not executed or reviewed by this document.
+
 Listener offset policy is intentionally simple. `APPLIED` results, duplicate already-applied results, durable `FAILED` handler outcomes, and known malformed/unsupported result events acknowledge the Kafka offset immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown without acknowledgement so Kafka can redeliver the record. Immediate acknowledgement reduces unnecessary redelivery of earlier successfully handled records from the same poll, but the delivery model remains at-least-once overall. The default consumer group is `workspace-processing-result-v1`, and default offset reset is `latest`; local controlled runs should start the listener before publishing result events. Durable `FAILED` result rows can be retried only through the explicit operator command for one selected result event ID and retained metadata-only envelope.
 
 Manual outbox recovery is similarly scoped. A selected request `OutboxEvent` in `PUBLISHING` can be requeued only when the exact outbox event ID is provided and the row is older than the configured minimum publishing age. The command does not publish the event; an operator must invoke the existing scoped relay separately. There is no broad stale-row scan or scheduled repair loop.

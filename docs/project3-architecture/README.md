@@ -167,6 +167,55 @@ P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first real grounded answer foundati
 
 P3-F2B.1 `[ĐÃ SMOKE THỰC TẾ]` verifies that foundation through one controlled local Spring -> FastAPI -> native Ollama -> Spring run. The local runtime used Ollama `0.31.1` and `qwen3:1.7b`; Spring still owned authorization, bounded context selection, source identity, and final citation validation; and the browser-shaped public response returned HTTP 200 with a nonblank answer, `insufficientContext=false`, and valid citations. FastAPI remained an internal adapter and the browser did not call FastAPI or Ollama. The observed one-request latency was about 12.3 seconds and is not a benchmark, load-capacity claim, production-readiness claim, or semantic answer-quality evaluation. No streaming, history, persistence, embeddings, external provider, Kafka/outbox assistant flow, retry topic, DLQ, reindex, rebuild, or reconciliation workflow is added.
 
+## Assistant Language Contract
+
+The V1 assistant quality and evaluation baseline is English-first:
+
+```text
+English video/audio
+-> English transcript
+-> English query
+-> English retrieval
+-> English answer
+```
+
+This is a quality contract, not an API blocker. The current public assistant APIs do not necessarily reject unsupported-language requests, but the product does not yet claim verified quality for Vietnamese audio, Vietnamese queries over English transcripts, or Vietnamese answer generation. The current transcription path should not be described as technically English-only; the documented V1 baseline simply defines what Project3 evaluates and supports first.
+
+Language behavior has separate product dimensions:
+
+- source language: the language of the original media/content;
+- transcript language: the language of the canonical transcript persisted by the product;
+- query language: the user's retrieval/assistant question language;
+- answer language: the language generated for the user;
+- UI language: the language used by product screens and controls.
+
+V1 evaluates the English-aligned combination. Future language capabilities may vary those dimensions independently, but they must extend the current architecture rather than replace it. Future Vietnamese support is a product capability, not a current V1 quality guarantee.
+
+Future Vietnamese support has these design constraints:
+
+- preserve the canonical source transcript and its source linkage;
+- never overwrite the canonical English transcript with a translated representation;
+- treat translations, multilingual search representations, embeddings, summaries, and language-specific indexes as derived and rebuildable artifacts;
+- preserve citation provenance from the answer back to the original source transcript;
+- keep Spring Boot as owner of workspace scope, retrieval policy, language policy, source selection, and citation validation;
+- keep FastAPI and model-provider integration internal and policy-free;
+- do not let frontend clients choose retrieval, indexing, or provider behavior directly;
+- preserve English API behavior when future language capabilities are introduced.
+
+Assistant evaluation is split accordingly:
+
+- English baseline suite: English transcript + English query + English answer.
+- Cross-language exploratory suite: for example, Vietnamese query over English transcript, and optionally Vietnamese answer later.
+- Future Vietnamese audio suite: Vietnamese audio + Vietnamese transcript + Vietnamese retrieval/answer.
+
+Recent F2C diagnosis showed that required evidence can be present inside Elasticsearch top-20 but omitted from the final top-3 assistant context pack. That is a retrieval/context-selection concern and must be evaluated separately from cross-language behavior. Existing Vietnamese-query F2C runs remain useful diagnostic evidence for ranking and bounded context coverage, but they are not pass/fail evidence for the English-first V1 baseline.
+
+Near-term evaluation should execute an English equivalent of the factual F2C-05 question before changing retrieval policy:
+
+> According to the provided transcript excerpts, what new iOS feature did the speaker ask Codex to build?
+
+Expected evidence is `segmentIndex 2`, and the expected answer is equivalent to a new iOS screen showing NASA's Astronomy Picture of the Day. This planned English-baseline follow-up has not been executed, passed, reviewed, or marked ready to run.
+
 ## Kafka And Celery
 
 Kafka and Celery both support asynchronous work, but they sit at different boundaries.
