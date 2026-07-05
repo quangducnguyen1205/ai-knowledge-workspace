@@ -253,7 +253,10 @@ class AssetSearchIndexingExecutorTest {
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.FAILED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.FAILED);
-        assertThat(indexingJob.getLastError()).contains("empty or unusable");
+        assertThat(indexingJob.getLastError())
+                .contains("category=INDEXING_SOURCE_INVALID")
+                .contains("failureStage=before_bulk")
+                .contains("usableRows=0");
         verify(assetSearchabilityService, never()).markSearchable(assetId);
         mockServer.verify();
     }
@@ -279,6 +282,107 @@ class AssetSearchIndexingExecutorTest {
         assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500");
+
+        assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
+        assertThat(indexingJob.getLastError())
+                .contains("category=ELASTICSEARCH_RESPONSE_INVALID")
+                .contains("failureStage=before_bulk")
+                .contains("exception=ElasticsearchIntegrationException")
+                .contains("usableRows=1")
+                .contains("blankRowsAfterFilter=0")
+                .contains("segmentIndexes=0")
+                .contains("textLengthMin=4")
+                .contains("textLengthMax=4")
+                .doesNotContain("Elasticsearch returned HTTP 500")
+                .doesNotContain(assetId.toString());
+        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        mockServer.verify();
+    }
+
+    @Test
+    void bulkFailureRecordsSafeDiagnosticWithoutRawTextIdsOrProviderMessage() {
+        UUID assetId = UUID.randomUUID();
+        String unsafeTranscriptRowId = "RAW_SOURCE_ID_SHOULD_NOT_PERSIST";
+        String unsafeTranscriptText = "DO_NOT_PERSIST_TRANSCRIPT_TEXT";
+        String unsafeProviderReason = "RAW_PROVIDER_REASON_SHOULD_NOT_PERSIST";
+        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 5", List.of(
+                transcriptRow(unsafeTranscriptRowId, 2, unsafeTranscriptText)
+        ));
+        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+
+        expectDelete(assetId);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString(unsafeTranscriptText)))
+                .andRespond(withSuccess("""
+                        {
+                          "errors": true,
+                          "items": [
+                            {
+                              "index": {
+                                "_id": "%s-%s",
+                                "status": 400,
+                                "error": {
+                                  "type": "mapper_parsing_exception",
+                                  "reason": "%s"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                        """.formatted(assetId, unsafeTranscriptRowId, unsafeProviderReason), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining(unsafeProviderReason);
+
+        assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
+        assertThat(indexingJob.getLastError())
+                .contains("category=ELASTICSEARCH_BULK_REJECTED")
+                .contains("failureStage=bulk_response")
+                .contains("exception=ElasticsearchIntegrationException")
+                .contains("usableRows=1")
+                .contains("blankRowsAfterFilter=0")
+                .contains("segmentIndexes=2")
+                .contains("textLengthBuckets=null:0,0:0,1-80:1")
+                .doesNotContain(unsafeTranscriptText)
+                .doesNotContain(unsafeTranscriptRowId)
+                .doesNotContain(assetId.toString())
+                .doesNotContain(unsafeProviderReason);
+        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        mockServer.verify();
+    }
+
+    @Test
+    void diagnosticPersistenceFailureDoesNotMaskOriginalIndexingFailure() {
+        UUID assetId = UUID.randomUUID();
+        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 6", List.of(
+                transcriptRow("row-1", 0, "Text")
+        ));
+        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(searchIndexJobRepository.save(indexingJob))
+                .thenReturn(indexingJob)
+                .thenThrow(new IllegalStateException("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK"));
+        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+
+        expectIndexExists();
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining("Elasticsearch returned HTTP 500")
+                .hasMessageNotContaining("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK");
 
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
         verify(assetSearchabilityService, never()).markSearchable(assetId);

@@ -87,6 +87,10 @@ public class AssetSearchIndexJob {
         syncActiveFingerprintKey();
     }
 
+    public void recordLastError(String errorDetail) {
+        lastError = errorDetail;
+    }
+
     public void markSuperseded() {
         status = AssetSearchIndexJobStatus.SUPERSEDED;
         indexedAt = null;

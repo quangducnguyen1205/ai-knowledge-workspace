@@ -6,6 +6,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.Category;
+import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.FailureStage;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -50,7 +52,17 @@ public class AssetSearchIndexingExecutor {
             return attempt.result();
         }
 
-        writeToElasticsearch(attempt.indexingSource());
+        try {
+            writeToElasticsearch(attempt.indexingSource());
+        } catch (IndexingWriteFailure failure) {
+            recordFailureDiagnostic(
+                    attempt,
+                    failure.failureStage(),
+                    failure.category(),
+                    failure.originalException()
+            );
+            throw failure.originalException();
+        }
 
         return transactionTemplate.execute(status -> finalizeSuccessfulAttempt(attempt.indexingJobId()));
     }
@@ -85,7 +97,7 @@ public class AssetSearchIndexingExecutor {
                 ));
         List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
         if (transcriptRows.isEmpty()) {
-            indexingJob.markFailed("Transcript snapshot was empty or unusable for indexing");
+            indexingJob.markFailed(IndexingFailureDiagnostic.sourceInvalid());
             searchIndexJobRepository.save(indexingJob);
             return IndexingAttempt.completed(new AssetSearchIndexExecutionResult(
                     indexingJob.getId(),
@@ -112,10 +124,115 @@ public class AssetSearchIndexingExecutor {
     }
 
     private void writeToElasticsearch(AssetIndexingSource indexingSource) {
-        transcriptSearchIndexClient.ensureTranscriptIndexExists();
-        transcriptSearchIndexClient.deleteTranscriptRowsForAsset(indexingSource.assetId());
-        transcriptSearchIndexClient.indexTranscriptRows(toIndexOperations(indexingSource));
-        transcriptSearchIndexClient.refreshTranscriptIndex();
+        runIndexingStep(
+                FailureStage.BEFORE_BULK,
+                Category.ELASTICSEARCH_RESPONSE_INVALID,
+                transcriptSearchIndexClient::ensureTranscriptIndexExists
+        );
+        runIndexingStep(
+                FailureStage.BEFORE_BULK,
+                Category.ELASTICSEARCH_RESPONSE_INVALID,
+                () -> transcriptSearchIndexClient.deleteTranscriptRowsForAsset(indexingSource.assetId())
+        );
+        runIndexingStep(
+                FailureStage.BULK_RESPONSE,
+                Category.ELASTICSEARCH_BULK_REJECTED,
+                () -> transcriptSearchIndexClient.indexTranscriptRows(toIndexOperations(indexingSource))
+        );
+        runIndexingStep(
+                FailureStage.AFTER_BULK,
+                Category.ELASTICSEARCH_RESPONSE_INVALID,
+                transcriptSearchIndexClient::refreshTranscriptIndex
+        );
+    }
+
+    private void runIndexingStep(
+            FailureStage integrationFailureStage,
+            Category integrationFailureCategory,
+            Runnable indexingStep
+    ) {
+        try {
+            indexingStep.run();
+        } catch (RuntimeException exception) {
+            throw new IndexingWriteFailure(
+                    failureStage(exception, integrationFailureStage),
+                    failureCategory(exception, integrationFailureCategory),
+                    exception
+            );
+        }
+    }
+
+    private void recordFailureDiagnostic(
+            IndexingAttempt attempt,
+            FailureStage failureStage,
+            Category category,
+            RuntimeException exception
+    ) {
+        String diagnostic = IndexingFailureDiagnostic.from(
+                toIndexOperations(attempt.indexingSource()),
+                category,
+                failureStage,
+                exception
+        );
+        try {
+            transactionTemplate.executeWithoutResult(status -> searchIndexJobRepository.findById(attempt.indexingJobId())
+                    .ifPresent(indexingJob -> {
+                        indexingJob.recordLastError(diagnostic);
+                        searchIndexJobRepository.save(indexingJob);
+                    }));
+        } catch (RuntimeException diagnosticPersistenceFailure) {
+            // Preserve the original indexing failure; diagnostics are best-effort.
+        }
+    }
+
+    private FailureStage failureStage(RuntimeException exception, FailureStage integrationFailureStage) {
+        if (exception instanceof ElasticsearchConnectivityException) {
+            return FailureStage.TRANSPORT;
+        }
+        if (exception instanceof ElasticsearchIntegrationException) {
+            return integrationFailureStage;
+        }
+        return FailureStage.UNEXPECTED;
+    }
+
+    private Category failureCategory(RuntimeException exception, Category integrationFailureCategory) {
+        if (exception instanceof ElasticsearchConnectivityException) {
+            return Category.ELASTICSEARCH_TRANSPORT_FAILURE;
+        }
+        if (exception instanceof ElasticsearchIntegrationException) {
+            return integrationFailureCategory;
+        }
+        return Category.INDEXING_UNEXPECTED_FAILURE;
+    }
+
+    private static final class IndexingWriteFailure extends RuntimeException {
+
+        private final FailureStage failureStage;
+        private final Category category;
+        private final RuntimeException originalException;
+
+        private IndexingWriteFailure(
+                FailureStage failureStage,
+                Category category,
+                RuntimeException originalException
+        ) {
+            super(originalException);
+            this.failureStage = failureStage;
+            this.category = category;
+            this.originalException = originalException;
+        }
+
+        private FailureStage failureStage() {
+            return failureStage;
+        }
+
+        private Category category() {
+            return category;
+        }
+
+        private RuntimeException originalException() {
+            return originalException;
+        }
     }
 
     private AssetSearchIndexExecutionResult finalizeSuccessfulAttempt(UUID indexingJobId) {
