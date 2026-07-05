@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.util.StringUtils;
@@ -13,27 +15,23 @@ final class IndexingFailureDiagnostic {
     }
 
     static String from(
-            List<TranscriptSearchIndexClient.TranscriptIndexOperation> operations,
+            List<?> transcriptRows,
             Category category,
             FailureStage failureStage,
             RuntimeException exception
     ) {
-        List<TranscriptIndexDocument> documents = operations.stream()
-                .map(TranscriptSearchIndexClient.TranscriptIndexOperation::document)
-                .filter(document -> document != null)
-                .toList();
         String diagnostic = String.join(";",
                 "diagnosticVersion=1",
                 "category=" + category.name(),
                 "failureStage=" + failureStage.value,
                 "exception=" + safeExceptionClass(exception),
-                "usableRows=" + documents.size(),
-                "blankRowsAfterFilter=" + blankRowsAfterFilter(documents),
-                "segmentIndexes=" + segmentIndexSummary(documents),
-                "missingSegmentIndexes=" + missingSegmentIndexCount(documents),
-                "textLengthMin=" + textLengthMin(documents),
-                "textLengthMax=" + textLengthMax(documents),
-                "textLengthBuckets=" + textLengthBuckets(documents)
+                "usableRows=" + transcriptRows.size(),
+                "blankRowsAfterFilter=" + blankRowsAfterFilter(transcriptRows),
+                "segmentIndexes=" + segmentIndexSummary(transcriptRows),
+                "missingSegmentIndexes=" + missingSegmentIndexCount(transcriptRows),
+                "textLengthMin=" + textLengthMin(transcriptRows),
+                "textLengthMax=" + textLengthMax(transcriptRows),
+                "textLengthBuckets=" + textLengthBuckets(transcriptRows)
         );
         if (diagnostic.length() <= MAX_DIAGNOSTIC_LENGTH) {
             return diagnostic;
@@ -41,23 +39,19 @@ final class IndexingFailureDiagnostic {
         return diagnostic.substring(0, MAX_DIAGNOSTIC_LENGTH);
     }
 
-    static String sourceInvalid() {
-        return from(List.of(), Category.INDEXING_SOURCE_INVALID, FailureStage.BEFORE_BULK, null);
-    }
-
     private static String safeExceptionClass(RuntimeException exception) {
         return exception == null ? "none" : exception.getClass().getSimpleName();
     }
 
-    private static long blankRowsAfterFilter(List<TranscriptIndexDocument> documents) {
-        return documents.stream()
-                .filter(document -> !StringUtils.hasText(document.text()))
+    private static long blankRowsAfterFilter(List<?> transcriptRows) {
+        return transcriptRows.stream()
+                .filter(row -> !StringUtils.hasText(text(row)))
                 .count();
     }
 
-    private static String segmentIndexSummary(List<TranscriptIndexDocument> documents) {
-        List<Integer> segmentIndexes = documents.stream()
-                .map(TranscriptIndexDocument::segmentIndex)
+    private static String segmentIndexSummary(List<?> transcriptRows) {
+        List<Integer> segmentIndexes = transcriptRows.stream()
+                .map(IndexingFailureDiagnostic::segmentIndex)
                 .filter(segmentIndex -> segmentIndex != null)
                 .distinct()
                 .sorted(Comparator.naturalOrder())
@@ -78,15 +72,15 @@ final class IndexingFailureDiagnostic {
         return summary;
     }
 
-    private static long missingSegmentIndexCount(List<TranscriptIndexDocument> documents) {
-        return documents.stream()
-                .filter(document -> document.segmentIndex() == null)
+    private static long missingSegmentIndexCount(List<?> transcriptRows) {
+        return transcriptRows.stream()
+                .filter(row -> segmentIndex(row) == null)
                 .count();
     }
 
-    private static String textLengthMin(List<TranscriptIndexDocument> documents) {
-        return documents.stream()
-                .map(TranscriptIndexDocument::text)
+    private static String textLengthMin(List<?> transcriptRows) {
+        return transcriptRows.stream()
+                .map(IndexingFailureDiagnostic::text)
                 .filter(text -> text != null)
                 .mapToInt(String::length)
                 .min()
@@ -96,9 +90,9 @@ final class IndexingFailureDiagnostic {
                 .orElse("none");
     }
 
-    private static String textLengthMax(List<TranscriptIndexDocument> documents) {
-        return documents.stream()
-                .map(TranscriptIndexDocument::text)
+    private static String textLengthMax(List<?> transcriptRows) {
+        return transcriptRows.stream()
+                .map(IndexingFailureDiagnostic::text)
                 .filter(text -> text != null)
                 .mapToInt(String::length)
                 .max()
@@ -108,7 +102,7 @@ final class IndexingFailureDiagnostic {
                 .orElse("none");
     }
 
-    private static String textLengthBuckets(List<TranscriptIndexDocument> documents) {
+    private static String textLengthBuckets(List<?> transcriptRows) {
         long nullCount = 0;
         long zeroCount = 0;
         long shortCount = 0;
@@ -116,8 +110,8 @@ final class IndexingFailureDiagnostic {
         long longCount = 0;
         long veryLongCount = 0;
 
-        for (TranscriptIndexDocument document : documents) {
-            String text = document.text();
+        for (Object transcriptRow : transcriptRows) {
+            String text = text(transcriptRow);
             if (text == null) {
                 nullCount++;
                 continue;
@@ -142,6 +136,33 @@ final class IndexingFailureDiagnostic {
                 + ",81-280:" + mediumCount
                 + ",281-1000:" + longCount
                 + ",1001+:" + veryLongCount;
+    }
+
+    private static Integer segmentIndex(Object transcriptRow) {
+        return readAccessor(transcriptRow, "segmentIndex", Integer.class);
+    }
+
+    private static String text(Object transcriptRow) {
+        return readAccessor(transcriptRow, "text", String.class);
+    }
+
+    private static <T> T readAccessor(Object transcriptRow, String accessorName, Class<T> expectedType) {
+        if (transcriptRow == null) {
+            return null;
+        }
+        try {
+            Method accessor = transcriptRow.getClass().getMethod(accessorName);
+            Object value = accessor.invoke(transcriptRow);
+            if (value == null) {
+                return null;
+            }
+            if (expectedType.isInstance(value)) {
+                return expectedType.cast(value);
+            }
+            throw new IllegalStateException("Unexpected transcript row metadata type");
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException exception) {
+            throw new IllegalStateException("Unable to read transcript row metadata", exception);
+        }
     }
 
     enum Category {

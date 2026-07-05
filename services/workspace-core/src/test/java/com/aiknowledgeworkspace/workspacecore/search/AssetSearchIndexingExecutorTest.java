@@ -17,12 +17,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +57,10 @@ class AssetSearchIndexingExecutorTest {
 
     @BeforeEach
     void setUp() {
+        executor = executorWithMapper(new TranscriptIndexDocumentMapper());
+    }
+
+    private AssetSearchIndexingExecutor executorWithMapper(TranscriptIndexDocumentMapper documentMapper) {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
@@ -68,13 +74,13 @@ class AssetSearchIndexingExecutorTest {
                 properties,
                 new ObjectMapper()
         );
-        executor = new AssetSearchIndexingExecutor(
+        return new AssetSearchIndexingExecutor(
                 searchIndexJobRepository,
                 assetReadService,
                 assetSearchabilityService,
                 new TranscriptSnapshotFingerprintService(),
                 searchIndexClient,
-                new TranscriptIndexDocumentMapper(),
+                documentMapper,
                 transactionManager()
         );
     }
@@ -385,6 +391,75 @@ class AssetSearchIndexingExecutorTest {
                 .hasMessageNotContaining("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK");
 
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
+        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        mockServer.verify();
+    }
+
+    @Test
+    void diagnosticConstructionDoesNotRepeatIndexDocumentMappingOrMaskOriginalFailure() {
+        AtomicInteger documentMappingCalls = new AtomicInteger();
+        executor = executorWithMapper(new TranscriptIndexDocumentMapper() {
+            @Override
+            public TranscriptIndexDocument toDocument(
+                    AssetIndexingSource asset,
+                    AssetTranscriptRowView transcriptRow,
+                    AssetStatus indexedAssetStatus
+            ) {
+                if (documentMappingCalls.incrementAndGet() > 1) {
+                    throw new IllegalStateException("SECOND_MAPPING_SHOULD_NOT_MASK");
+                }
+                return super.toDocument(asset, transcriptRow, indexedAssetStatus);
+            }
+        });
+
+        UUID assetId = UUID.randomUUID();
+        String unsafeProviderReason = "ORIGINAL_PROVIDER_REASON_SHOULD_WIN";
+        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 7", List.of(
+                transcriptRow("row-1", 3, "Mapped once")
+        ));
+        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+
+        expectDelete(assetId);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "errors": true,
+                          "items": [
+                            {
+                              "index": {
+                                "_id": "%s-row-1",
+                                "status": 400,
+                                "error": {
+                                  "type": "mapper_parsing_exception",
+                                  "reason": "%s"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                        """.formatted(assetId, unsafeProviderReason), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining(unsafeProviderReason)
+                .hasMessageNotContaining("SECOND_MAPPING_SHOULD_NOT_MASK");
+
+        assertThat(documentMappingCalls).hasValue(1);
+        assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
+        assertThat(indexingJob.getLastError())
+                .contains("category=ELASTICSEARCH_BULK_REJECTED")
+                .contains("segmentIndexes=3")
+                .contains("textLengthMin=11")
+                .contains("textLengthMax=11")
+                .doesNotContain(unsafeProviderReason)
+                .doesNotContain("SECOND_MAPPING_SHOULD_NOT_MASK")
+                .doesNotContain(assetId.toString());
         verify(assetSearchabilityService, never()).markSearchable(assetId);
         mockServer.verify();
     }

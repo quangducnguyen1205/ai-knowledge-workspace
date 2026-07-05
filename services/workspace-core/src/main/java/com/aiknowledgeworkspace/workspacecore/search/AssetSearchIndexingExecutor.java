@@ -97,7 +97,12 @@ public class AssetSearchIndexingExecutor {
                 ));
         List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
         if (transcriptRows.isEmpty()) {
-            indexingJob.markFailed(IndexingFailureDiagnostic.sourceInvalid());
+            indexingJob.markFailed(IndexingFailureDiagnostic.from(
+                    transcriptRows,
+                    Category.INDEXING_SOURCE_INVALID,
+                    FailureStage.BEFORE_BULK,
+                    null
+            ));
             searchIndexJobRepository.save(indexingJob);
             return IndexingAttempt.completed(new AssetSearchIndexExecutionResult(
                     indexingJob.getId(),
@@ -168,13 +173,13 @@ public class AssetSearchIndexingExecutor {
             Category category,
             RuntimeException exception
     ) {
-        String diagnostic = IndexingFailureDiagnostic.from(
-                toIndexOperations(attempt.indexingSource()),
-                category,
-                failureStage,
-                exception
-        );
         try {
+            String diagnostic = IndexingFailureDiagnostic.from(
+                    diagnosticTranscriptRows(attempt.indexingSource()),
+                    category,
+                    failureStage,
+                    exception
+            );
             transactionTemplate.executeWithoutResult(status -> searchIndexJobRepository.findById(attempt.indexingJobId())
                     .ifPresent(indexingJob -> {
                         indexingJob.recordLastError(diagnostic);
@@ -309,6 +314,21 @@ public class AssetSearchIndexingExecutor {
             return message;
         }
         return message.substring(0, MAX_ERROR_DETAIL_LENGTH);
+    }
+
+    private List<?> diagnosticTranscriptRows(Object indexingSource) {
+        if (indexingSource == null) {
+            return List.of();
+        }
+        try {
+            Object transcriptRows = indexingSource.getClass().getMethod("transcriptRows").invoke(indexingSource);
+            if (transcriptRows instanceof List<?> rows) {
+                return rows;
+            }
+            throw new IllegalStateException("Unexpected transcript row metadata type");
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Unable to read transcript row metadata", exception);
+        }
     }
 
     private record IndexingAttempt(
