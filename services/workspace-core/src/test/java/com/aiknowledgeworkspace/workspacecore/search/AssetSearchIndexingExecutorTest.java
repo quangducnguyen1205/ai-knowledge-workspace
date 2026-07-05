@@ -306,6 +306,76 @@ class AssetSearchIndexingExecutorTest {
     }
 
     @Test
+    void preBulkFailureRecordsSourceMetadataWithoutDocumentMapping() {
+        AtomicInteger documentMappingCalls = new AtomicInteger();
+        executor = executorWithMapper(new TranscriptIndexDocumentMapper() {
+            @Override
+            public TranscriptIndexDocument toDocument(
+                    AssetIndexingSource asset,
+                    AssetTranscriptRowView transcriptRow,
+                    AssetStatus indexedAssetStatus
+            ) {
+                documentMappingCalls.incrementAndGet();
+                return super.toDocument(asset, transcriptRow, indexedAssetStatus);
+            }
+        });
+
+        UUID assetId = UUID.randomUUID();
+        String unsafeTranscriptRowId = "PRE_BULK_ROW_ID_SHOULD_NOT_PERSIST";
+        String unsafeTranscriptText = "PRE_BULK_TRANSCRIPT_TEXT_SHOULD_NOT_PERSIST";
+        String unsafeProviderReason = "PRE_BULK_PROVIDER_REASON_SHOULD_NOT_PERSIST";
+        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture pre-bulk", List.of(
+                transcriptRow(unsafeTranscriptRowId, 7, unsafeTranscriptText)
+        ));
+        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+
+        expectIndexExists();
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "total": 1,
+                          "deleted": 0,
+                          "version_conflicts": 0,
+                          "failures": [
+                            {
+                              "cause": {
+                                "reason": "%s"
+                              }
+                            }
+                          ]
+                        }
+                        """.formatted(unsafeProviderReason), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .hasMessageContaining(unsafeProviderReason);
+
+        assertThat(documentMappingCalls).hasValue(0);
+        assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
+        assertThat(indexingJob.getLastError())
+                .contains("category=ELASTICSEARCH_RESPONSE_INVALID")
+                .contains("failureStage=before_bulk")
+                .contains("exception=ElasticsearchIntegrationException")
+                .contains("usableRows=1")
+                .contains("blankRowsAfterFilter=0")
+                .contains("segmentIndexes=7")
+                .contains("textLengthMin=" + unsafeTranscriptText.length())
+                .contains("textLengthMax=" + unsafeTranscriptText.length())
+                .doesNotContain(unsafeTranscriptText)
+                .doesNotContain(unsafeTranscriptRowId)
+                .doesNotContain(assetId.toString())
+                .doesNotContain(unsafeProviderReason);
+        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        mockServer.verify();
+    }
+
+    @Test
     void bulkFailureRecordsSafeDiagnosticWithoutRawTextIdsOrProviderMessage() {
         UUID assetId = UUID.randomUUID();
         String unsafeTranscriptRowId = "RAW_SOURCE_ID_SHOULD_NOT_PERSIST";

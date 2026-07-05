@@ -192,7 +192,16 @@ public class AssetSearchIndexingExecutor {
         try {
             List<IndexingFailureDiagnostic.RowMetadata> rowMetadata = failure.rowMetadata();
             if (rowMetadata == null) {
-                rowMetadata = toIndexOperations(attempt.indexingSource()).rowMetadata();
+                rowMetadata = attempt.indexingSource().transcriptRows().stream()
+                        .map(transcriptRow -> {
+                            String text = transcriptRow.text();
+                            return new IndexingFailureDiagnostic.RowMetadata(
+                                    transcriptRow.segmentIndex(),
+                                    StringUtils.hasText(text),
+                                    text == null ? null : text.length()
+                            );
+                        })
+                        .toList();
             }
             String diagnostic = IndexingFailureDiagnostic.from(
                     rowMetadata,
@@ -326,7 +335,11 @@ public class AssetSearchIndexingExecutor {
         List<TranscriptSearchIndexClient.TranscriptIndexOperation> operations = new ArrayList<>();
         List<IndexingFailureDiagnostic.RowMetadata> rowMetadata = new ArrayList<>();
         for (AssetTranscriptRowView transcriptRow : indexingSource.transcriptRows()) {
-            String documentId = transcriptIndexDocumentMapper.toDocumentId(indexingSource, transcriptRow);
+            String rawTranscriptRowId = transcriptRow.id();
+            String transcriptRowId = StringUtils.hasText(rawTranscriptRowId)
+                    ? rawTranscriptRowId
+                    : "segment-" + transcriptRow.segmentIndex();
+            String documentId = indexingSource.assetId() + "-" + transcriptRowId;
             TranscriptIndexDocument document = transcriptIndexDocumentMapper.toDocument(
                     indexingSource,
                     transcriptRow,
