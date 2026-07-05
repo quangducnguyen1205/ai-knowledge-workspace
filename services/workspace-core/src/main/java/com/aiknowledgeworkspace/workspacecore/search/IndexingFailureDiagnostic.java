@@ -1,10 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.List;
-import org.springframework.util.StringUtils;
+import java.util.Map;
+import java.util.TreeMap;
 
 final class IndexingFailureDiagnostic {
 
@@ -15,23 +14,24 @@ final class IndexingFailureDiagnostic {
     }
 
     static String from(
-            List<?> transcriptRows,
+            List<RowMetadata> transcriptRows,
             Category category,
             FailureStage failureStage,
             RuntimeException exception
     ) {
+        RowSummary rowSummary = summarize(transcriptRows);
         String diagnostic = String.join(";",
                 "diagnosticVersion=1",
                 "category=" + category.name(),
                 "failureStage=" + failureStage.value,
                 "exception=" + safeExceptionClass(exception),
                 "usableRows=" + transcriptRows.size(),
-                "blankRowsAfterFilter=" + blankRowsAfterFilter(transcriptRows),
-                "segmentIndexes=" + segmentIndexSummary(transcriptRows),
-                "missingSegmentIndexes=" + missingSegmentIndexCount(transcriptRows),
-                "textLengthMin=" + textLengthMin(transcriptRows),
-                "textLengthMax=" + textLengthMax(transcriptRows),
-                "textLengthBuckets=" + textLengthBuckets(transcriptRows)
+                "blankRowsAfterFilter=" + rowSummary.blankRowsAfterFilter(),
+                "segmentIndexes=" + segmentIndexSummary(rowSummary.segmentIndexCounts()),
+                "missingSegmentIndexes=" + rowSummary.missingSegmentIndexes(),
+                "textLengthMin=" + textLengthValue(rowSummary.textLengthMin()),
+                "textLengthMax=" + textLengthValue(rowSummary.textLengthMax()),
+                "textLengthBuckets=" + textLengthBuckets(rowSummary.textLengthBuckets())
         );
         if (diagnostic.length() <= MAX_DIAGNOSTIC_LENGTH) {
             return diagnostic;
@@ -43,125 +43,115 @@ final class IndexingFailureDiagnostic {
         return exception == null ? "none" : exception.getClass().getSimpleName();
     }
 
-    private static long blankRowsAfterFilter(List<?> transcriptRows) {
-        return transcriptRows.stream()
-                .filter(row -> !StringUtils.hasText(text(row)))
-                .count();
+    private static RowSummary summarize(List<RowMetadata> transcriptRows) {
+        long blankRowsAfterFilter = 0;
+        long missingSegmentIndexes = 0;
+        Integer textLengthMin = null;
+        Integer textLengthMax = null;
+        Map<Integer, Long> segmentIndexCounts = new TreeMap<>(Comparator.naturalOrder());
+        TextLengthBuckets textLengthBuckets = new TextLengthBuckets();
+
+        for (RowMetadata row : transcriptRows) {
+            Integer segmentIndex = row.segmentIndex();
+            if (segmentIndex == null) {
+                missingSegmentIndexes++;
+            } else {
+                segmentIndexCounts.merge(segmentIndex, 1L, Long::sum);
+            }
+
+            if (!row.hasText()) {
+                blankRowsAfterFilter++;
+            }
+            Integer textLength = row.textLength();
+            textLengthBuckets.record(textLength);
+            if (textLength != null) {
+                textLengthMin = textLengthMin == null ? textLength : Math.min(textLengthMin, textLength);
+                textLengthMax = textLengthMax == null ? textLength : Math.max(textLengthMax, textLength);
+            }
+        }
+
+        return new RowSummary(
+                blankRowsAfterFilter,
+                segmentIndexCounts,
+                missingSegmentIndexes,
+                textLengthMin,
+                textLengthMax,
+                textLengthBuckets
+        );
     }
 
-    private static String segmentIndexSummary(List<?> transcriptRows) {
-        List<Integer> segmentIndexes = transcriptRows.stream()
-                .map(IndexingFailureDiagnostic::segmentIndex)
-                .filter(segmentIndex -> segmentIndex != null)
-                .distinct()
-                .sorted(Comparator.naturalOrder())
-                .toList();
-        if (segmentIndexes.isEmpty()) {
+    private static String segmentIndexSummary(Map<Integer, Long> segmentIndexCounts) {
+        if (segmentIndexCounts.isEmpty()) {
             return "none";
         }
 
-        String summary = segmentIndexes.stream()
+        String summary = segmentIndexCounts.keySet().stream()
                 .limit(MAX_SEGMENT_INDEXES)
                 .map(String::valueOf)
                 .reduce((left, right) -> left + "," + right)
                 .orElse("none");
-        int overflowCount = segmentIndexes.size() - MAX_SEGMENT_INDEXES;
+        int overflowCount = segmentIndexCounts.size() - MAX_SEGMENT_INDEXES;
         if (overflowCount > 0) {
             summary = summary + ",...+" + overflowCount;
         }
         return summary;
     }
 
-    private static long missingSegmentIndexCount(List<?> transcriptRows) {
-        return transcriptRows.stream()
-                .filter(row -> segmentIndex(row) == null)
-                .count();
+    private static String textLengthValue(Integer value) {
+        return value == null ? "none" : String.valueOf(value);
     }
 
-    private static String textLengthMin(List<?> transcriptRows) {
-        return transcriptRows.stream()
-                .map(IndexingFailureDiagnostic::text)
-                .filter(text -> text != null)
-                .mapToInt(String::length)
-                .min()
-                .stream()
-                .mapToObj(String::valueOf)
-                .findFirst()
-                .orElse("none");
+    private static String textLengthBuckets(TextLengthBuckets buckets) {
+        return "null:" + buckets.nullCount
+                + ",0:" + buckets.zeroCount
+                + ",1-80:" + buckets.shortCount
+                + ",81-280:" + buckets.mediumCount
+                + ",281-1000:" + buckets.longCount
+                + ",1001+:" + buckets.veryLongCount;
     }
 
-    private static String textLengthMax(List<?> transcriptRows) {
-        return transcriptRows.stream()
-                .map(IndexingFailureDiagnostic::text)
-                .filter(text -> text != null)
-                .mapToInt(String::length)
-                .max()
-                .stream()
-                .mapToObj(String::valueOf)
-                .findFirst()
-                .orElse("none");
+    private record RowSummary(
+            long blankRowsAfterFilter,
+            Map<Integer, Long> segmentIndexCounts,
+            long missingSegmentIndexes,
+            Integer textLengthMin,
+            Integer textLengthMax,
+            TextLengthBuckets textLengthBuckets
+    ) {
     }
 
-    private static String textLengthBuckets(List<?> transcriptRows) {
-        long nullCount = 0;
-        long zeroCount = 0;
-        long shortCount = 0;
-        long mediumCount = 0;
-        long longCount = 0;
-        long veryLongCount = 0;
+    record RowMetadata(
+            Integer segmentIndex,
+            boolean hasText,
+            Integer textLength
+    ) {
+    }
 
-        for (Object transcriptRow : transcriptRows) {
-            String text = text(transcriptRow);
-            if (text == null) {
+    private static final class TextLengthBuckets {
+
+        private long nullCount;
+        private long zeroCount;
+        private long shortCount;
+        private long mediumCount;
+        private long longCount;
+        private long veryLongCount;
+
+        private void record(Integer textLength) {
+            if (textLength == null) {
                 nullCount++;
-                continue;
+                return;
             }
-            int length = text.length();
-            if (length == 0) {
+            if (textLength == 0) {
                 zeroCount++;
-            } else if (length <= 80) {
+            } else if (textLength <= 80) {
                 shortCount++;
-            } else if (length <= 280) {
+            } else if (textLength <= 280) {
                 mediumCount++;
-            } else if (length <= 1000) {
+            } else if (textLength <= 1000) {
                 longCount++;
             } else {
                 veryLongCount++;
             }
-        }
-
-        return "null:" + nullCount
-                + ",0:" + zeroCount
-                + ",1-80:" + shortCount
-                + ",81-280:" + mediumCount
-                + ",281-1000:" + longCount
-                + ",1001+:" + veryLongCount;
-    }
-
-    private static Integer segmentIndex(Object transcriptRow) {
-        return readAccessor(transcriptRow, "segmentIndex", Integer.class);
-    }
-
-    private static String text(Object transcriptRow) {
-        return readAccessor(transcriptRow, "text", String.class);
-    }
-
-    private static <T> T readAccessor(Object transcriptRow, String accessorName, Class<T> expectedType) {
-        if (transcriptRow == null) {
-            return null;
-        }
-        try {
-            Method accessor = transcriptRow.getClass().getMethod(accessorName);
-            Object value = accessor.invoke(transcriptRow);
-            if (value == null) {
-                return null;
-            }
-            if (expectedType.isInstance(value)) {
-                return expectedType.cast(value);
-            }
-            throw new IllegalStateException("Unexpected transcript row metadata type");
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException exception) {
-            throw new IllegalStateException("Unable to read transcript row metadata", exception);
         }
     }
 

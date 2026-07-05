@@ -8,8 +8,10 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.Category;
 import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.FailureStage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -55,12 +57,7 @@ public class AssetSearchIndexingExecutor {
         try {
             writeToElasticsearch(attempt.indexingSource());
         } catch (IndexingWriteFailure failure) {
-            recordFailureDiagnostic(
-                    attempt,
-                    failure.failureStage(),
-                    failure.category(),
-                    failure.originalException()
-            );
+            recordFailureDiagnostic(attempt, failure);
             throw failure.originalException();
         }
 
@@ -98,7 +95,7 @@ public class AssetSearchIndexingExecutor {
         List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
         if (transcriptRows.isEmpty()) {
             indexingJob.markFailed(IndexingFailureDiagnostic.from(
-                    transcriptRows,
+                    List.of(),
                     Category.INDEXING_SOURCE_INVALID,
                     FailureStage.BEFORE_BULK,
                     null
@@ -139,16 +136,25 @@ public class AssetSearchIndexingExecutor {
                 Category.ELASTICSEARCH_RESPONSE_INVALID,
                 () -> transcriptSearchIndexClient.deleteTranscriptRowsForAsset(indexingSource.assetId())
         );
-        runIndexingStep(
+        IndexingPlan indexingPlan = runIndexingStep(
                 FailureStage.BULK_RESPONSE,
                 Category.ELASTICSEARCH_BULK_REJECTED,
-                () -> transcriptSearchIndexClient.indexTranscriptRows(toIndexOperations(indexingSource))
+                () -> toIndexOperations(indexingSource)
         );
-        runIndexingStep(
-                FailureStage.AFTER_BULK,
-                Category.ELASTICSEARCH_RESPONSE_INVALID,
-                transcriptSearchIndexClient::refreshTranscriptIndex
-        );
+        try {
+            runIndexingStep(
+                    FailureStage.BULK_RESPONSE,
+                    Category.ELASTICSEARCH_BULK_REJECTED,
+                    () -> transcriptSearchIndexClient.indexTranscriptRows(indexingPlan.operations())
+            );
+            runIndexingStep(
+                    FailureStage.AFTER_BULK,
+                    Category.ELASTICSEARCH_RESPONSE_INVALID,
+                    transcriptSearchIndexClient::refreshTranscriptIndex
+            );
+        } catch (IndexingWriteFailure failure) {
+            throw failure.withRowMetadata(indexingPlan.rowMetadata());
+        }
     }
 
     private void runIndexingStep(
@@ -156,29 +162,43 @@ public class AssetSearchIndexingExecutor {
             Category integrationFailureCategory,
             Runnable indexingStep
     ) {
-        try {
+        runIndexingStep(integrationFailureStage, integrationFailureCategory, () -> {
             indexingStep.run();
+            return null;
+        });
+    }
+
+    private <T> T runIndexingStep(
+            FailureStage integrationFailureStage,
+            Category integrationFailureCategory,
+            Supplier<T> indexingStep
+    ) {
+        try {
+            return indexingStep.get();
         } catch (RuntimeException exception) {
             throw new IndexingWriteFailure(
                     failureStage(exception, integrationFailureStage),
                     failureCategory(exception, integrationFailureCategory),
-                    exception
+                    exception,
+                    null
             );
         }
     }
 
     private void recordFailureDiagnostic(
             IndexingAttempt attempt,
-            FailureStage failureStage,
-            Category category,
-            RuntimeException exception
+            IndexingWriteFailure failure
     ) {
         try {
+            List<IndexingFailureDiagnostic.RowMetadata> rowMetadata = failure.rowMetadata();
+            if (rowMetadata == null) {
+                rowMetadata = toIndexOperations(attempt.indexingSource()).rowMetadata();
+            }
             String diagnostic = IndexingFailureDiagnostic.from(
-                    diagnosticTranscriptRows(attempt.indexingSource()),
-                    category,
-                    failureStage,
-                    exception
+                    rowMetadata,
+                    failure.category(),
+                    failure.failureStage(),
+                    failure.originalException()
             );
             transactionTemplate.executeWithoutResult(status -> searchIndexJobRepository.findById(attempt.indexingJobId())
                     .ifPresent(indexingJob -> {
@@ -215,16 +235,23 @@ public class AssetSearchIndexingExecutor {
         private final FailureStage failureStage;
         private final Category category;
         private final RuntimeException originalException;
+        private final List<IndexingFailureDiagnostic.RowMetadata> rowMetadata;
 
         private IndexingWriteFailure(
                 FailureStage failureStage,
                 Category category,
-                RuntimeException originalException
+                RuntimeException originalException,
+                List<IndexingFailureDiagnostic.RowMetadata> rowMetadata
         ) {
             super(originalException);
             this.failureStage = failureStage;
             this.category = category;
             this.originalException = originalException;
+            this.rowMetadata = rowMetadata;
+        }
+
+        private IndexingWriteFailure withRowMetadata(List<IndexingFailureDiagnostic.RowMetadata> rowMetadata) {
+            return new IndexingWriteFailure(failureStage, category, originalException, rowMetadata);
         }
 
         private FailureStage failureStage() {
@@ -237,6 +264,10 @@ public class AssetSearchIndexingExecutor {
 
         private RuntimeException originalException() {
             return originalException;
+        }
+
+        private List<IndexingFailureDiagnostic.RowMetadata> rowMetadata() {
+            return rowMetadata;
         }
     }
 
@@ -291,17 +322,25 @@ public class AssetSearchIndexingExecutor {
         );
     }
 
-    private List<TranscriptSearchIndexClient.TranscriptIndexOperation> toIndexOperations(AssetIndexingSource indexingSource) {
-        return indexingSource.transcriptRows().stream()
-                .map(transcriptRow -> new TranscriptSearchIndexClient.TranscriptIndexOperation(
-                        transcriptIndexDocumentMapper.toDocumentId(indexingSource, transcriptRow),
-                        transcriptIndexDocumentMapper.toDocument(
-                                indexingSource,
-                                transcriptRow,
-                                AssetStatus.SEARCHABLE
-                        )
-                ))
-                .toList();
+    private IndexingPlan toIndexOperations(AssetIndexingSource indexingSource) {
+        List<TranscriptSearchIndexClient.TranscriptIndexOperation> operations = new ArrayList<>();
+        List<IndexingFailureDiagnostic.RowMetadata> rowMetadata = new ArrayList<>();
+        for (AssetTranscriptRowView transcriptRow : indexingSource.transcriptRows()) {
+            String documentId = transcriptIndexDocumentMapper.toDocumentId(indexingSource, transcriptRow);
+            TranscriptIndexDocument document = transcriptIndexDocumentMapper.toDocument(
+                    indexingSource,
+                    transcriptRow,
+                    AssetStatus.SEARCHABLE
+            );
+            operations.add(new TranscriptSearchIndexClient.TranscriptIndexOperation(documentId, document));
+            String text = document.text();
+            rowMetadata.add(new IndexingFailureDiagnostic.RowMetadata(
+                    document.segmentIndex(),
+                    StringUtils.hasText(text),
+                    text == null ? null : text.length()
+            ));
+        }
+        return new IndexingPlan(List.copyOf(operations), List.copyOf(rowMetadata));
     }
 
     private String safeErrorDetail(RuntimeException exception) {
@@ -314,21 +353,6 @@ public class AssetSearchIndexingExecutor {
             return message;
         }
         return message.substring(0, MAX_ERROR_DETAIL_LENGTH);
-    }
-
-    private List<?> diagnosticTranscriptRows(Object indexingSource) {
-        if (indexingSource == null) {
-            return List.of();
-        }
-        try {
-            Object transcriptRows = indexingSource.getClass().getMethod("transcriptRows").invoke(indexingSource);
-            if (transcriptRows instanceof List<?> rows) {
-                return rows;
-            }
-            throw new IllegalStateException("Unexpected transcript row metadata type");
-        } catch (ReflectiveOperationException exception) {
-            throw new IllegalStateException("Unable to read transcript row metadata", exception);
-        }
     }
 
     private record IndexingAttempt(
@@ -347,5 +371,11 @@ public class AssetSearchIndexingExecutor {
         ) {
             return new IndexingAttempt(indexingJobId, indexingSource, null);
         }
+    }
+
+    private record IndexingPlan(
+            List<TranscriptSearchIndexClient.TranscriptIndexOperation> operations,
+            List<IndexingFailureDiagnostic.RowMetadata> rowMetadata
+    ) {
     }
 }
