@@ -10,7 +10,7 @@ public class FastApiProperties {
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(30);
     private String assistantAnswerPath = "/internal/assistant/answer";
-    private Duration assistantReadTimeout = Duration.ofSeconds(30);
+    private Duration assistantReadTimeout = Duration.ofSeconds(75);
 
     public String getBaseUrl() {
         return baseUrl;
