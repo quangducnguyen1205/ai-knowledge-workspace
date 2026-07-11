@@ -37,6 +37,44 @@ class FastApiPropertiesTest {
                         .isEqualTo(Duration.ofSeconds(91)));
     }
 
+    @Test
+    void rejectsBaseUrlWithoutHttpSchemeOrHost() {
+        contextRunner
+                .withPropertyValues("integration.fastapi.base-url=localhost:8000")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("integration.fastapi.base-url")
+                            .hasStackTraceContaining("plain HTTP or HTTPS URI with a host");
+                });
+    }
+
+    @Test
+    void rejectsAccidentallyQuotedOrEscapedBaseUrl() {
+        for (String invalidBaseUrl : new String[]{"'http://127.0.0.1:8000'", "http:\\\\127.0.0.1:8000"}) {
+            contextRunner
+                    .withPropertyValues("integration.fastapi.base-url=" + invalidBaseUrl)
+                    .run(context -> {
+                        assertThat(context).hasFailed();
+                        assertThat(context.getStartupFailure())
+                                .hasStackTraceContaining("integration.fastapi.base-url")
+                                .hasStackTraceContaining("shell quoting or escaping");
+                    });
+        }
+    }
+
+    @Test
+    void rejectsNonPositiveAssistantReadTimeout() {
+        contextRunner
+                .withPropertyValues("integration.fastapi.assistant-read-timeout=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("integration.fastapi.assistant-read-timeout")
+                            .hasStackTraceContaining("must be positive");
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(FastApiProperties.class)
     static class TestConfiguration {

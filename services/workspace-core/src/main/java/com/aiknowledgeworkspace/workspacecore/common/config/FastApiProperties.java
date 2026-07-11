@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.config;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -17,6 +19,7 @@ public class FastApiProperties {
     }
 
     public void setBaseUrl(String baseUrl) {
+        validateBaseUrl(baseUrl);
         this.baseUrl = baseUrl;
     }
 
@@ -49,6 +52,34 @@ public class FastApiProperties {
     }
 
     public void setAssistantReadTimeout(Duration assistantReadTimeout) {
+        if (assistantReadTimeout == null || assistantReadTimeout.isZero() || assistantReadTimeout.isNegative()) {
+            throw new IllegalArgumentException("integration.fastapi.assistant-read-timeout must be positive");
+        }
         this.assistantReadTimeout = assistantReadTimeout;
+    }
+
+    private void validateBaseUrl(String value) {
+        if (value == null || value.isBlank() || !value.equals(value.trim())) {
+            throw new IllegalArgumentException("integration.fastapi.base-url must be a plain HTTP or HTTPS URI with a host");
+        }
+        if (value.indexOf('\\') >= 0 || value.indexOf('\'') >= 0 || value.indexOf('"') >= 0) {
+            throw new IllegalArgumentException("integration.fastapi.base-url must not contain shell quoting or escaping");
+        }
+
+        try {
+            URI uri = new URI(value);
+            boolean supportedScheme = "http".equalsIgnoreCase(uri.getScheme())
+                    || "https".equalsIgnoreCase(uri.getScheme());
+            if (!supportedScheme || uri.getHost() == null || uri.getHost().isBlank()) {
+                throw new IllegalArgumentException(
+                        "integration.fastapi.base-url must be a plain HTTP or HTTPS URI with a host"
+                );
+            }
+        } catch (URISyntaxException exception) {
+            throw new IllegalArgumentException(
+                    "integration.fastapi.base-url must be a plain HTTP or HTTPS URI with a host",
+                    exception
+            );
+        }
     }
 }

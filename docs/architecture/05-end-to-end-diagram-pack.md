@@ -139,7 +139,7 @@ flowchart TD
     TR["transcript read after success"] --> TS["AssetTranscriptRowSnapshot persist when missing and usable"]
     TS --> P
 
-    IX["explicit indexing"] --> RD["read transcript snapshot from PostgreSQL"]
+    IX["automatic indexing or explicit fallback"] --> RD["read transcript snapshot from PostgreSQL"]
     RD --> ESW["write transcript-row search documents"]
     ESW --> E["Elasticsearch (derived search layer)"]
     IX --> AUP["Asset status update to SEARCHABLE"]
@@ -158,14 +158,14 @@ Note:
 
 How to read this:
 - FastAPI helps produce transcript data, but it is not the product-facing search endpoint.
-- Search becomes possible only after transcript snapshot capture plus explicit indexing.
+- Search becomes possible only after transcript snapshot capture plus successful indexing. The integrated profile requests indexing automatically; the explicit endpoint remains a fallback.
 - Workspace scope is always enforced first, and asset scope is optional.
 
 ```mermaid
 flowchart LR
     F["Repo A FastAPI processing service"] -->|processed transcript rows| S["Repo B Spring Boot product core"]
     S -->|validate usable transcript rows| T["PostgreSQL AssetTranscriptRowSnapshot"]
-    T -->|explicit indexing request| I["Indexing path in Repo B"]
+    T -->|automatic request or explicit fallback| I["Indexing path in Repo B"]
     I -->|derived transcript-row documents| E["Elasticsearch"]
 
     Q["GET /api/search?q=..."] --> S
@@ -177,7 +177,7 @@ flowchart LR
 ```
 
 Note:
-- The explicit indexing request in the current product flow is `POST /api/assets/{assetId}/index`.
+- The integrated product flow requests indexing automatically. `POST /api/assets/{assetId}/index` remains the explicit fallback and uses the same indexing core.
 
 ## 5. Current State Transitions
 
@@ -193,7 +193,7 @@ stateDiagram-v2
     [*] --> FAILED: upload maps to failed state
     PROCESSING --> TRANSCRIPT_READY: usable transcript snapshot captured
     PROCESSING --> FAILED: upstream processing fails\nor transcript is unusable
-    TRANSCRIPT_READY --> SEARCHABLE: explicit indexing succeeds
+    TRANSCRIPT_READY --> SEARCHABLE: automatic or fallback indexing succeeds
     SEARCHABLE --> SEARCHABLE: repeat indexing succeeds
 ```
 

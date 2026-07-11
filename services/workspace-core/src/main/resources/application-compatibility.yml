@@ -1,0 +1,26 @@
+spring:
+  config:
+    activate:
+      on-profile: compatibility
+
+workspace:
+  security:
+    authentication-mode: legacy_session
+  processing:
+    trigger-mode: direct_upload
+    request-relay:
+      enabled: false
+  search:
+    indexing:
+      auto-request-enabled: false
+    indexing-relay:
+      enabled: false
+  kafka:
+    enabled: false
+    processing-result-listener-enabled: false
+    indexing-listener-enabled: false
+
+integration:
+  fastapi:
+    base-url: http://127.0.0.1:8000
+    assistant-read-timeout: 75s

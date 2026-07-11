@@ -1,5 +1,5 @@
 .PHONY: help test test-core test-workspace-core compile smoke smoke-workspace \
-        infra-up infra-down infra-logs run require-media-file
+        infra-up infra-down infra-logs run run-project3 run-compatibility run-standalone require-media-file
 
 WORKSPACE_CORE_MODULE ?= services/workspace-core
 WORKSPACE_CORE_POM ?= $(WORKSPACE_CORE_MODULE)/pom.xml
@@ -17,6 +17,7 @@ SMOKE_LEGACY_USER_ID ?= smoke-dev-user
 
 ENV_FILE ?= .env
 COMPOSE_FILE ?= infra/docker-compose.dev.yml
+SPRING_PROFILE ?= project3
 
 help:
 	@printf '%s\n' \
@@ -24,7 +25,10 @@ help:
 		'  make infra-up            Start Repo B PostgreSQL + Elasticsearch with docker compose' \
 		'  make infra-down          Stop Repo B infrastructure' \
 		'  make infra-logs          Show Repo B infrastructure logs' \
-		'  make run                 Run workspace-core with env loaded from .env' \
+		'  make run                 Run workspace-core with the coherent project3 profile' \
+		'  make run-project3        Compatibility alias for the normal integrated run target' \
+		'  make run-compatibility   Run direct_upload with asynchronous controls disabled' \
+		'  make run-standalone      Compatibility alias for run-compatibility' \
 		'  make test                Run workspace-core tests' \
 		'  make test-core           Run workspace-core tests' \
 		'  make test-workspace-core Run workspace-core tests' \
@@ -34,6 +38,7 @@ help:
 		'' \
 		'Useful overrides:' \
 		'  ENV_FILE=.env' \
+		'  SPRING_PROFILE=project3' \
 		'  MEDIA_FILE=/absolute/path/to/media.mp4' \
 		'  SEARCH_QUERY="binary search tree"' \
 		'  UPLOAD_TITLE="Lecture 7"' \
@@ -55,7 +60,15 @@ infra-logs:
 	docker compose --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" logs -f
 
 run:
-	set -a && . "$(ENV_FILE)" && set +a && cd "$(WORKSPACE_CORE_MODULE)" && mvn spring-boot:run
+	set -a && . "$(ENV_FILE)" && set +a && cd "$(WORKSPACE_CORE_MODULE)" && mvn spring-boot:run -Dspring-boot.run.profiles="$(SPRING_PROFILE)"
+
+run-project3:
+	$(MAKE) run SPRING_PROFILE=project3
+
+run-compatibility:
+	$(MAKE) run SPRING_PROFILE=compatibility
+
+run-standalone: run-compatibility
 
 test:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" test

@@ -37,6 +37,29 @@ This repository uses different host ports to avoid conflicts:
 - `.env.example`: example environment values for local development
 - `services/workspace-core/src/main/resources/db/migration`: Flyway migrations for the product schema
 
+## Integrated Product Profile And Rollback
+
+The normal integrated local Spring path is the `project3` profile:
+
+```bash
+make infra-up
+make run
+```
+
+`make run` loads `.env` and activates `project3`. The profile selects `kafka_request`, the Kafka publisher, the processing-request relay, the processing-result listener, automatic indexing request creation, the indexing relay, and the indexing listener as one coherent set. It keeps `legacy_session`, uses the plain FastAPI URL `http://127.0.0.1:8000`, and keeps the assistant read timeout at 75 seconds. Startup fails before product work is accepted if `kafka_request` is combined with an incomplete relay/listener configuration.
+
+The FastAPI repository must be running its `project3` integrated topology before Spring accepts uploads. The frontend continues to call Spring only and does not select a processing mode.
+
+The explicit rollback path is:
+
+```bash
+make run-compatibility
+```
+
+The `compatibility` profile selects `direct_upload`, disables the asynchronous request/result/indexing controls, preserves legacy session authentication, and keeps explicit indexing available. `make run-standalone` is an alias. Generic source defaults also remain compatibility-safe when no profile is active; no executable path was deleted.
+
+P3-S3.A1 validates this profile statically and with tests only. One fresh controlled runtime fixture from public upload through asynchronous processing, automatic indexing, grounded answer, and citation navigation is still required before deprecating any compatibility path.
+
 Current environment-backed upload limit defaults:
 
 - `WORKSPACE_CORE_MAX_FILE_SIZE=200MB`
@@ -79,20 +102,20 @@ WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE=workspace-core
 
 Do not enable that mode for the default local path until a controlled Keycloak/OIDC smoke is the goal. P3-C3 `[ĐÃ XÁC MINH TỪ CODE]` adds the React/Vite opt-in bearer-token foundation: `VITE_AUTHENTICATION_MODE=legacy_session` remains the frontend default; `keycloak_jwt` requires public Keycloak client settings for `workspace-web`, uses Authorization Code + PKCE, keeps the access token in memory only, sends Spring API calls with `Authorization: Bearer <access-token>`, and treats `GET /api/me` as the Spring-owned product-user authority. The frontend must not use Keycloak roles or raw JWT claims for workspace or asset authorization. Browser Keycloak smoke, token refresh, silent SSO, global logout propagation, account management, default auth cutover, legacy-session removal, and collaboration/membership/RBAC remain future work.
 
-Current processing trigger default:
+Generic standalone and `compatibility` processing defaults:
 
 - `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload`
 - `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=false`
 - `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_FIXED_DELAY=10s`
 - `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_BATCH_SIZE=10`
 
-The automatic request relay is an opt-in transition control for `kafka_request` only. It also requires `WORKSPACE_CORE_KAFKA_ENABLED=true`. When enabled, it relays a bounded batch of due `asset.processing.requested` outbox rows through the existing outbox state machine and publisher envelope. It does not relay result events, indexing events, or arbitrary outbox rows, and it does not change the default `direct_upload` path.
+The normal integrated `project3` profile overrides these standalone defaults coherently. The automatic request relay remains scoped to `kafka_request` and requires the Kafka publisher. It relays a bounded batch of due `asset.processing.requested` rows and never relays result, indexing, or arbitrary outbox events.
 
 P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified this as a normal opt-in runtime path with `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true`, and the Spring result listener enabled before FastAPI result publication. The run used one Spring upload, no manual Spring request relay command, FastAPI/Celery processing from MinIO, one FastAPI result relay, and automatic Spring result consumption through to `TRANSCRIPT_READY`/`SUCCEEDED`. Search indexing stayed disabled.
 
 P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the fully automatic local runtime path after one-time Docker bootstrap: Spring automatic request relay published the selected durable request row, the FastAPI overlay automatic `result-relay` process published the selected durable result outbox row, and the Spring automatic result listener applied the result. No manual Spring request relay, manual result-file handler, manual recovery command, FastAPI one-shot result relay, or direct Kafka injection was used. Selected Spring/FastAPI/Redis/MinIO data was deleted afterward while Kafka history, consumer groups, Docker images, volumes, networks, and build cache were intentionally retained.
 
-P3-E2 `[ĐÃ SMOKE THỰC TẾ]` extends that opt-in runtime path through derived indexing. With search auto-request, automatic indexing relay, and the indexing listener explicitly enabled, one normal `kafka_request` upload completed processing, persisted a Spring transcript snapshot, created one indexing job and one metadata-only indexing outbox event, automatically relayed the indexing request, wrote derived Elasticsearch documents, reached `SEARCHABLE`, and returned through workspace search, asset-scoped search, and transcript context. The same run temporarily set only the selected asset to `TRANSCRIPT_READY` and confirmed PostgreSQL product state gated the stale Elasticsearch document. Do not treat this as a default cutover: `direct_upload` remains default, and retry topics, DLQ, stale-row recovery, reindex, rebuild, and reconcile workflows remain future work.
+P3-E2 `[ĐÃ SMOKE THỰC TẾ]` validated the automatic processing-to-search composition before the profile cutover. P3-S3.A1 now packages that already-proven property set as the normal integrated `project3` profile. Retry topics, DLQ, stale-row automation, reindex, rebuild, and reconcile workflows remain future work.
 
 Manual processing smoke controls:
 
@@ -111,7 +134,7 @@ Manual operator recovery controls:
 
 Supported recovery commands are `retry_failed_result_event_once` and `requeue_stuck_outbox_event_once`. They are disabled by default, run once, then close the Spring application context. They do not add an HTTP endpoint, scheduler, retry topic, DLQ, or broad recovery scan. `retry_failed_result_event_once` requires `WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID` and retries only that selected durable `FAILED` consumed result event using the retained safe result envelope. `requeue_stuck_outbox_event_once` requires `WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID`, requires the selected outbox row to still be `PUBLISHING`, and requires it to be older than `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE`. Empty and negative minimum ages are rejected; `0s` is allowed only for explicit controlled local smoke.
 
-Current Kafka defaults:
+Generic standalone Kafka defaults:
 
 - `KAFKA_IMAGE=apache/kafka:4.0.2`
 - `WORKSPACE_CORE_KAFKA_PORT=9092`
@@ -125,7 +148,7 @@ Current Kafka defaults:
 
 Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1`, `asset.processing.result.v1`, and `asset.indexing.requested.v1`. Each topic uses one partition and replication factor one for local development.
 
-Current derived search indexing defaults:
+Generic standalone derived search indexing defaults:
 
 - `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`
 - `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=false`
@@ -137,11 +160,11 @@ Current derived search indexing defaults:
 - `WORKSPACE_CORE_KAFKA_INDEXING_CONSUMER_GROUP=workspace-search-indexer-v1`
 - `WORKSPACE_CORE_KAFKA_INDEXING_AUTO_OFFSET_RESET=latest`
 
-Explicit `POST /api/assets/{assetId}/index` remains supported and uses the same indexing core as the async foundation. A repeated explicit index request for the same already-indexed snapshot is a successful no-op and does not call Elasticsearch again. Automatic indexing request creation is opt-in. When enabled, a stable Spring-owned transcript snapshot can create an `asset_search_index_jobs` row and one metadata-only `asset.indexing.requested` outbox event in the same product transaction. PostgreSQL prevents duplicate active indexing jobs for the same asset/fingerprint, and indexing completion rechecks the current transcript fingerprint before marking the asset `SEARCHABLE`. The indexing payload contains asset ID, indexing job ID, and snapshot fingerprint only; it does not contain transcript text, raw media bytes, object keys, credentials, or stack traces.
+Explicit `POST /api/assets/{assetId}/index` remains supported as a fallback and uses the same indexing core as the automatic path. A repeated request for the same indexed snapshot is a successful no-op. In the integrated `project3` profile, a stable Spring-owned transcript snapshot normally creates an indexing job and metadata-only `asset.indexing.requested` outbox event automatically. PostgreSQL prevents duplicate active jobs for the same asset/fingerprint, and indexing completion rechecks the current fingerprint before marking the asset `SEARCHABLE`.
 
 `relay_indexing_outbox_once` is a disabled-by-default smoke command that requires `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID` and relays only that selected `asset.indexing.requested` outbox row. P3-E1 `[ĐÃ XÁC MINH TỪ CODE]` adds an automatic indexing request relay with separate controls: it requires `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true` and `WORKSPACE_CORE_KAFKA_ENABLED=true`, relays only due `asset.indexing.requested` rows in bounded batches, and does not enable auto-request creation or the indexing listener. The indexing listener is also disabled by default. P3-B2 runtime-smoked this path by starting the listener before relaying one selected indexing event, writing derived Elasticsearch documents from Spring PostgreSQL snapshot rows, and proving that PostgreSQL asset state gates stale Elasticsearch documents. P3-B2.1 then runtime-smoked a fresh local Elasticsearch environment with no `asset-transcript-rows` index: the Spring indexing write path created the derived index lazily, indexed the selected asset documents, and completed search successfully without manual index pre-creation. Operator reindex, workspace rebuild, reconcile workflows, automatic stale-row recovery, retry topics, and DLQ remain future work.
 
-For a full automatic processing-to-search smoke, enable all separate opt-in controls together: `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true`, `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=true`, `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true`, and `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=true`. P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verified that combination with Kafka, FastAPI/Celery/MinIO, Elasticsearch, and Spring host runtime, without invoking any manual relay or recovery command.
+The `project3` profile owns the complete automatic property set; operators should not assemble the six controls manually. P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verified the underlying combination with Kafka, FastAPI/Celery/MinIO, Elasticsearch, and Spring host runtime without manual relay or recovery commands.
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds `POST /api/assistant/context` as a local retrieval-only assistant context pack endpoint. Send JSON with `workspaceId`, `query`, optional `assetId`, optional `maxSources`, and optional `contextWindow`. Defaults are `maxSources=5` and `contextWindow=1`; bounds are `maxSources 1..10`, `contextWindow 0..5`, and query length at most `500` characters. The endpoint returns cited source context only and reuses existing search/context authorization; it does not call FastAPI, invoke an LLM provider, generate an answer, persist chat history, or add embeddings.
 
@@ -154,14 +177,16 @@ When using `POST /api/assistant/context` as a diagnostic preflight for `POST /ap
 Current Spring-to-FastAPI assistant adapter defaults:
 
 - `FASTAPI_ASSISTANT_ANSWER_PATH=/internal/assistant/answer`
-- `FASTAPI_ASSISTANT_READ_TIMEOUT=30s`
+- `FASTAPI_ASSISTANT_READ_TIMEOUT=75s`
 
-Current FastAPI assistant-side defaults live in Repo A and are intentionally disabled:
+Generic FastAPI assistant-side defaults remain intentionally disabled. The integrated FastAPI `project3` topology overrides them with the runtime-proven values:
 
 - `ASSISTANT_LLM_ENABLED=false`
 - `ASSISTANT_OLLAMA_BASE_URL=http://host.docker.internal:11434`
 - `ASSISTANT_OLLAMA_MODEL=qwen3:1.7b`
 - `ASSISTANT_OLLAMA_TIMEOUT_SECONDS=15`
+
+Integrated values are `ASSISTANT_LLM_ENABLED=true`, `ASSISTANT_OLLAMA_MODEL=qwen3:4b`, `ASSISTANT_OLLAMA_TIMEOUT_SECONDS=60`, and `ASSISTANT_OLLAMA_NUM_PREDICT=256`. These settings do not change the prompt, provider schema, citation aliases, or Spring-facing contract.
 
 Ollama runs natively on the macOS host for the verified local smoke; FastAPI reaches it from Docker through `host.docker.internal`. This setup does not add an Ollama Docker service, model volume, streaming mode, chat persistence, embeddings, external provider, Kafka/outbox assistant flow, retry, DLQ, reindex, rebuild, or reconciliation workflow.
 
@@ -182,8 +207,8 @@ Current schema-management defaults:
 
 Current outbox behavior:
 
-- `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` is the default product behavior. Upload persistence writes `Asset` and `ProcessingJob`, stores the FastAPI direct-upload task/video IDs, does not create an `asset.processing.requested` outbox row, and leaves `ProcessingJob.processingRequestEventId` null.
-- `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request` is an explicit local/manual transition mode. Upload persistence writes `Asset`, `ProcessingJob`, and an `asset.processing.requested` outbox row with `event_version = 1` into Product PostgreSQL, skips FastAPI direct upload, stores the outbox event ID on `ProcessingJob.processingRequestEventId`, and leaves FastAPI direct-upload IDs null.
+- `direct_upload` remains the generic standalone and explicit rollback behavior. It stores FastAPI direct-upload task/video IDs and creates no processing-request outbox row.
+- `kafka_request` is the normal integrated `project3` behavior. It atomically writes `Asset`, `ProcessingJob`, and one versioned `asset.processing.requested` outbox row in Product PostgreSQL, skips FastAPI direct upload, and leaves direct-upload identifiers null.
 - The outbox row is durable publication intent for the Kafka processing lifecycle.
 - Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
 - Kafka publishing exists only when explicitly enabled. Scheduled relay execution is not implemented; for local smoke, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once` plus `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` can invoke the relay for exactly one selected request event.
