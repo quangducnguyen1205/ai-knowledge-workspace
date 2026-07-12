@@ -27,8 +27,8 @@ help:
 		'  make infra-logs          Show Repo B infrastructure logs' \
 		'  make run                 Run workspace-core with the coherent project3 profile' \
 		'  make run-project3        Compatibility alias for the normal integrated run target' \
-		'  make run-compatibility   Run direct_upload with asynchronous controls disabled' \
-		'  make run-standalone      Compatibility alias for run-compatibility' \
+		'  make run-compatibility   Deprecated but functional direct_upload rollback path' \
+		'  make run-standalone      Deprecated alias for run-compatibility' \
 		'  make test                Run workspace-core tests' \
 		'  make test-core           Run workspace-core tests' \
 		'  make test-workspace-core Run workspace-core tests' \
@@ -66,9 +66,12 @@ run-project3:
 	$(MAKE) run SPRING_PROFILE=project3
 
 run-compatibility:
+	@printf '%s\n' 'DEPRECATION: direct_upload is retained temporarily for rollback and recovery; use make run for normal Project3 operation. No removal date is assigned.'
 	$(MAKE) run SPRING_PROFILE=compatibility
 
-run-standalone: run-compatibility
+run-standalone:
+	@printf '%s\n' 'DEPRECATION: make run-standalone is a deprecated alias; use make run-compatibility for rollback and make run for normal operation.'
+	$(MAKE) run-compatibility
 
 test:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" test

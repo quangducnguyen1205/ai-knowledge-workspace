@@ -50,15 +50,38 @@ make run
 
 The FastAPI repository must be running its `project3` integrated topology before Spring accepts uploads. The frontend continues to call Spring only and does not select a processing mode.
 
-The explicit rollback path is:
+The deprecated but functional rollback path is:
 
 ```bash
 make run-compatibility
 ```
 
-The `compatibility` profile selects `direct_upload`, disables the asynchronous request/result/indexing controls, preserves legacy session authentication, and keeps explicit indexing available. `make run-standalone` is an alias. Generic source defaults also remain compatibility-safe when no profile is active; no executable path was deleted.
+The `compatibility` profile selects `direct_upload`, disables the asynchronous request/result/indexing controls, preserves legacy session authentication, and keeps explicit indexing available. It emits a non-blocking startup warning and remains supported temporarily for rollback and recovery. `make run-standalone` is a deprecated alias for `make run-compatibility`. Generic source defaults also remain compatibility-safe when no profile is active; no executable path was deleted or disabled, and no removal date is assigned.
 
-P3-S3.A1 validates this profile statically and with tests only. One fresh controlled runtime fixture from public upload through asynchronous processing, automatic indexing, grounded answer, and citation navigation is still required before deprecating any compatibility path.
+New Project3 integrations must use the asynchronous default path. The completed controlled local observation campaign and rollback drills support entering a documented deprecation period, but they do not establish production-scale stability. Removal requires a separate decision after the gates in the [deprecation registry](../architecture/deprecations.md) are met.
+
+### Migration from the old normal local flow
+
+Old compatibility flow:
+
+```text
+run compatibility/direct processing
+-> wait for TRANSCRIPT_READY
+-> click Index transcript
+```
+
+Current normal flow:
+
+```text
+make project3-up in the FastAPI repository
++ make run in the Spring repository
+-> upload
+-> automatic processing
+-> automatic indexing
+-> SEARCHABLE
+```
+
+The explicit indexing endpoint and `Index transcript` UI remain supported recovery actions. Manual/one-shot relays, exact-ID recovery, and legacy session authentication are outside this deprecation scope.
 
 Current environment-backed upload limit defaults:
 
