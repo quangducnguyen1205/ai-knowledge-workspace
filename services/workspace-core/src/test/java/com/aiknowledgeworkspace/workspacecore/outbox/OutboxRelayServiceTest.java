@@ -76,7 +76,7 @@ class OutboxRelayServiceTest {
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
-        assertThat(savedEvent.getLastError()).isEqualTo("publisher unavailable");
+        assertThat(savedEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
         assertThat(savedEvent.getPublishedAt()).isNull();
     }
@@ -85,7 +85,7 @@ class OutboxRelayServiceTest {
     void relayMarksEventFailedAfterMaxAttempts() {
         fakeOutboxMessagePublisher.failWith("still down");
         OutboxEvent event = newOutboxEvent();
-        event.recordPublishFailure("previous failure", Instant.now().minusSeconds(5), 5);
+        recordFailure(event, Instant.now().minusSeconds(5), 5);
         event = outboxEventRepository.saveAndFlush(event);
 
         int processedCount = outboxRelayService.relayDueEvents();
@@ -95,7 +95,8 @@ class OutboxRelayServiceTest {
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.FAILED);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(2);
-        assertThat(savedEvent.getLastError()).isEqualTo("still down");
+        assertThat(savedEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
+        assertThat(savedEvent.getFailureDisposition()).isEqualTo(OutboxFailureDisposition.UNKNOWN);
         assertThat(savedEvent.getNextAttemptAt()).isNull();
         assertThat(savedEvent.getPublishedAt()).isNull();
     }
@@ -103,7 +104,7 @@ class OutboxRelayServiceTest {
     @Test
     void relaySkipsPendingEventScheduledForFutureRetry() {
         OutboxEvent event = newOutboxEvent();
-        event.recordPublishFailure("wait before retry", Instant.now().plusSeconds(3600), 5);
+        recordFailure(event, Instant.now().plusSeconds(3600), 5);
         event = outboxEventRepository.saveAndFlush(event);
 
         int processedCount = outboxRelayService.relayDueEvents();
@@ -124,7 +125,7 @@ class OutboxRelayServiceTest {
         OutboxEvent thirdRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
         OutboxEvent indexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
         OutboxEvent futureRequestEvent = newOutboxEvent();
-        futureRequestEvent.recordPublishFailure("not yet", Instant.now().plusSeconds(3600), 5);
+        recordFailure(futureRequestEvent, Instant.now().plusSeconds(3600), 5);
         futureRequestEvent = outboxEventRepository.saveAndFlush(futureRequestEvent);
 
         int processedCount = outboxRelayService.relayDueProcessingRequestEvents(2);
@@ -159,7 +160,7 @@ class OutboxRelayServiceTest {
         OutboxEvent savedFailingEvent = outboxEventRepository.findById(failingRequestEvent.getId()).orElseThrow();
         assertThat(savedFailingEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedFailingEvent.getAttemptCount()).isEqualTo(1);
-        assertThat(savedFailingEvent.getLastError()).isEqualTo("broker unavailable");
+        assertThat(savedFailingEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
         assertThat(savedFailingEvent.getNextAttemptAt()).isAfter(Instant.now());
 
         OutboxEvent savedSuccessfulEvent = outboxEventRepository.findById(successfulRequestEvent.getId()).orElseThrow();
@@ -174,7 +175,7 @@ class OutboxRelayServiceTest {
         OutboxEvent processingRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
         OutboxEvent resultEvent = outboxEventRepository.saveAndFlush(newResultOutboxEvent());
         OutboxEvent futureIndexingEvent = newIndexingOutboxEvent();
-        futureIndexingEvent.recordPublishFailure("not yet", Instant.now().plusSeconds(3600), 5);
+        recordFailure(futureIndexingEvent, Instant.now().plusSeconds(3600), 5);
         futureIndexingEvent = outboxEventRepository.saveAndFlush(futureIndexingEvent);
 
         int processedCount = outboxRelayService.relayDueIndexingRequestEvents(2);
@@ -211,7 +212,7 @@ class OutboxRelayServiceTest {
         OutboxEvent savedFailingEvent = outboxEventRepository.findById(failingIndexingEvent.getId()).orElseThrow();
         assertThat(savedFailingEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedFailingEvent.getAttemptCount()).isEqualTo(1);
-        assertThat(savedFailingEvent.getLastError()).isEqualTo("broker unavailable");
+        assertThat(savedFailingEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
         assertThat(savedFailingEvent.getNextAttemptAt()).isAfter(Instant.now());
 
         OutboxEvent savedSuccessfulEvent = outboxEventRepository.findById(successfulIndexingEvent.getId()).orElseThrow();
@@ -296,7 +297,7 @@ class OutboxRelayServiceTest {
     @Test
     void scopedRelayRejectsFailedEvent() {
         OutboxEvent event = newOutboxEvent();
-        event.recordPublishFailure("terminal failure", Instant.now().minusSeconds(5), 1);
+        recordFailure(event, Instant.now().minusSeconds(5), 1);
         event = outboxEventRepository.saveAndFlush(event);
         UUID eventId = event.getId();
 
@@ -311,7 +312,7 @@ class OutboxRelayServiceTest {
     @Test
     void scopedRelayRejectsPendingEventScheduledForFutureRetry() {
         OutboxEvent event = newOutboxEvent();
-        event.recordPublishFailure("wait before retry", Instant.now().plusSeconds(3600), 5);
+        recordFailure(event, Instant.now().plusSeconds(3600), 5);
         event = outboxEventRepository.saveAndFlush(event);
         UUID eventId = event.getId();
 
@@ -334,7 +335,7 @@ class OutboxRelayServiceTest {
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
-        assertThat(savedEvent.getLastError()).isEqualTo("publisher unavailable");
+        assertThat(savedEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
         assertThat(savedEvent.getPublishedAt()).isNull();
     }
@@ -379,6 +380,20 @@ class OutboxRelayServiceTest {
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
+        );
+    }
+
+    private void recordFailure(OutboxEvent event, Instant nextAttemptAt, int maxAttempts) {
+        event.recordPublishFailure(
+                new OutboxFailureClassification(
+                        OutboxFailureDisposition.UNKNOWN,
+                        "TEST_PUBLICATION_FAILURE"
+                ),
+                Instant.now(),
+                nextAttemptAt,
+                maxAttempts,
+                java.time.Duration.ofSeconds(60),
+                3
         );
     }
 

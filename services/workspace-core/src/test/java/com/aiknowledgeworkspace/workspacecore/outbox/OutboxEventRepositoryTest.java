@@ -77,6 +77,11 @@ class OutboxEventRepositoryTest {
         assertThat(savedEvent.getCreatedAt()).isNotNull();
         assertThat(savedEvent.getUpdatedAt()).isNotNull();
         assertThat(savedEvent.getPublishedAt()).isNull();
+        assertThat(savedEvent.getFailureDisposition()).isNull();
+        assertThat(savedEvent.getRecoveryCycleCount()).isZero();
+        assertThat(savedEvent.getNextRecoveryAt()).isNull();
+        assertThat(savedEvent.getLastFailureCategory()).isNull();
+        assertThat(savedEvent.getRecoveryExhaustedAt()).isNull();
 
         List<OutboxEvent> aggregateEvents = outboxEventRepository.findByAggregateTypeAndAggregateId(
                 OutboxEventFactory.ASSET_AGGREGATE_TYPE,

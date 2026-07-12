@@ -17,6 +17,8 @@ public class OutboxRelayService {
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxMessagePublisher outboxMessagePublisher;
     private final OutboxRelayProperties outboxRelayProperties;
+    private final OutboxRecoveryProperties outboxRecoveryProperties;
+    private final OutboxFailureClassifier failureClassifier;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -25,21 +27,35 @@ public class OutboxRelayService {
             OutboxEventRepository outboxEventRepository,
             OutboxMessagePublisher outboxMessagePublisher,
             OutboxRelayProperties outboxRelayProperties,
+            OutboxRecoveryProperties outboxRecoveryProperties,
+            OutboxFailureClassifier failureClassifier,
             TransactionTemplate transactionTemplate
     ) {
-        this(outboxEventRepository, outboxMessagePublisher, outboxRelayProperties, transactionTemplate, Clock.systemUTC());
+        this(
+                outboxEventRepository,
+                outboxMessagePublisher,
+                outboxRelayProperties,
+                outboxRecoveryProperties,
+                failureClassifier,
+                transactionTemplate,
+                Clock.systemUTC()
+        );
     }
 
     OutboxRelayService(
             OutboxEventRepository outboxEventRepository,
             OutboxMessagePublisher outboxMessagePublisher,
             OutboxRelayProperties outboxRelayProperties,
+            OutboxRecoveryProperties outboxRecoveryProperties,
+            OutboxFailureClassifier failureClassifier,
             TransactionTemplate transactionTemplate,
             Clock clock
     ) {
         this.outboxEventRepository = outboxEventRepository;
         this.outboxMessagePublisher = outboxMessagePublisher;
         this.outboxRelayProperties = outboxRelayProperties;
+        this.outboxRecoveryProperties = outboxRecoveryProperties;
+        this.failureClassifier = failureClassifier;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
@@ -207,10 +223,14 @@ public class OutboxRelayService {
         return transactionTemplate.execute(status -> {
             OutboxEvent event = outboxEventRepository.findById(eventId)
                     .orElseThrow(() -> new IllegalStateException("Outbox event was not found after publish failure: " + eventId));
+            Instant failedAt = Instant.now(clock);
             event.recordPublishFailure(
-                    resolveErrorMessage(exception),
-                    Instant.now(clock).plus(resolvedRetryDelay()),
-                    resolvedMaxAttempts()
+                    failureClassifier.classify(exception),
+                    failedAt,
+                    failedAt.plus(resolvedRetryDelay()),
+                    resolvedMaxAttempts(),
+                    outboxRecoveryProperties.getCooldown(),
+                    outboxRecoveryProperties.getMaxCycles()
             );
             outboxEventRepository.save(event);
             return event.getStatus();
@@ -257,10 +277,4 @@ public class OutboxRelayService {
         return retryDelay;
     }
 
-    private String resolveErrorMessage(RuntimeException exception) {
-        if (exception.getMessage() == null || exception.getMessage().isBlank()) {
-            return exception.getClass().getSimpleName();
-        }
-        return exception.getMessage();
-    }
 }

@@ -138,7 +138,7 @@ P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified this as a normal opt-in runtime path w
 
 P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the fully automatic local runtime path after one-time Docker bootstrap: Spring automatic request relay published the selected durable request row, the FastAPI overlay automatic `result-relay` process published the selected durable result outbox row, and the Spring automatic result listener applied the result. No manual Spring request relay, manual result-file handler, manual recovery command, FastAPI one-shot result relay, or direct Kafka injection was used. Selected Spring/FastAPI/Redis/MinIO data was deleted afterward while Kafka history, consumer groups, Docker images, volumes, networks, and build cache were intentionally retained.
 
-P3-E2 `[ĐÃ SMOKE THỰC TẾ]` validated the automatic processing-to-search composition before the profile cutover. P3-S3.A1 now packages that already-proven property set as the normal integrated `project3` profile. Retry topics, DLQ, stale-row automation, reindex, rebuild, and reconcile workflows remain future work.
+P3-E2 `[ĐÃ SMOKE THỰC TẾ]` validated the automatic processing-to-search composition before the profile cutover. P3-S3.A1 now packages that already-proven property set as the normal integrated `project3` profile. Retry topics, a full Kafka DLQ, broad stale-`PUBLISHING` repair, reindex, rebuild, and Elasticsearch reconcile workflows remain future work; P3-S4.B2 adds only bounded transient failed-publication reconciliation.
 
 Manual processing smoke controls:
 
@@ -179,7 +179,7 @@ Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived 
 
 The local Kafka service uses a bounded JVM heap (`-Xms256m -Xmx512m`), a 512 MiB container memory reservation, a 1 GiB container memory limit, and `unless-stopped` restart behavior. These are conservative Docker Desktop development defaults, not production sizing, and they do not guarantee that every OOM condition is impossible. Override `KAFKA_HEAP_OPTS`, `KAFKA_MEMORY_RESERVATION`, `KAFKA_MEMORY_LIMIT`, or `KAFKA_RESTART_POLICY` in the private `.env` when a different local machine budget is required; do not edit the tracked Compose file for machine-specific sizing.
 
-Kafka continues to write KRaft data to the named `workspace_core_kafka_data` volume at `/tmp/kraft-combined-logs`. An unexpected process/container exit can restart automatically, while an intentional stop remains stopped. Spring and FastAPI Kafka clients are expected to reconnect after the broker becomes healthy. Events that already exhausted application outbox retry attempts remain `FAILED`; resource hardening does not repair those rows, and P3-S4.B2 owns that recovery problem.
+Kafka continues to write KRaft data to the named `workspace_core_kafka_data` volume at `/tmp/kraft-combined-logs`. An unexpected process/container exit can restart automatically, while an intentional stop remains stopped. Spring and FastAPI Kafka clients are expected to reconnect after the broker becomes healthy. Resource hardening itself does not repair exhausted outbox rows; the bounded application reconciler described below handles only reliably classified transient publication failures.
 
 Validate the effective configuration without starting services:
 
@@ -196,7 +196,7 @@ The target renders Compose JSON and verifies the image, non-`no` restart policy,
 3. Run `make kafka-config-check`.
 4. Restore Kafka with `make infra-up` after confirming the configuration.
 5. Inspect application outbox failure state through supported diagnostics.
-6. Do not manually mutate outbox rows; exhausted retry recovery belongs to P3-S4.B2.
+6. Do not manually mutate outbox rows; use bounded reconciliation or the retained operator recovery workflow according to the persisted classification.
 
 Generic standalone derived search indexing defaults:
 
@@ -247,7 +247,17 @@ Current outbox-relay defaults:
 - `WORKSPACE_CORE_OUTBOX_RELAY_MAX_ATTEMPTS=5`
 - `WORKSPACE_CORE_OUTBOX_RELAY_RETRY_DELAY=30s`
 
-The relay foundation is disabled by default. Phase 3C adds a Kafka publisher adapter, but no scheduler. Manual relay publishing requires both `WORKSPACE_CORE_KAFKA_ENABLED=true` and `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, plus an explicit caller of the relay service.
+Current failed-outbox recovery defaults:
+
+- `WORKSPACE_CORE_OUTBOX_RECOVERY_ENABLED=false`
+- `WORKSPACE_CORE_OUTBOX_RECOVERY_INTERVAL=30s`
+- `WORKSPACE_CORE_OUTBOX_RECOVERY_COOLDOWN=60s`
+- `WORKSPACE_CORE_OUTBOX_RECOVERY_BATCH_SIZE=50`
+- `WORKSPACE_CORE_OUTBOX_RECOVERY_MAX_CYCLES=3`
+
+The generic and `compatibility` configurations keep failed-outbox reconciliation disabled. The integrated `project3` profile enables it as part of the coherent asynchronous chain. The existing five normal publication attempts and retry delay are unchanged.
+
+The generic relay foundation is disabled by default. Manual relay publishing requires both `WORKSPACE_CORE_KAFKA_ENABLED=true` and `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, plus an explicit caller of the relay service. The integrated profile separately enables the scoped relay schedulers and bounded failed-outbox reconciliation.
 
 Current schema-management defaults:
 
@@ -261,16 +271,33 @@ Current outbox behavior:
 - `kafka_request` is the normal integrated `project3` behavior. It atomically writes `Asset`, `ProcessingJob`, and one versioned `asset.processing.requested` outbox row in Product PostgreSQL, skips FastAPI direct upload, and leaves direct-upload identifiers null.
 - The outbox row is durable publication intent for the Kafka processing lifecycle.
 - Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter behind the relay boundary.
-- Kafka publishing exists only when explicitly enabled. Scheduled relay execution is not implemented; for local smoke, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once` plus `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` can invoke the relay for exactly one selected request event.
-- Exact-ID manual requeue exists for a selected request outbox row stuck in `PUBLISHING` after process interruption. It moves only that selected stale row back to `PENDING` and does not publish it automatically. Broad stale-row scans and scheduled recovery are still not implemented.
+- Kafka publishing exists only when explicitly enabled. The integrated profile runs the scoped processing and indexing relay schedulers; the exact-ID smoke command remains available for controlled operator work.
+- Exact-ID manual requeue remains available for a selected request outbox row stuck in `PUBLISHING` after process interruption. It moves only that selected stale row back to `PENDING` and does not publish it automatically. The bounded reconciler handles only terminal `FAILED` rows with a reliable `TRANSIENT` classification; it does not scan stale `PUBLISHING` rows.
 - Transition warning: the Spring request outbox relay remains disabled by default. Do not enable/request-relay ordinary `direct_upload` uploads; use `kafka_request` for request-path validation so the same asset is not processed twice. The manual smoke command remains scoped by event ID and will not relay arbitrary due outbox rows; the automatic relay remains scoped to due `asset.processing.requested` rows only.
 - Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`.
 - The result listener defaults to consumer group `workspace-processing-result-v1` and `latest` offset reset. Start the listener before publishing result events in a local controlled run; it will not silently replay historical topic data for a new group by default.
 - `transcript.ready` handling requires an internal FastAPI artifact endpoint: `GET /internal/processing-requests/{processingRequestId}/transcript-rows`.
 - In result events, `processingRequestId` and `causationEventId` are the original Spring `asset.processing.requested` event ID. Spring stores that value on `ProcessingJob.processingRequestEventId`; `fastapiTaskId` remains the transitional direct-upload/FastAPI task ID.
 - For local smoke, capture one result envelope to a temporary file and run `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with `WORKSPACE_CORE_PROCESSING_SMOKE_RESULT_EVENT_FILE` pointing at that file. This calls the existing manual handler once; it does not install an automatic listener.
-- Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged with `MANUAL_IMMEDIATE`, so the commit happens immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. This reduces unnecessary redelivery of earlier successfully handled records from the same poll, but delivery remains at-least-once. Durable `FAILED` rows require exact-ID manual recovery; there is still no retry topic, DLQ, broad failed-row scan, or automated failed-event recovery.
+- Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported result records are acknowledged with `MANUAL_IMMEDIATE`, so the commit happens immediately on the consumer thread. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery. This reduces unnecessary redelivery of earlier successfully handled records from the same poll, but delivery remains at-least-once. Durable consumed-result failures still require exact-ID manual recovery; failed-outbox reconciliation applies to publication intent, not consumed business outcomes.
 - Delivery is at-least-once; future consumers must be idempotent.
+
+### Exhausted outbox recovery
+
+Publication failures are classified using typed exception information. Retryable Kafka transport, connection, and timeout failures are `TRANSIENT`; serialization, invalid event construction, and deterministic publisher configuration failures are `PERMANENT`; unrecognized failures are `UNKNOWN`. A transient row that exhausts its normal five attempts becomes eligible only after the configured cooldown. One reconciler atomically returns a bounded batch to the existing `PENDING` relay state, resets only the normal attempt counter, increments the recovery-cycle counter, and preserves the event ID, event key, aggregate identity, and payload.
+
+After the configured maximum recovery cycles, another exhausted transient failure is marked `RECOVERY_EXHAUSTED` and is never automatically requeued. Existing failed rows created before the recovery migration are classified as historical `UNKNOWN`; they are intentionally not replayed automatically. `PERMANENT`, `UNKNOWN`, and `RECOVERY_EXHAUSTED` rows require operator investigation and an existing explicit recovery command where applicable.
+
+There is no Kafka retry topic or full DLQ in this baseline. Infrastructure recovery restores broker availability; application recovery separately decides whether durable publication intent is safe to requeue. Because a publisher can receive a broker acknowledgement and crash before committing `PUBLISHED`, delivery remains at-least-once and consumers must continue to deduplicate by event identity.
+
+For a `RECOVERY_EXHAUSTED` row:
+
+1. restore and verify the underlying Kafka/publisher dependency;
+2. inspect only safe failure category and aggregate operational counts;
+3. confirm the event is not currently `PUBLISHING` or concurrently claimed;
+4. use the retained exact-ID/manual recovery workflow when its operator preconditions are met;
+5. do not edit outbox rows directly or change event identity;
+6. confirm the existing idempotent consumer applies any replay at most once at the product boundary.
 
 ## Startup Sequence
 

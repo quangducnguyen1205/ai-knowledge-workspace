@@ -49,6 +49,22 @@ public class OutboxEvent {
     @Column(columnDefinition = "text")
     private String lastError;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private OutboxFailureDisposition failureDisposition;
+
+    @Column(nullable = false)
+    private Integer recoveryCycleCount = 0;
+
+    @Column
+    private Instant nextRecoveryAt;
+
+    @Column(length = 128)
+    private String lastFailureCategory;
+
+    @Column
+    private Instant recoveryExhaustedAt;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -95,21 +111,49 @@ public class OutboxEvent {
         this.publishedAt = publishedAt;
         nextAttemptAt = null;
         lastError = null;
+        failureDisposition = null;
+        nextRecoveryAt = null;
+        lastFailureCategory = null;
+        recoveryExhaustedAt = null;
     }
 
-    public void recordPublishFailure(String errorMessage, Instant nextAttemptAt, int maxAttempts) {
+    public void recordPublishFailure(
+            OutboxFailureClassification classification,
+            Instant failedAt,
+            Instant nextAttemptAt,
+            int maxAttempts,
+            java.time.Duration recoveryCooldown,
+            int maxRecoveryCycles
+    ) {
         attemptCount = attemptCount == null ? 1 : attemptCount + 1;
-        lastError = errorMessage;
+        lastError = classification.safeCategory();
+        lastFailureCategory = classification.safeCategory();
         publishedAt = null;
+        recoveryExhaustedAt = null;
 
         if (attemptCount >= maxAttempts) {
             status = OutboxEventStatus.FAILED;
             this.nextAttemptAt = null;
+            if (classification.disposition() == OutboxFailureDisposition.TRANSIENT) {
+                if (resolvedRecoveryCycleCount() >= maxRecoveryCycles) {
+                    failureDisposition = OutboxFailureDisposition.RECOVERY_EXHAUSTED;
+                    nextRecoveryAt = null;
+                    recoveryExhaustedAt = failedAt;
+                } else {
+                    failureDisposition = OutboxFailureDisposition.TRANSIENT;
+                    nextRecoveryAt = failedAt.plus(recoveryCooldown);
+                }
+            } else {
+                failureDisposition = classification.disposition();
+                nextRecoveryAt = null;
+            }
             return;
         }
 
         status = OutboxEventStatus.PENDING;
         this.nextAttemptAt = nextAttemptAt;
+        failureDisposition = null;
+        nextRecoveryAt = null;
     }
 
     public void requeueFromPublishing() {
@@ -177,6 +221,26 @@ public class OutboxEvent {
         return lastError;
     }
 
+    public OutboxFailureDisposition getFailureDisposition() {
+        return failureDisposition;
+    }
+
+    public Integer getRecoveryCycleCount() {
+        return recoveryCycleCount;
+    }
+
+    public Instant getNextRecoveryAt() {
+        return nextRecoveryAt;
+    }
+
+    public String getLastFailureCategory() {
+        return lastFailureCategory;
+    }
+
+    public Instant getRecoveryExhaustedAt() {
+        return recoveryExhaustedAt;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -187,5 +251,9 @@ public class OutboxEvent {
 
     public Instant getPublishedAt() {
         return publishedAt;
+    }
+
+    private int resolvedRecoveryCycleCount() {
+        return recoveryCycleCount == null ? 0 : recoveryCycleCount;
     }
 }

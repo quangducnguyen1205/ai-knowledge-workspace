@@ -24,3 +24,7 @@ integration:
   fastapi:
     base-url: http://127.0.0.1:8000
     assistant-read-timeout: 75s
+
+outbox:
+  recovery:
+    enabled: false

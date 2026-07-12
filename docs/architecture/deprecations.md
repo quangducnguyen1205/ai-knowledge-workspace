@@ -46,7 +46,7 @@ The explicit indexing endpoint remains the supported recovery action when automa
 
 Classification: `KAFKA_HARDENING_RECOMMENDED_NOT_DEPRECATION_BLOCKER`.
 
-One prior local Kafka container OOM event was observed. The controlled observation campaign completed without an OOM recurrence, but this does not prove production-scale stability. P3-S4.B1 now provides a bounded local Kafka heap and container memory budget plus automatic `unless-stopped` restart behavior while preserving the KRaft volume and broker semantics. Application-level recovery for events that already exhausted outbox attempts remains pending for P3-S4.B2. Compatibility removal is still not scheduled.
+One prior local Kafka container OOM event was observed. The controlled observation campaign completed without an OOM recurrence, but this does not prove production-scale stability. P3-S4.B1 provides a bounded local Kafka heap and container memory budget plus automatic `unless-stopped` restart behavior while preserving the KRaft volume and broker semantics. P3-S4.B2 adds bounded automatic reconciliation for typed transient publication failures after normal attempts are exhausted. Historical, unknown, permanent, and recovery-exhausted failures still require explicit operator review or recovery; manual and exact-ID recovery remain supported and are not deprecated. Compatibility removal is still not scheduled.
 
 ## Removal gates
 

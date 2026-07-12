@@ -22,6 +22,7 @@ Repo B now uses Flyway migrations under `services/workspace-core/src/main/resour
 - `V8__add_asset_search_index_jobs.sql` adds PostgreSQL-owned derived search indexing jobs.
 - `V9__harden_asset_search_index_jobs.sql` adds the active-fingerprint key used to prevent duplicate active indexing jobs for the same asset and snapshot fingerprint.
 - `V10__add_user_external_identity.sql` adds nullable provider/subject identity linkage for opt-in OIDC/JWT users.
+- `V11__add_outbox_recovery_metadata.sql` adds bounded failed-publication classification and recovery metadata. Existing terminal failed rows are classified as historical `UNKNOWN` and are not automatically replayed.
 - Normal Spring Boot startup uses `spring.jpa.hibernate.ddl-auto=validate` by default.
 - Hibernate is no longer the default schema-creation mechanism.
 - `WORKSPACE_CORE_JPA_DDL_AUTO` can still override the setting for local troubleshooting, but migrations are the expected path.
@@ -97,6 +98,9 @@ erDiagram
         string eventKey
         string status
         int attemptCount
+        string failureDisposition
+        int recoveryCycleCount
+        instant nextRecoveryAt
         instant createdAt
     }
 
@@ -158,6 +162,8 @@ Flyway currently defines the following persistence guardrails:
 - `outbox_events.status` is constrained to the current publication lifecycle values.
 - `outbox_events.event_version` is required and must be greater than zero.
 - `outbox_events.attempt_count` must be non-negative.
+- `outbox_events.failure_disposition` is constrained to `TRANSIENT`, `PERMANENT`, `UNKNOWN`, or `RECOVERY_EXHAUSTED` when present.
+- `outbox_events.recovery_cycle_count` must be non-negative, and the eligibility index supports bounded lookup by status, disposition, recovery time, and cycle count.
 - `consumed_processing_result_events.event_id` is the durable idempotency key for consumed FastAPI result events.
 - `consumed_processing_result_events.status` is constrained to the current receive/apply/failure lifecycle values.
 - `asset_search_index_jobs.asset_id` references `assets.id`.
@@ -434,10 +440,11 @@ Current role:
 - If object storage succeeds but FastAPI direct upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.
-- The Phase 3C relay is disabled by default and has no scheduler. If Kafka is disabled and the relay is manually invoked, the default publisher fails clearly instead of marking rows as externally delivered.
+- The shared relay foundation remains disabled by default. The integrated profile enables the existing scoped processing and indexing relay schedulers. If Kafka is disabled and a relay is invoked, the default publisher fails clearly instead of marking rows as externally delivered.
 - The integrated profile enables the scoped processing request relay and Kafka publisher together. Generic standalone and compatibility profiles keep them off. The relay selects only due `asset.processing.requested` rows in bounded batches.
 - Request relays must not be enabled for ordinary `direct_upload` uploads. The explicit `kafka_request` trigger mode exists to prevent duplicate processing before cutover.
-- Exact-ID manual requeue exists for a selected `PUBLISHING` request outbox row that is older than the configured minimum age. Requeue moves only that selected row back to the retryable `PENDING` state and does not publish it automatically; the operator must invoke the scoped relay separately. Broad stale-row scans and automated recovery remain out of scope.
+- Exact-ID manual requeue exists for a selected `PUBLISHING` request outbox row that is older than the configured minimum age. Requeue moves only that selected row back to the retryable `PENDING` state and does not publish it automatically; the operator must invoke the scoped relay separately. Broad stale-row scans remain out of scope.
+- Processing-request and automatic-indexing publication failures share one classifier and bounded reconciler. Only terminal `FAILED` rows classified `TRANSIENT`, past their cooldown, and below the configured recovery-cycle limit can be atomically returned to `PENDING`; the event identity and payload are unchanged. `PERMANENT`, `UNKNOWN`, historical, and `RECOVERY_EXHAUSTED` rows remain terminal for operator review.
 - Phase 3D-H adds a disabled-by-default Spring Kafka result listener for `asset.processing.result.v1`. It uses `MANUAL_IMMEDIATE` acknowledgements, consumer group `workspace-processing-result-v1`, and `latest` offset reset by default. Enable it only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, and start it before publishing result events in controlled local runs.
 - `transcript.ready` handling validates the result event, requires `payload.processingRequestId == causationEventId`, loads the `ProcessingJob` by asset ID plus `processingRequestEventId`, fetches transcript artifact rows from FastAPI by `processingRequestId`, validates the complete artifact set, replaces the Spring-owned transcript snapshot, marks the processing job `SUCCEEDED`, and marks the asset `TRANSCRIPT_READY`.
 - `asset.processing.failed` handling validates the same request/result correlation, marks the processing job and asset `FAILED`, and stores only bounded safe error state.
@@ -471,7 +478,7 @@ Current role:
 - Kafka consumer state, FastAPI event-consumption state, or dead-letter routing
 - Kafka listener offsets as product state
 - Operator-triggered reindex, workspace-wide rebuild, or Elasticsearch reconcile state
-- Automatic recovery, broad scans, or scheduled stale-row repair for stuck `PUBLISHING` outbox rows
+- Broad scans or scheduled stale-row repair for stuck `PUBLISHING` outbox rows
 - Workspace sharing rules
 - Search history or query analytics
 

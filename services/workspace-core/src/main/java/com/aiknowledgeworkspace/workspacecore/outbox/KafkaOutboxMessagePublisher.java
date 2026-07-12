@@ -80,7 +80,7 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         try {
             return objectMapper.writeValueAsString(envelope);
         } catch (JsonProcessingException exception) {
-            throw new OutboxPublishException("Kafka envelope serialization failed", exception);
+            throw new PermanentOutboxPublishException("Kafka envelope serialization failed", exception);
         }
     }
 
@@ -88,7 +88,9 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         return switch (event.getEventType()) {
             case OutboxEventFactory.ASSET_PROCESSING_REQUESTED -> properties.getProcessingRequestedTopic();
             case OutboxEventFactory.ASSET_INDEXING_REQUESTED -> properties.getIndexingRequestedTopic();
-            default -> throw new OutboxPublishException("No Kafka topic configured for event type " + event.getEventType());
+            default -> throw new PermanentOutboxPublishException(
+                    "No Kafka topic configured for event type " + event.getEventType()
+            );
         };
     }
 
@@ -96,7 +98,7 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         try {
             return objectMapper.readTree(event.getPayload());
         } catch (JsonProcessingException exception) {
-            throw new OutboxPublishException("Outbox event payload is not valid JSON", exception);
+            throw new PermanentOutboxPublishException("Outbox event payload is not valid JSON", exception);
         }
     }
 
@@ -106,7 +108,7 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
 
     private String requireId(UUID id) {
         if (id == null) {
-            throw new OutboxPublishException("Outbox event cannot be published without an id");
+            throw new PermanentOutboxPublishException("Outbox event cannot be published without an id");
         }
         return id.toString();
     }

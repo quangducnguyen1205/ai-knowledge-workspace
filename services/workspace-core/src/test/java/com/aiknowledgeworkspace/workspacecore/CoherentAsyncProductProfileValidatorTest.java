@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.aiknowledgeworkspace.workspacecore.common.config.FastApiProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.WorkspaceSecurityProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingAsyncConfiguration;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
@@ -45,6 +46,7 @@ class CoherentAsyncProductProfileValidatorTest {
                     WorkspaceKafkaProperties kafka = context.getBean(WorkspaceKafkaProperties.class);
                     WorkspaceSecurityProperties security = context.getBean(WorkspaceSecurityProperties.class);
                     FastApiProperties fastApi = context.getBean(FastApiProperties.class);
+                    OutboxRecoveryProperties recovery = context.getBean(OutboxRecoveryProperties.class);
 
                     assertThat(processing.getTriggerMode()).isEqualTo(ProcessingTriggerMode.KAFKA_REQUEST);
                     assertThat(processingRelay.isEnabled()).isTrue();
@@ -56,6 +58,7 @@ class CoherentAsyncProductProfileValidatorTest {
                     assertThat(security.isLegacySessionMode()).isTrue();
                     assertThat(fastApi.getBaseUrl()).isEqualTo("http://127.0.0.1:8000");
                     assertThat(fastApi.getAssistantReadTimeout()).isEqualTo(Duration.ofSeconds(75));
+                    assertThat(recovery.isEnabled()).isTrue();
                 });
     }
 
@@ -74,6 +77,7 @@ class CoherentAsyncProductProfileValidatorTest {
                     IndexingRequestRelayProperties indexingRelay = context.getBean(IndexingRequestRelayProperties.class);
                     WorkspaceKafkaProperties kafka = context.getBean(WorkspaceKafkaProperties.class);
                     WorkspaceSecurityProperties security = context.getBean(WorkspaceSecurityProperties.class);
+                    OutboxRecoveryProperties recovery = context.getBean(OutboxRecoveryProperties.class);
 
                     assertThat(processing.getTriggerMode()).isEqualTo(ProcessingTriggerMode.DIRECT_UPLOAD);
                     assertThat(processingRelay.isEnabled()).isFalse();
@@ -83,6 +87,7 @@ class CoherentAsyncProductProfileValidatorTest {
                     assertThat(kafka.isProcessingResultListenerEnabled()).isFalse();
                     assertThat(kafka.isIndexingListenerEnabled()).isFalse();
                     assertThat(security.isLegacySessionMode()).isTrue();
+                    assertThat(recovery.isEnabled()).isFalse();
                 });
     }
 
@@ -99,7 +104,8 @@ class CoherentAsyncProductProfileValidatorTest {
                             .hasStackTraceContaining("workspace.kafka.processing-result-listener-enabled")
                             .hasStackTraceContaining("workspace.search.indexing.auto-request-enabled")
                             .hasStackTraceContaining("workspace.search.indexing-relay.enabled")
-                            .hasStackTraceContaining("workspace.kafka.indexing-listener-enabled");
+                            .hasStackTraceContaining("workspace.kafka.indexing-listener-enabled")
+                            .hasStackTraceContaining("outbox.recovery.enabled");
                 });
     }
 
@@ -111,6 +117,7 @@ class CoherentAsyncProductProfileValidatorTest {
             IndexingRequestRelayProperties.class,
             WorkspaceKafkaProperties.class,
             WorkspaceSecurityProperties.class,
+            OutboxRecoveryProperties.class,
             FastApiProperties.class,
     })
     @Import({

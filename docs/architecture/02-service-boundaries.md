@@ -185,17 +185,21 @@ flowchart LR
 - A disabled-by-default automatic indexing request relay for due `asset.indexing.requested` rows only. It reuses the outbox state machine and does not relay processing request, result, or arbitrary outbox events.
 - A disabled-by-default Kafka listener for `asset.indexing.requested.v1`. It loads canonical transcript snapshot rows from PostgreSQL, writes derived documents to Elasticsearch, and marks assets `SEARCHABLE` only after successful indexing.
 - A disabled-by-default one-shot smoke command for relaying exactly one selected indexing outbox event ID.
+- Shared, typed publication-failure classification for processing-request and automatic-indexing outbox rows: `TRANSIENT`, `PERMANENT`, `UNKNOWN`, and terminal `RECOVERY_EXHAUSTED`.
+- A disabled-by-default bounded failed-outbox reconciler. The integrated `project3` profile enables it for classified transient rows only, after a cooldown, with atomic compare-and-set requeue, preserved event identity, and a finite recovery-cycle budget.
+- Historical `FAILED` rows are migrated as `UNKNOWN` and remain terminal until an operator uses an existing explicit recovery path.
 
 ### Does Not Own Yet
 
 - Generic all-event scheduled relay execution.
 - Dead-letter topic/queue routing.
-- Automated recovery, broad scans, or scheduled stale-row repair for rows stuck in `PUBLISHING` after process interruption.
+- Broad scans or scheduled stale-row repair for rows stuck in `PUBLISHING` after process interruption.
+- Automatic recovery of `UNKNOWN`, `PERMANENT`, historical, or `RECOVERY_EXHAUSTED` rows.
 - Automatic retry of durable `FAILED` consumed result events.
 - Kafka retry-topic framework.
 - Operator-triggered exact-asset reindex, workspace-wide rebuild, and Elasticsearch reconcile workflows.
 
-Phase 3I keeps Kafka as transport, not product truth. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state changes only after Spring validates the result and persists a complete transcript snapshot. P3-S3.A1 packages the previously opt-in chain into the normal integrated `project3` profile: `kafka_request`, request relay/publisher, result listener, automatic indexing request/relay/listener. The generic standalone configuration and explicit `compatibility` profile retain `direct_upload` with asynchronous controls disabled. The two upload modes remain mutually exclusive per upload, and no retry topic, DLQ, or broad recovery automation is added.
+Phase 3I keeps Kafka as transport, not product truth. `consumed_processing_result_events` stores durable idempotency by `eventId`; product state changes only after Spring validates the result and persists a complete transcript snapshot. P3-S3.A1 packages the previously opt-in chain into the normal integrated `project3` profile: `kafka_request`, request relay/publisher, result listener, automatic indexing request/relay/listener. The generic standalone configuration and explicit `compatibility` profile retain `direct_upload` with asynchronous controls disabled. The two upload modes remain mutually exclusive per upload. P3-S4.B2 adds bounded reconciliation of typed transient publication failures, but no retry topic, Kafka DLQ, broad stale-row repair, or automatic replay of ambiguous historical failures.
 
 P3-D1 adds an opt-in automatic request relay foundation. It is not a generic outbox worker: it selects a bounded batch of due `asset.processing.requested` events only, runs only with `kafka_request` and Kafka enabled, and leaves `direct_upload` unchanged. Kafka publication still happens through the existing publisher envelope and remains at-least-once; the claim/finalize/failure database updates are kept separate from the Kafka send so the scheduler does not hold a product database transaction open across the broker call.
 

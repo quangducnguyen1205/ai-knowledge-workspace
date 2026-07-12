@@ -69,4 +69,47 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
             @Param("publishingStatus") OutboxEventStatus publishingStatus,
             @Param("now") Instant now
     );
+
+    @Query("""
+            select event.id
+            from OutboxEvent event
+            where event.status = :failedStatus
+              and event.failureDisposition = :transientDisposition
+              and event.nextRecoveryAt is not null
+              and event.nextRecoveryAt <= :now
+              and event.recoveryCycleCount < :maxCycles
+            order by event.nextRecoveryAt asc, event.createdAt asc, event.id asc
+            """)
+    List<UUID> findEligibleRecoveryIds(
+            @Param("failedStatus") OutboxEventStatus failedStatus,
+            @Param("transientDisposition") OutboxFailureDisposition transientDisposition,
+            @Param("now") Instant now,
+            @Param("maxCycles") int maxCycles,
+            Pageable pageable
+    );
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update OutboxEvent event
+            set event.status = :pendingStatus,
+                event.attemptCount = 0,
+                event.nextAttemptAt = null,
+                event.nextRecoveryAt = null,
+                event.recoveryCycleCount = event.recoveryCycleCount + 1,
+                event.updatedAt = :now
+            where event.id = :id
+              and event.status = :failedStatus
+              and event.failureDisposition = :transientDisposition
+              and event.nextRecoveryAt is not null
+              and event.nextRecoveryAt <= :now
+              and event.recoveryCycleCount < :maxCycles
+            """)
+    int requeueFailedForRecovery(
+            @Param("id") UUID id,
+            @Param("failedStatus") OutboxEventStatus failedStatus,
+            @Param("pendingStatus") OutboxEventStatus pendingStatus,
+            @Param("transientDisposition") OutboxFailureDisposition transientDisposition,
+            @Param("now") Instant now,
+            @Param("maxCycles") int maxCycles
+    );
 }

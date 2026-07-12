@@ -74,7 +74,17 @@ class ProcessingRecoveryServiceTest {
     @Test
     void requeuesOnlySelectedStalePublishingEventWithoutPublishingIt() {
         OutboxEvent selected = outboxEventRepository.saveAndFlush(newOutboxEvent());
-        selected.recordPublishFailure("previous failure", Instant.now().minusSeconds(60), 5);
+        selected.recordPublishFailure(
+                new com.aiknowledgeworkspace.workspacecore.outbox.OutboxFailureClassification(
+                        com.aiknowledgeworkspace.workspacecore.outbox.OutboxFailureDisposition.UNKNOWN,
+                        "PREVIOUS_FAILURE"
+                ),
+                Instant.now(),
+                Instant.now().minusSeconds(60),
+                5,
+                Duration.ofSeconds(60),
+                3
+        );
         selected = outboxEventRepository.saveAndFlush(selected);
         OutboxEvent other = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
@@ -91,7 +101,7 @@ class ProcessingRecoveryServiceTest {
         OutboxEvent savedOther = outboxEventRepository.findById(other.getId()).orElseThrow();
         assertThat(savedSelected.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedSelected.getAttemptCount()).isEqualTo(1);
-        assertThat(savedSelected.getLastError()).isEqualTo("previous failure");
+        assertThat(savedSelected.getLastError()).isEqualTo("PREVIOUS_FAILURE");
         assertThat(savedSelected.getNextAttemptAt()).isNull();
         assertThat(savedSelected.getPublishedAt()).isNull();
         assertThat(savedOther.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHING);

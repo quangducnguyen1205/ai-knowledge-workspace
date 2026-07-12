@@ -85,7 +85,9 @@ class KafkaOutboxRelayServiceTest {
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
-        assertThat(savedEvent.getLastError()).isEqualTo("Kafka publish failed");
+        assertThat(savedEvent.getLastError()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
+        assertThat(savedEvent.getLastFailureCategory()).isEqualTo("UNKNOWN_PUBLICATION_FAILURE");
+        assertThat(savedEvent.getFailureDisposition()).isNull();
         assertThat(savedEvent.getPublishedAt()).isNull();
         assertThat(savedEvent.getNextAttemptAt()).isAfter(Instant.now());
     }

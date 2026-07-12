@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingAsyncConfiguration;
 import com.aiknowledgeworkspace.workspacecore.search.SearchAsyncConfiguration;
@@ -14,15 +15,18 @@ public class CoherentAsyncProductProfileValidator implements InitializingBean {
     private final ProcessingAsyncConfiguration processingConfiguration;
     private final SearchAsyncConfiguration searchConfiguration;
     private final WorkspaceKafkaProperties kafkaProperties;
+    private final OutboxRecoveryProperties outboxRecoveryProperties;
 
     public CoherentAsyncProductProfileValidator(
             ProcessingAsyncConfiguration processingConfiguration,
             SearchAsyncConfiguration searchConfiguration,
-            WorkspaceKafkaProperties kafkaProperties
+            WorkspaceKafkaProperties kafkaProperties,
+            OutboxRecoveryProperties outboxRecoveryProperties
     ) {
         this.processingConfiguration = processingConfiguration;
         this.searchConfiguration = searchConfiguration;
         this.kafkaProperties = kafkaProperties;
+        this.outboxRecoveryProperties = outboxRecoveryProperties;
     }
 
     @Override
@@ -58,6 +62,7 @@ public class CoherentAsyncProductProfileValidator implements InitializingBean {
                 "workspace.kafka.indexing-listener-enabled",
                 missingControls
         );
+        require(outboxRecoveryProperties.isEnabled(), "outbox.recovery.enabled", missingControls);
 
         if (!missingControls.isEmpty()) {
             throw new IllegalStateException(
