@@ -1,5 +1,5 @@
 .PHONY: help test test-core test-workspace-core compile smoke smoke-workspace \
-        infra-up infra-down infra-logs run run-project3 run-compatibility run-standalone require-media-file
+        infra-up infra-down infra-logs kafka-config-check run run-project3 run-compatibility run-standalone require-media-file
 
 WORKSPACE_CORE_MODULE ?= services/workspace-core
 WORKSPACE_CORE_POM ?= $(WORKSPACE_CORE_MODULE)/pom.xml
@@ -17,6 +17,7 @@ SMOKE_LEGACY_USER_ID ?= smoke-dev-user
 
 ENV_FILE ?= .env
 COMPOSE_FILE ?= infra/docker-compose.dev.yml
+KAFKA_CONFIG_VALIDATOR ?= infra/scripts/validate-kafka-runtime-config.py
 SPRING_PROFILE ?= project3
 
 help:
@@ -25,6 +26,7 @@ help:
 		'  make infra-up            Start Repo B PostgreSQL + Elasticsearch with docker compose' \
 		'  make infra-down          Stop Repo B infrastructure' \
 		'  make infra-logs          Show Repo B infrastructure logs' \
+		'  make kafka-config-check  Statically validate rendered local Kafka resource/restart settings' \
 		'  make run                 Run workspace-core with the coherent project3 profile' \
 		'  make run-project3        Compatibility alias for the normal integrated run target' \
 		'  make run-compatibility   Deprecated but functional direct_upload rollback path' \
@@ -58,6 +60,9 @@ infra-down:
 
 infra-logs:
 	docker compose --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" logs -f
+
+kafka-config-check:
+	docker compose --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" config --format json | python3 "$(KAFKA_CONFIG_VALIDATOR)"
 
 run:
 	set -a && . "$(ENV_FILE)" && set +a && cd "$(WORKSPACE_CORE_MODULE)" && mvn spring-boot:run -Dspring-boot.run.profiles="$(SPRING_PROFILE)"

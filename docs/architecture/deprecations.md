@@ -46,7 +46,7 @@ The explicit indexing endpoint remains the supported recovery action when automa
 
 Classification: `KAFKA_HARDENING_RECOMMENDED_NOT_DEPRECATION_BLOCKER`.
 
-One prior local Kafka container OOM event was observed. The current container restart policy is `no`, and no explicit container memory limit is configured. The controlled observation campaign completed without an OOM recurrence, but this does not prove production-scale stability. Kafka memory growth, container limits, restart behavior, and monitoring require a future hardening phase; no Kafka configuration is changed by this deprecation.
+One prior local Kafka container OOM event was observed. The controlled observation campaign completed without an OOM recurrence, but this does not prove production-scale stability. P3-S4.B1 now provides a bounded local Kafka heap and container memory budget plus automatic `unless-stopped` restart behavior while preserving the KRaft volume and broker semantics. Application-level recovery for events that already exhausted outbox attempts remains pending for P3-S4.B2. Compatibility removal is still not scheduled.
 
 ## Removal gates
 

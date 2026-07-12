@@ -103,7 +103,11 @@ services:
   kafka:
     image: ${KAFKA_IMAGE:-apache/kafka:4.0.2}
     user: "0:0"
+    restart: ${KAFKA_RESTART_POLICY:-unless-stopped}
+    mem_reservation: ${KAFKA_MEMORY_RESERVATION:-512m}
+    mem_limit: ${KAFKA_MEMORY_LIMIT:-1g}
     environment:
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093

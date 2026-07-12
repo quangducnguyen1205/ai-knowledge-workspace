@@ -160,6 +160,10 @@ Supported recovery commands are `retry_failed_result_event_once` and `requeue_st
 Generic standalone Kafka defaults:
 
 - `KAFKA_IMAGE=apache/kafka:4.0.2`
+- `KAFKA_HEAP_OPTS='-Xms256m -Xmx512m'`
+- `KAFKA_MEMORY_RESERVATION=512m`
+- `KAFKA_MEMORY_LIMIT=1g`
+- `KAFKA_RESTART_POLICY=unless-stopped`
 - `WORKSPACE_CORE_KAFKA_PORT=9092`
 - `WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
 - `WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC=asset.processing.requested.v1`
@@ -170,6 +174,29 @@ Generic standalone Kafka defaults:
 - `WORKSPACE_CORE_KAFKA_LOGGING_PLACEHOLDER_ENABLED=false`
 
 Repo B Docker Compose starts a single-node KRaft Kafka broker and a short-lived topic bootstrap helper for `asset.processing.requested.v1`, `asset.processing.result.v1`, and `asset.indexing.requested.v1`. Each topic uses one partition and replication factor one for local development.
+
+### Local Kafka resource and restart baseline
+
+The local Kafka service uses a bounded JVM heap (`-Xms256m -Xmx512m`), a 512 MiB container memory reservation, a 1 GiB container memory limit, and `unless-stopped` restart behavior. These are conservative Docker Desktop development defaults, not production sizing, and they do not guarantee that every OOM condition is impossible. Override `KAFKA_HEAP_OPTS`, `KAFKA_MEMORY_RESERVATION`, `KAFKA_MEMORY_LIMIT`, or `KAFKA_RESTART_POLICY` in the private `.env` when a different local machine budget is required; do not edit the tracked Compose file for machine-specific sizing.
+
+Kafka continues to write KRaft data to the named `workspace_core_kafka_data` volume at `/tmp/kraft-combined-logs`. An unexpected process/container exit can restart automatically, while an intentional stop remains stopped. Spring and FastAPI Kafka clients are expected to reconnect after the broker becomes healthy. Events that already exhausted application outbox retry attempts remain `FAILED`; resource hardening does not repair those rows, and P3-S4.B2 owns that recovery problem.
+
+Validate the effective configuration without starting services:
+
+```bash
+make kafka-config-check
+```
+
+The target renders Compose JSON and verifies the image, non-`no` restart policy, positive memory budget, heap/container relationship, persistent volume mount, and health check. To inspect only selected effective fields safely, render with `docker compose --env-file .env -f infra/docker-compose.dev.yml config --format json` and filter the `services.kafka` image, restart, memory, heap, volume target, and health-check presence; do not print the complete environment.
+
+#### Kafka exited unexpectedly
+
+1. Inspect the Kafka container exit code and Docker `OOMKilled` state.
+2. Confirm the effective heap, memory reservation, memory limit, and restart-policy overrides.
+3. Run `make kafka-config-check`.
+4. Restore Kafka with `make infra-up` after confirming the configuration.
+5. Inspect application outbox failure state through supported diagnostics.
+6. Do not manually mutate outbox rows; exhausted retry recovery belongs to P3-S4.B2.
 
 Generic standalone derived search indexing defaults:
 
