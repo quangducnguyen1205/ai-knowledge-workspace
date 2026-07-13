@@ -48,13 +48,14 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.data.domain.Sort;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
-class AssetServiceTest {
+class AssetApplicationServicesTest {
 
     @Mock
     private AssetRepository assetRepository;
@@ -89,7 +90,7 @@ class AssetServiceTest {
 
     @Test
     void uploadAssociatesAssetWithResolvedWorkspace() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -159,7 +160,7 @@ class AssetServiceTest {
 
     @Test
     void uploadUsesDefaultWorkspaceWhenWorkspaceIdIsOmitted() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -211,7 +212,7 @@ class AssetServiceTest {
     @Test
     void uploadInKafkaRequestModeDoesNotCallFastApiDirectUploadAndPersistsOutboxIntent() {
         when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(true);
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -275,7 +276,7 @@ class AssetServiceTest {
 
     @Test
     void uploadCleansStoredObjectWhenFastApiUploadFails() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -318,7 +319,7 @@ class AssetServiceTest {
 
     @Test
     void uploadCleansStoredObjectWhenDatabasePersistenceFails() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -364,7 +365,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetRejectsAssetWithoutWorkspace() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -386,7 +387,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetReturnsOwnedAssetWithoutBackfill() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -408,7 +409,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetStatusReturnsLocalStateWhenNoDirectFastApiTaskExists() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -440,7 +441,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetRejectsNonOwnedAssetWithOwnershipSafeNotFound() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -475,7 +476,7 @@ class AssetServiceTest {
                 workspaceProperties,
                 currentUserService
         );
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -518,7 +519,7 @@ class AssetServiceTest {
                 new WorkspaceProperties(),
                 currentUserService
         );
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -539,7 +540,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsUsesDefaultWorkspaceScopeOnly() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -588,7 +589,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsUsesRequestedNonDefaultWorkspace() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -621,7 +622,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsSupportsExplicitPageAndSize() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -673,7 +674,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsFiltersByAssetStatusWithinWorkspaceScope() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -713,7 +714,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsRejectsNegativePage() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -728,7 +729,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsRejectsNonPositiveSize() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -743,7 +744,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsRejectsSizeAboveMaximum() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -758,7 +759,7 @@ class AssetServiceTest {
 
     @Test
     void listAssetsUsesDeterministicOrderingWhenCreatedAtMatches() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -801,7 +802,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetTranscriptUsesPersistedSnapshotInNormalPath() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -838,7 +839,7 @@ class AssetServiceTest {
 
     @Test
     void getAssetTranscriptCapturesAndPersistsSnapshotWhenLocalRowsAreMissing() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -884,7 +885,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextReturnsRequestedWindowAroundMatchedRow() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -929,7 +930,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextUsesFallbackSegmentIdentifierWhenTranscriptRowIdIsMissing() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -969,7 +970,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextDoesNotMatchSyntheticSegmentIdentifierWhenRealRowIdExists() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1005,7 +1006,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextRejectsInvalidWindow() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1024,7 +1025,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextRejectsWhenTranscriptProcessingIsNotYetSuccessful() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1059,7 +1060,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextRejectsWhenTranscriptIsEmptyAndMarksAssetFailed() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1095,7 +1096,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextCapturesOnlyUsableTranscriptRows() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1144,7 +1145,7 @@ class AssetServiceTest {
 
     @Test
     void transcriptContextRejectsUnknownTranscriptRowForAsset() {
-        AssetService assetService = new AssetService(
+        AssetApplicationFixture assetService = new AssetApplicationFixture(
                 assetRepository,
                 processingRequestApplication,
                 fastApiProcessingClient,
@@ -1175,6 +1176,117 @@ class AssetServiceTest {
                 .isInstanceOf(TranscriptRowNotFoundException.class)
                 .hasMessageContaining("Transcript row not found for asset " + assetId + ": row-404");
         verifyNoInteractions(fastApiProcessingClient);
+    }
+
+    /**
+     * Test-only composition fixture for the focused asset application services. Production
+     * code uses Spring constructor injection and no longer needs the former AssetService
+     * compatibility facade.
+     */
+    private static final class AssetApplicationFixture {
+
+        private final UploadAssetApplicationService uploadApplicationService;
+        private final AssetQueryApplicationService queryApplicationService;
+
+        private AssetApplicationFixture(
+                AssetRepository assetRepository,
+                ProcessingRequestApplication processingRequestApplication,
+                FastApiProcessingClient fastApiProcessingClient,
+                AssetPersistenceService assetPersistenceService,
+                WorkspaceService workspaceService,
+                ObjectStorageClient objectStorageClient,
+                ObjectKeyFactory objectKeyFactory,
+                ObjectStorageProperties objectStorageProperties
+        ) {
+            AssetTranscriptQueryService transcriptQueryService = new AssetTranscriptQueryService(
+                    assetRepository,
+                    assetPersistenceService,
+                    workspaceService
+            );
+            AssetTranscriptSnapshotService transcriptSnapshotService = new AssetTranscriptSnapshotService(
+                    assetRepository,
+                    assetPersistenceService,
+                    (assetId, rows) -> {
+                    }
+            );
+            DirectProcessingCompatibilityAdapter compatibilityAdapter = new DirectProcessingCompatibilityAdapter(
+                    fastApiProcessingClient,
+                    transcriptQueryService,
+                    transcriptSnapshotService
+            );
+            this.uploadApplicationService = new UploadAssetApplicationService(
+                    processingRequestApplication,
+                    compatibilityAdapter,
+                    assetPersistenceService,
+                    workspaceService,
+                    objectStorageClient,
+                    objectKeyFactory,
+                    objectStorageProperties
+            );
+            this.queryApplicationService = new AssetQueryApplicationService(
+                    assetRepository,
+                    processingRequestApplication,
+                    compatibilityAdapter,
+                    assetPersistenceService,
+                    workspaceService
+            );
+        }
+
+        private AssetApplicationFixture(
+                AssetRepository assetRepository,
+                ProcessingRequestApplication processingRequestApplication,
+                FastApiProcessingClient fastApiProcessingClient,
+                AssetPersistenceService assetPersistenceService,
+                WorkspaceService workspaceService
+        ) {
+            this(
+                    assetRepository,
+                    processingRequestApplication,
+                    fastApiProcessingClient,
+                    assetPersistenceService,
+                    workspaceService,
+                    new ObjectStorageClient() {
+                        @Override
+                        public StoredObject store(StoreObjectRequest request) {
+                            throw new IllegalStateException("Object storage client is not configured");
+                        }
+
+                        @Override
+                        public void delete(String bucket, String objectKey) {
+                        }
+                    },
+                    new ObjectKeyFactory(),
+                    new ObjectStorageProperties()
+            );
+        }
+
+        private AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
+            return uploadApplicationService.uploadAsset(workspaceId, file, requestedTitle);
+        }
+
+        private Asset getAsset(UUID assetId) {
+            return queryApplicationService.getAsset(assetId);
+        }
+
+        private AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus status) {
+            return queryApplicationService.listAssets(workspaceId, page, size, status);
+        }
+
+        private AssetStatusResponse getAssetStatus(UUID assetId) {
+            return queryApplicationService.getAssetStatus(assetId);
+        }
+
+        private List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
+            return queryApplicationService.getAssetTranscript(assetId);
+        }
+
+        private AssetTranscriptContextResponse getAssetTranscriptContext(
+                UUID assetId,
+                String transcriptRowId,
+                Integer window
+        ) {
+            return queryApplicationService.getAssetTranscriptContext(assetId, transcriptRowId, window);
+        }
     }
 
     private Asset asset(UUID assetId, String originalFilename, String title, AssetStatus status) {

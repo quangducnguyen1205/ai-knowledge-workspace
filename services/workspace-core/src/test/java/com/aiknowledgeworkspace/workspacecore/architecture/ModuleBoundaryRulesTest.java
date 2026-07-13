@@ -107,6 +107,51 @@ class ModuleBoundaryRulesTest {
         assertThat(Modifier.isPublic(adapter.getModifiers())).isFalse();
     }
 
+    @Test
+    void kafkaListenerAdaptersDoNotAccessPersistenceRepositories() {
+        noClasses()
+                .that().resideInAnyPackage("..processing.result.listener..", "..search.listener..")
+                .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void processingResultApplicationDoesNotDependOnAssetOrFastApiImplementationTypes() {
+        noClasses()
+                .that().haveSimpleName("ApplyProcessingResultApplicationService")
+                .should().dependOnClassesThat().resideInAnyPackage("..asset..", "..integration.fastapi..")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void indexingEntryAdaptersDoNotAccessElasticsearchWriterDirectly() {
+        noClasses()
+                .that().haveSimpleName("AssetIndexingKafkaListener")
+                .or().haveSimpleName("AssetIndexingEventHandler")
+                .or().haveSimpleName("TranscriptIndexingService")
+                .should().dependOnClassesThat().haveSimpleName("TranscriptIndexWriter")
+                .orShould().dependOnClassesThat().haveSimpleName("TranscriptSearchIndexClient")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void indexingTransactionServiceDoesNotAccessElasticsearch() {
+        noClasses()
+                .that().haveSimpleName("IndexingAttemptTransactionService")
+                .should().dependOnClassesThat().haveSimpleName("TranscriptIndexWriter")
+                .orShould().dependOnClassesThat().haveSimpleName("TranscriptSearchIndexClient")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void obsoleteAssetServiceFacadeDoesNotReturn() {
+        assertThat(WORKSPACE_CORE_CLASSES.stream()
+                .noneMatch(javaClass -> javaClass.getFullName().equals(
+                        "com.aiknowledgeworkspace.workspacecore.asset.AssetService"
+                )))
+                .isTrue();
+    }
+
     private static boolean isProcessingOrSearch(String packageName) {
         return packageName.startsWith("com.aiknowledgeworkspace.workspacecore.processing")
                 || packageName.startsWith("com.aiknowledgeworkspace.workspacecore.search");

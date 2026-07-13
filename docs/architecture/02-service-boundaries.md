@@ -58,8 +58,23 @@ direct-processing path is isolated behind the package-private
 processing results use the same snapshot owner. Controllers inject use-case
 services rather than repositories, transaction participation remains
 synchronous, and the ratchet is reduced to `83` non-cycle messages. A thin
-internal `AssetService` facade remains only for legacy unit fixtures and is a
-B2C cleanup candidate; it contains no product logic and is not a Spring bean.
+internal `AssetService` facade remained only for legacy unit fixtures at that
+checkpoint; it contained no product logic and was not a Spring bean.
+
+P3-S5.B2C `[VERIFIED BY TESTS]` makes the remaining processing-result and
+indexing flows explicit without changing their contracts or transaction
+boundaries. The Kafka processing-result listener delegates parsing to
+`ProcessingResultEventHandler`, durable consumed-event ownership to
+`ProcessingResultInbox`, artifact HTTP access to `TranscriptArtifactGateway`,
+and product application to `ApplyProcessingResultApplicationService`. Manual
+result recovery reaches that same application use case. Indexing now has
+separate Kafka and explicit entry adapters that both call
+`ExecuteIndexJobApplicationService`; `IndexingAttemptTransactionService` keeps
+the database begin/finalize operations on either side of the
+`TranscriptIndexWriter` call, so Elasticsearch remains outside those database
+transactions. The obsolete `AssetService` facade is removed, the architecture
+ratchet is `79` non-cycle messages, and strict Modulith verification remains red
+only for reviewed exposure debt.
 
 ## Current Boundary Diagram
 
