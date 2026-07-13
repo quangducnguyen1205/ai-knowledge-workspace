@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -67,7 +67,7 @@ public class ProcessingRecoveryCommandRunner implements ApplicationRunner {
 
     private void requeueStuckOutboxEventOnce() {
         UUID eventId = resolveOutboxEventId();
-        OutboxEventStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
+        OutboxDeliveryStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
                 eventId,
                 properties.getMinimumPublishingAge()
         );

@@ -1,9 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventData;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,21 +22,21 @@ public class AssetSearchIndexRequestService {
     private final SearchIndexingProperties searchIndexingProperties;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final AssetSearchIndexJobRepository searchIndexJobRepository;
-    private final OutboxEventFactory outboxEventFactory;
-    private final OutboxEventRepository outboxEventRepository;
+    private final IndexingRequestedEventCodec indexingRequestedEventCodec;
+    private final OutboxWriter outboxWriter;
 
     public AssetSearchIndexRequestService(
             SearchIndexingProperties searchIndexingProperties,
             TranscriptSnapshotFingerprintService fingerprintService,
             AssetSearchIndexJobRepository searchIndexJobRepository,
-            OutboxEventFactory outboxEventFactory,
-            OutboxEventRepository outboxEventRepository
+            IndexingRequestedEventCodec indexingRequestedEventCodec,
+            OutboxWriter outboxWriter
     ) {
         this.searchIndexingProperties = searchIndexingProperties;
         this.fingerprintService = fingerprintService;
         this.searchIndexJobRepository = searchIndexJobRepository;
-        this.outboxEventFactory = outboxEventFactory;
-        this.outboxEventRepository = outboxEventRepository;
+        this.indexingRequestedEventCodec = indexingRequestedEventCodec;
+        this.outboxWriter = outboxWriter;
     }
 
     @Transactional
@@ -83,15 +84,15 @@ public class AssetSearchIndexRequestService {
         }
 
         AssetSearchIndexJob searchIndexJob = new AssetSearchIndexJob(assetId, snapshotFingerprint);
-        OutboxEvent outboxEvent = outboxEventFactory.assetIndexingRequested(
+        OutboxDraft outboxEvent = indexingRequestedEventCodec.encode(new IndexingRequestedEventData(
                 assetId,
                 searchIndexJob.getId(),
                 snapshotFingerprint
-        );
-        searchIndexJob.attachRequestOutboxEvent(outboxEvent.getId());
+        ));
+        searchIndexJob.attachRequestOutboxEvent(outboxEvent.eventId());
 
         searchIndexJob = searchIndexJobRepository.save(searchIndexJob);
-        outboxEventRepository.save(outboxEvent);
+        outboxWriter.enqueue(outboxEvent);
         return searchIndexJob;
     }
 

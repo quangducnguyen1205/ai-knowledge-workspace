@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;

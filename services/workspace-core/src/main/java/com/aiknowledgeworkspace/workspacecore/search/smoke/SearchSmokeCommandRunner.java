@@ -1,7 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search.smoke;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,16 +18,16 @@ public class SearchSmokeCommandRunner implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(SearchSmokeCommandRunner.class);
 
     private final SearchSmokeProperties properties;
-    private final OutboxRelayService outboxRelayService;
+    private final OutboxRelay outboxRelay;
     private final ConfigurableApplicationContext applicationContext;
 
     public SearchSmokeCommandRunner(
             SearchSmokeProperties properties,
-            OutboxRelayService outboxRelayService,
+            OutboxRelay outboxRelay,
             ConfigurableApplicationContext applicationContext
     ) {
         this.properties = properties;
-        this.outboxRelayService = outboxRelayService;
+        this.outboxRelay = outboxRelay;
         this.applicationContext = applicationContext;
     }
 
@@ -46,7 +48,11 @@ public class SearchSmokeCommandRunner implements ApplicationRunner {
 
     private void relayIndexingOutboxOnce() {
         UUID eventId = resolveIndexingOutboxEventId();
-        OutboxEventStatus status = outboxRelayService.relayIndexingEventByIdOnce(eventId);
+        OutboxDeliveryStatus status = outboxRelay.relay(RelayRequest.explicit(
+                eventId,
+                IndexingRequestedEventContract.EVENT_TYPE,
+                "Manual search smoke relay only supports asset.indexing.requested events"
+        )).requiredDeliveryStatus();
         LOGGER.info("Manual smoke indexing outbox relay completed eventId={} status={}", eventId, status);
         System.out.println("SPRING_SMOKE_INDEXING_RELAY eventId=%s status=%s".formatted(eventId, status));
     }

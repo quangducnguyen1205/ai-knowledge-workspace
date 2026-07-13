@@ -5,7 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
 import java.time.Duration;
@@ -100,7 +100,7 @@ class ProcessingRecoveryCommandRunnerTest {
         properties.setOutboxEventId(eventId);
         properties.setMinimumPublishingAge(minimumAge);
         when(processingRecoveryService.requeueStuckOutboxEventOnce(eventId, minimumAge))
-                .thenReturn(OutboxEventStatus.PENDING);
+                .thenReturn(OutboxDeliveryStatus.PENDING);
 
         newRunner(properties).run(new DefaultApplicationArguments());
 

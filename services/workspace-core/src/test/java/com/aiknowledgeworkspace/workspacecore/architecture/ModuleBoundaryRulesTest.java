@@ -1,7 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventCodec;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -27,6 +30,28 @@ class ModuleBoundaryRulesTest {
                         "..workspace.."
                 )
                 .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void outboxDoesNotDependOnProductFeatureImplementations() {
+        noClasses()
+                .that().resideInAPackage("..outbox..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "..asset..",
+                        "..processing..",
+                        "..search..",
+                        "..storage..",
+                        "..workspace.."
+                )
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void eventCodecsRemainOwnedByTheirFeatureModules() {
+        assertThat(ProcessingRequestedEventCodec.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.processing.integration.request");
+        assertThat(IndexingRequestedEventCodec.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.search.integration.request");
     }
 
 }

@@ -3,20 +3,12 @@
 # Human-readable cycle paths remain listed for dependency review.
 # This is a strict ratchet, not proof of a clean modular architecture.
 detected-modules=asset,assistant,common,integration,outbox,processing,search,storage,workspace
-violation-message-count=115
-cycle-message-count=13
-violation-set-sha256=bd3eb98665b868d3dd3a95e1e83fd9f3b995097a6c64698a9f580629cf998c61
+violation-message-count=107
+cycle-message-count=5
+violation-set-sha256=29de31b8b2de3ffe27491779ad86a152881dd9a75f27ecbe18c36c5abb9f680f
 
-cycle=asset -> outbox -> asset
-cycle=asset -> outbox -> workspace -> asset
 cycle=asset -> processing -> asset
-cycle=asset -> processing -> outbox -> asset
-cycle=asset -> processing -> outbox -> workspace -> asset
 cycle=asset -> search -> asset
-cycle=asset -> search -> outbox -> asset
-cycle=asset -> search -> outbox -> workspace -> asset
 cycle=asset -> search -> processing -> asset
-cycle=asset -> search -> processing -> outbox -> asset
-cycle=asset -> search -> processing -> outbox -> workspace -> asset
 cycle=asset -> search -> workspace -> asset
 cycle=asset -> workspace -> asset

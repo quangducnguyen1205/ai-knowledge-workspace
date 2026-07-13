@@ -11,9 +11,10 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +36,7 @@ class AssetSearchIndexRequestServiceTest {
     private AssetSearchIndexJobRepository searchIndexJobRepository;
 
     @Mock
-    private OutboxEventRepository outboxEventRepository;
+    private OutboxWriter outboxWriter;
 
     private SearchIndexingProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -64,7 +65,7 @@ class AssetSearchIndexRequestServiceTest {
 
         assertThat(result).isEmpty();
         verify(searchIndexJobRepository, never()).save(any());
-        verify(outboxEventRepository, never()).save(any());
+        verify(outboxWriter, never()).enqueue(any());
     }
 
     @Test
@@ -75,24 +76,24 @@ class AssetSearchIndexRequestServiceTest {
 
         AssetSearchIndexJob job = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
-        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxEventRepository).save(outboxCaptor.capture());
-        OutboxEvent outboxEvent = outboxCaptor.getValue();
+        ArgumentCaptor<OutboxDraft> outboxCaptor = ArgumentCaptor.forClass(OutboxDraft.class);
+        verify(outboxWriter).enqueue(outboxCaptor.capture());
+        OutboxDraft outboxEvent = outboxCaptor.getValue();
 
         assertThat(job.getStatus()).isEqualTo(AssetSearchIndexJobStatus.PENDING);
         assertThat(job.getAssetId()).isEqualTo(asset.getId());
-        assertThat(job.getRequestOutboxEventId()).isEqualTo(outboxEvent.getId());
-        assertThat(outboxEvent.getEventType()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_REQUESTED);
-        assertThat(outboxEvent.getEventVersion()).isEqualTo(1);
-        assertThat(outboxEvent.getAggregateType()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE);
-        assertThat(outboxEvent.getAggregateId()).isEqualTo(asset.getId());
-        assertThat(outboxEvent.getEventKey()).isEqualTo(asset.getId().toString());
+        assertThat(job.getRequestOutboxEventId()).isEqualTo(outboxEvent.eventId());
+        assertThat(outboxEvent.eventType()).isEqualTo(IndexingRequestedEventContract.EVENT_TYPE);
+        assertThat(outboxEvent.eventVersion()).isEqualTo(IndexingRequestedEventContract.EVENT_VERSION);
+        assertThat(outboxEvent.aggregateType()).isEqualTo(IndexingRequestedEventContract.AGGREGATE_TYPE);
+        assertThat(outboxEvent.aggregateId()).isEqualTo(asset.getId());
+        assertThat(outboxEvent.eventKey()).isEqualTo(asset.getId().toString());
 
-        JsonNode payload = objectMapper.readTree(outboxEvent.getPayload());
+        JsonNode payload = objectMapper.readTree(outboxEvent.payload());
         assertThat(payload.path("assetId").asText()).isEqualTo(asset.getId().toString());
         assertThat(payload.path("indexingJobId").asText()).isEqualTo(job.getId().toString());
         assertThat(payload.path("snapshotFingerprint").asText()).isEqualTo(job.getSnapshotFingerprint());
-        assertThat(outboxEvent.getPayload()).doesNotContain("Secret transcript text", "objectKey", "credential", "password");
+        assertThat(outboxEvent.payload()).doesNotContain("Secret transcript text", "objectKey", "credential", "password");
     }
 
     @Test
@@ -112,7 +113,7 @@ class AssetSearchIndexRequestServiceTest {
         AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
         assertThat(result).isSameAs(existingJob);
-        verify(outboxEventRepository, never()).save(any());
+        verify(outboxWriter, never()).enqueue(any());
     }
 
     @Test
@@ -134,7 +135,7 @@ class AssetSearchIndexRequestServiceTest {
         assertThat(result).isSameAs(indexedJob);
         verify(searchIndexJobRepository, never()).findByAssetIdAndStatusIn(any(), any());
         verify(searchIndexJobRepository, never()).save(any(AssetSearchIndexJob.class));
-        verify(outboxEventRepository, never()).save(any());
+        verify(outboxWriter, never()).enqueue(any());
     }
 
     @Test
@@ -156,7 +157,7 @@ class AssetSearchIndexRequestServiceTest {
         AssetSearchIndexJob result = service().requestIndexingIfEnabled(asset.getId(), rows).orElseThrow();
 
         assertThat(result).isSameAs(indexedJob);
-        verify(outboxEventRepository, never()).save(any());
+        verify(outboxWriter, never()).enqueue(any());
     }
 
     @Test
@@ -174,7 +175,7 @@ class AssetSearchIndexRequestServiceTest {
 
         assertThat(oldJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         verify(searchIndexJobRepository).save(oldJob);
-        verify(outboxEventRepository).save(any(OutboxEvent.class));
+        verify(outboxWriter).enqueue(any(OutboxDraft.class));
     }
 
     private AssetSearchIndexRequestService service() {
@@ -182,8 +183,8 @@ class AssetSearchIndexRequestServiceTest {
                 properties,
                 new TranscriptSnapshotFingerprintService(),
                 searchIndexJobRepository,
-                new OutboxEventFactory(objectMapper),
-                outboxEventRepository
+                new IndexingRequestedEventCodec(objectMapper),
+                outboxWriter
         );
     }
 

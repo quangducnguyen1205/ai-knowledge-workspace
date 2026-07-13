@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,6 +12,6 @@ public record AssetIndexingEventEnvelope(
         UUID aggregateId,
         String eventKey,
         Instant occurredAt,
-        AssetIndexingRequestedPayload payload
+        IndexingRequestedPayload payload
 ) {
 }

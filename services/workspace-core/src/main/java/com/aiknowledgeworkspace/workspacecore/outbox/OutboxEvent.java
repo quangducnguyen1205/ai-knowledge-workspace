@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -104,6 +105,18 @@ public class OutboxEvent {
         this.aggregateId = aggregateId;
         this.eventKey = eventKey;
         this.payload = payload;
+    }
+
+    static OutboxEvent fromDraft(OutboxDraft draft) {
+        return new OutboxEvent(
+                draft.eventId(),
+                draft.eventType(),
+                draft.eventVersion(),
+                draft.aggregateType(),
+                draft.aggregateId(),
+                draft.eventKey(),
+                draft.payload()
+        );
     }
 
     public void markPublished(Instant publishedAt) {

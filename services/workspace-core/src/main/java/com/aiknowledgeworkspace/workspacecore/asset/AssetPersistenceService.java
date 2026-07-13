@@ -1,12 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventData;
 import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
@@ -23,23 +24,23 @@ public class AssetPersistenceService {
     private final AssetRepository assetRepository;
     private final ProcessingJobRepository processingJobRepository;
     private final AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
-    private final OutboxEventRepository outboxEventRepository;
-    private final OutboxEventFactory outboxEventFactory;
+    private final OutboxWriter outboxWriter;
+    private final ProcessingRequestedEventCodec processingRequestedEventCodec;
     private final AssetSearchIndexRequestService assetSearchIndexRequestService;
 
     public AssetPersistenceService(
             AssetRepository assetRepository,
             ProcessingJobRepository processingJobRepository,
             AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository,
-            OutboxEventRepository outboxEventRepository,
-            OutboxEventFactory outboxEventFactory,
+            OutboxWriter outboxWriter,
+            ProcessingRequestedEventCodec processingRequestedEventCodec,
             AssetSearchIndexRequestService assetSearchIndexRequestService
     ) {
         this.assetRepository = assetRepository;
         this.processingJobRepository = processingJobRepository;
         this.assetTranscriptRowSnapshotRepository = assetTranscriptRowSnapshotRepository;
-        this.outboxEventRepository = outboxEventRepository;
-        this.outboxEventFactory = outboxEventFactory;
+        this.outboxWriter = outboxWriter;
+        this.processingRequestedEventCodec = processingRequestedEventCodec;
         this.assetSearchIndexRequestService = assetSearchIndexRequestService;
     }
 
@@ -100,11 +101,16 @@ public class AssetPersistenceService {
                 storedObject.eTag()
         ));
 
-        OutboxEvent processingRequestedEvent = outboxEventFactory.assetProcessingRequested(
-                asset,
-                workspace,
-                storedObject
-        );
+        OutboxDraft processingRequestedEvent = processingRequestedEventCodec.encode(new ProcessingRequestedEventData(
+                asset.getId(),
+                workspace.getId(),
+                workspace.getOwnerId(),
+                storedObject.bucket(),
+                storedObject.objectKey(),
+                asset.getOriginalFilename(),
+                storedObject.contentType(),
+                storedObject.sizeBytes()
+        ));
 
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),
@@ -113,10 +119,10 @@ public class AssetPersistenceService {
                 ProcessingJobStatus.PENDING,
                 "kafka_request_pending"
         );
-        processingJob.setProcessingRequestEventId(processingRequestedEvent.getId());
+        processingJob.setProcessingRequestEventId(processingRequestedEvent.eventId());
         processingJob = processingJobRepository.save(processingJob);
 
-        outboxEventRepository.save(processingRequestedEvent);
+        outboxWriter.enqueue(processingRequestedEvent);
 
         return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());
     }

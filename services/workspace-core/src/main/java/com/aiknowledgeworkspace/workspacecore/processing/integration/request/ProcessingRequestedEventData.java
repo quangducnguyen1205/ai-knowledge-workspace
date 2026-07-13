@@ -1,9 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.outbox;
+package com.aiknowledgeworkspace.workspacecore.processing.integration.request;
 
-import java.time.Instant;
 import java.util.UUID;
 
-public record AssetProcessingRequestedPayload(
+public record ProcessingRequestedEventData(
         UUID assetId,
         UUID workspaceId,
         String ownerId,
@@ -11,7 +10,6 @@ public record AssetProcessingRequestedPayload(
         String objectKey,
         String originalFilename,
         String contentType,
-        long sizeBytes,
-        Instant requestedAt
+        long sizeBytes
 ) {
 }

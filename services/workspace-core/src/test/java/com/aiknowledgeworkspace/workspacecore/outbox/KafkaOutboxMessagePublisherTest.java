@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -42,9 +44,9 @@ class KafkaOutboxMessagePublisherTest {
 
         JsonNode envelope = objectMapper.readTree(envelopeCaptor.getValue());
         assertThat(envelope.path("eventId").asText()).isEqualTo(event.getId().toString());
-        assertThat(envelope.path("eventType").asText()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
+        assertThat(envelope.path("eventType").asText()).isEqualTo(ProcessingRequestedEventContract.EVENT_TYPE);
         assertThat(envelope.path("eventVersion").asInt()).isEqualTo(1);
-        assertThat(envelope.path("aggregateType").asText()).isEqualTo(OutboxEventFactory.ASSET_AGGREGATE_TYPE);
+        assertThat(envelope.path("aggregateType").asText()).isEqualTo(ProcessingRequestedEventContract.AGGREGATE_TYPE);
         assertThat(envelope.path("aggregateId").asText()).isEqualTo(event.getAggregateId().toString());
         assertThat(envelope.path("eventKey").asText()).isEqualTo("asset-key");
         assertThat(envelope.path("occurredAt").asText()).isEqualTo(event.getCreatedAt().toString());
@@ -70,9 +72,9 @@ class KafkaOutboxMessagePublisherTest {
         UUID assetId = UUID.randomUUID();
         UUID indexingJobId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
-                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                IndexingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 "asset-key",
                 """
@@ -91,7 +93,7 @@ class KafkaOutboxMessagePublisherTest {
         ArgumentCaptor<String> envelopeCaptor = ArgumentCaptor.forClass(String.class);
         verify(kafkaSender).send(eq("asset.indexing.requested.v1"), eq("asset-key"), envelopeCaptor.capture());
         JsonNode envelope = objectMapper.readTree(envelopeCaptor.getValue());
-        assertThat(envelope.path("eventType").asText()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_REQUESTED);
+        assertThat(envelope.path("eventType").asText()).isEqualTo(IndexingRequestedEventContract.EVENT_TYPE);
         assertThat(envelope.path("eventKey").asText()).isEqualTo("asset-key");
         assertThat(envelope.path("payload").path("indexingJobId").asText()).isEqualTo(indexingJobId.toString());
         assertThat(envelope.toString()).doesNotContain("transcript text", "objectKey", "secret", "password");
@@ -125,9 +127,9 @@ class KafkaOutboxMessagePublisherTest {
     private OutboxEvent newKafkaEvent() {
         UUID assetId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 "asset-key",
                 """

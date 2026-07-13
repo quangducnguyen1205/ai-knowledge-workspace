@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -60,7 +62,7 @@ class KafkaOutboxRelayServiceTest {
                 .thenReturn(CompletableFuture.completedFuture(null));
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = outboxRelayService.relay(RelayRequest.scheduledAll(20)).processedCount();
 
         assertThat(processedCount).isEqualTo(1);
 
@@ -78,7 +80,7 @@ class KafkaOutboxRelayServiceTest {
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")));
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = outboxRelayService.relay(RelayRequest.scheduledAll(20)).processedCount();
 
         assertThat(processedCount).isEqualTo(1);
 
@@ -95,9 +97,9 @@ class KafkaOutboxRelayServiceTest {
     private OutboxEvent newOutboxEvent() {
         UUID assetId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 """

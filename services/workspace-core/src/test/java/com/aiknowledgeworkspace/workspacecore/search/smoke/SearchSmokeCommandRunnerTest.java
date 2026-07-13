@@ -1,13 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.search.smoke;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +23,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 class SearchSmokeCommandRunnerTest {
 
     @Mock
-    private OutboxRelayService outboxRelayService;
+    private OutboxRelay outboxRelay;
 
     @Mock
     private ConfigurableApplicationContext applicationContext;
@@ -31,8 +34,7 @@ class SearchSmokeCommandRunnerTest {
 
         newRunner(properties).run(new DefaultApplicationArguments());
 
-        verify(outboxRelayService, never()).relayDueEvents();
-        verify(outboxRelayService, never()).relayIndexingEventByIdOnce(any());
+        verifyNoInteractions(outboxRelay);
         verify(applicationContext, never()).close();
     }
 
@@ -45,8 +47,7 @@ class SearchSmokeCommandRunnerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("indexing-outbox-event-id is required");
 
-        verify(outboxRelayService, never()).relayDueEvents();
-        verify(outboxRelayService, never()).relayIndexingEventByIdOnce(any());
+        verifyNoInteractions(outboxRelay);
         verify(applicationContext).close();
     }
 
@@ -56,16 +57,20 @@ class SearchSmokeCommandRunnerTest {
         SearchSmokeProperties properties = new SearchSmokeProperties();
         properties.setCommand(SearchSmokeCommand.RELAY_INDEXING_OUTBOX_ONCE);
         properties.setIndexingOutboxEventId(eventId);
-        when(outboxRelayService.relayIndexingEventByIdOnce(eventId)).thenReturn(OutboxEventStatus.PUBLISHED);
+        RelayRequest request = RelayRequest.explicit(
+                eventId,
+                IndexingRequestedEventContract.EVENT_TYPE,
+                "Manual search smoke relay only supports asset.indexing.requested events"
+        );
+        when(outboxRelay.relay(request)).thenReturn(RelayOutcome.single(OutboxDeliveryStatus.PUBLISHED));
 
         newRunner(properties).run(new DefaultApplicationArguments());
 
-        verify(outboxRelayService).relayIndexingEventByIdOnce(eventId);
-        verify(outboxRelayService, never()).relayDueEvents();
+        verify(outboxRelay).relay(request);
         verify(applicationContext).close();
     }
 
     private SearchSmokeCommandRunner newRunner(SearchSmokeProperties properties) {
-        return new SearchSmokeCommandRunner(properties, outboxRelayService, applicationContext);
+        return new SearchSmokeCommandRunner(properties, outboxRelay, applicationContext);
     }
 }

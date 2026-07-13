@@ -1,13 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.search.relay;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -17,7 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class IndexingRequestRelaySchedulerTest {
 
     @Mock
-    private OutboxRelayService outboxRelayService;
+    private OutboxRelay outboxRelay;
 
     @Test
     void disabledRelayDoesNotDelegateToOutboxRelay() {
@@ -29,7 +31,7 @@ class IndexingRequestRelaySchedulerTest {
                 .relayDueIndexingRequestsOnce();
 
         assertThat(processedCount).isZero();
-        verify(outboxRelayService, never()).relayDueIndexingRequestEvents(anyInt());
+        verifyNoInteractions(outboxRelay);
     }
 
     @Test
@@ -42,7 +44,7 @@ class IndexingRequestRelaySchedulerTest {
                 .relayDueIndexingRequestsOnce();
 
         assertThat(processedCount).isZero();
-        verify(outboxRelayService, never()).relayDueIndexingRequestEvents(anyInt());
+        verifyNoInteractions(outboxRelay);
     }
 
     @Test
@@ -52,13 +54,14 @@ class IndexingRequestRelaySchedulerTest {
         indexingRelayProperties.setBatchSize(4);
         WorkspaceKafkaProperties kafkaProperties = new WorkspaceKafkaProperties();
         kafkaProperties.setEnabled(true);
-        when(outboxRelayService.relayDueIndexingRequestEvents(4)).thenReturn(3);
+        RelayRequest request = RelayRequest.scheduledForType(IndexingRequestedEventContract.EVENT_TYPE, 4);
+        when(outboxRelay.relay(request)).thenReturn(RelayOutcome.batch(3));
 
         int processedCount = newScheduler(indexingRelayProperties, kafkaProperties)
                 .relayDueIndexingRequestsOnce();
 
         assertThat(processedCount).isEqualTo(3);
-        verify(outboxRelayService).relayDueIndexingRequestEvents(4);
+        verify(outboxRelay).relay(request);
     }
 
     private IndexingRequestRelayScheduler newScheduler(
@@ -68,7 +71,7 @@ class IndexingRequestRelaySchedulerTest {
         return new IndexingRequestRelayScheduler(
                 indexingRelayProperties,
                 kafkaProperties,
-                outboxRelayService
+                outboxRelay
         );
     }
 }

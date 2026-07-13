@@ -4,9 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
 import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
@@ -91,12 +92,12 @@ class ProcessingRecoveryServiceTest {
         markPublishing(selected.getId(), Instant.now().minus(Duration.ofMinutes(10)));
         markPublishing(other.getId(), Instant.now().minus(Duration.ofMinutes(10)));
 
-        OutboxEventStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
+        OutboxDeliveryStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
                 selected.getId(),
                 Duration.ofMinutes(5)
         );
 
-        assertThat(status).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(status).isEqualTo(OutboxDeliveryStatus.PENDING);
         OutboxEvent savedSelected = outboxEventRepository.findById(selected.getId()).orElseThrow();
         OutboxEvent savedOther = outboxEventRepository.findById(other.getId()).orElseThrow();
         assertThat(savedSelected.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
@@ -140,7 +141,7 @@ class ProcessingRecoveryServiceTest {
         OutboxEvent wrongType = outboxEventRepository.saveAndFlush(new OutboxEvent(
                 "transcript.ready",
                 1,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 UUID.randomUUID(),
                 UUID.randomUUID().toString(),
                 "{}"
@@ -211,13 +212,13 @@ class ProcessingRecoveryServiceTest {
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
         markPublishing(event.getId(), Instant.now());
 
-        OutboxEventStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
+        OutboxDeliveryStatus status = processingRecoveryService.requeueStuckOutboxEventOnce(
                 event.getId(),
                 Duration.ZERO
         );
 
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
-        assertThat(status).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(status).isEqualTo(OutboxDeliveryStatus.PENDING);
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getPublishedAt()).isNull();
     }
@@ -225,9 +226,9 @@ class ProcessingRecoveryServiceTest {
     private OutboxEvent newOutboxEvent() {
         UUID assetId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)

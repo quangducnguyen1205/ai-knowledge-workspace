@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxFailureRecovery;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -11,9 +13,9 @@ public class OutboxRecoveryScheduler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OutboxRecoveryScheduler.class);
 
-    private final OutboxRecoveryService recoveryService;
+    private final OutboxFailureRecovery recoveryService;
 
-    public OutboxRecoveryScheduler(OutboxRecoveryService recoveryService) {
+    public OutboxRecoveryScheduler(OutboxFailureRecovery recoveryService) {
         this.recoveryService = recoveryService;
     }
 

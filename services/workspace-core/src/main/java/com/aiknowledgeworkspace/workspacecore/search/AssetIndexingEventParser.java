@@ -1,7 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,13 +32,13 @@ public class AssetIndexingEventParser {
         String eventKey = readRequiredText(root, "eventKey");
         Instant occurredAt = readInstant(root, "occurredAt");
 
-        if (!OutboxEventFactory.ASSET_INDEXING_REQUESTED.equals(eventType)) {
+        if (!IndexingRequestedEventContract.EVENT_TYPE.equals(eventType)) {
             throw new AssetIndexingEventRejectedException("Unsupported indexing event type: " + eventType);
         }
-        if (eventVersion != OutboxEventFactory.ASSET_INDEXING_REQUESTED_VERSION) {
+        if (eventVersion != IndexingRequestedEventContract.EVENT_VERSION) {
             throw new AssetIndexingEventRejectedException("Unsupported indexing event version: " + eventVersion);
         }
-        if (!OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE.equals(aggregateType)) {
+        if (!IndexingRequestedEventContract.AGGREGATE_TYPE.equals(aggregateType)) {
             throw new AssetIndexingEventRejectedException("Unsupported indexing aggregate type: " + aggregateType);
         }
         if (!aggregateId.toString().equals(eventKey)) {
@@ -67,7 +67,7 @@ public class AssetIndexingEventParser {
                 aggregateId,
                 eventKey,
                 occurredAt,
-                new AssetIndexingRequestedPayload(payloadAssetId, indexingJobId, snapshotFingerprint)
+                new IndexingRequestedPayload(payloadAssetId, indexingJobId, snapshotFingerprint)
         );
     }
 

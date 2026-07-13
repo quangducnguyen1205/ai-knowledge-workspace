@@ -7,7 +7,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -78,7 +78,7 @@ public class TranscriptIndexingService {
 
     public AssetIndexingHandleResult handleIndexingEvent(String rawEventJson) {
         AssetIndexingEventEnvelope event = indexingEventParser.parse(rawEventJson);
-        AssetIndexingRequestedPayload payload = event.payload();
+        IndexingRequestedPayload payload = event.payload();
         AssetSearchIndexJob indexingJob = searchIndexJobRepository.findById(payload.indexingJobId())
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset search index job was not found: " + payload.indexingJobId()
@@ -96,7 +96,7 @@ public class TranscriptIndexingService {
     }
 
     private void validateEventMatchesJob(AssetIndexingEventEnvelope event, AssetSearchIndexJob indexingJob) {
-        AssetIndexingRequestedPayload payload = event.payload();
+        IndexingRequestedPayload payload = event.payload();
         if (!indexingJob.getAssetId().equals(event.aggregateId())) {
             throw new AssetIndexingEventRejectedException("Indexing event aggregateId did not match job assetId");
         }

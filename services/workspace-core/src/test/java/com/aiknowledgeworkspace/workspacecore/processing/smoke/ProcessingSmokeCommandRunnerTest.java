@@ -1,13 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.processing.smoke;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
@@ -26,7 +29,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 class ProcessingSmokeCommandRunnerTest {
 
     @Mock
-    private OutboxRelayService outboxRelayService;
+    private OutboxRelay outboxRelay;
 
     @Mock
     private ProcessingResultEventHandler processingResultEventHandler;
@@ -43,8 +46,7 @@ class ProcessingSmokeCommandRunnerTest {
 
         newRunner(properties).run(new DefaultApplicationArguments());
 
-        verify(outboxRelayService, never()).relayDueEvents();
-        verify(outboxRelayService, never()).relayEventByIdOnce(any());
+        verifyNoInteractions(outboxRelay);
         verify(processingResultEventHandler, never()).handle(org.mockito.ArgumentMatchers.anyString());
         verify(applicationContext, never()).close();
     }
@@ -58,8 +60,7 @@ class ProcessingSmokeCommandRunnerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("request-outbox-event-id is required");
 
-        verify(outboxRelayService, never()).relayDueEvents();
-        verify(outboxRelayService, never()).relayEventByIdOnce(any());
+        verifyNoInteractions(outboxRelay);
         verify(applicationContext).close();
     }
 
@@ -69,12 +70,16 @@ class ProcessingSmokeCommandRunnerTest {
         ProcessingSmokeProperties properties = new ProcessingSmokeProperties();
         properties.setCommand(ProcessingSmokeCommand.RELAY_REQUEST_OUTBOX_ONCE);
         properties.setRequestOutboxEventId(eventId);
-        when(outboxRelayService.relayEventByIdOnce(eventId)).thenReturn(OutboxEventStatus.PUBLISHED);
+        RelayRequest request = RelayRequest.explicit(
+                eventId,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                "Manual smoke relay only supports asset.processing.requested events"
+        );
+        when(outboxRelay.relay(request)).thenReturn(RelayOutcome.single(OutboxDeliveryStatus.PUBLISHED));
 
         newRunner(properties).run(new DefaultApplicationArguments());
 
-        verify(outboxRelayService).relayEventByIdOnce(eventId);
-        verify(outboxRelayService, never()).relayDueEvents();
+        verify(outboxRelay).relay(request);
         verify(applicationContext).close();
     }
 
@@ -114,7 +119,7 @@ class ProcessingSmokeCommandRunnerTest {
     private ProcessingSmokeCommandRunner newRunner(ProcessingSmokeProperties properties) {
         return new ProcessingSmokeCommandRunner(
                 properties,
-                outboxRelayService,
+                outboxRelay,
                 processingResultEventHandler,
                 applicationContext
         );

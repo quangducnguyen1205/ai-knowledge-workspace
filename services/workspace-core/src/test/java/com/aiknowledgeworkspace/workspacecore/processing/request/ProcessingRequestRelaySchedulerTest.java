@@ -1,14 +1,17 @@
 package com.aiknowledgeworkspace.workspacecore.processing.request;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -18,7 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ProcessingRequestRelaySchedulerTest {
 
     @Mock
-    private OutboxRelayService outboxRelayService;
+    private OutboxRelay outboxRelay;
 
     @Test
     void disabledRelayDoesNotDelegateToOutboxRelay() {
@@ -32,7 +35,7 @@ class ProcessingRequestRelaySchedulerTest {
                 .relayDueRequestsOnce();
 
         assertThat(processedCount).isZero();
-        verify(outboxRelayService, never()).relayDueProcessingRequestEvents(org.mockito.ArgumentMatchers.anyInt());
+        verifyNoInteractions(outboxRelay);
     }
 
     @Test
@@ -47,7 +50,7 @@ class ProcessingRequestRelaySchedulerTest {
                 .relayDueRequestsOnce();
 
         assertThat(processedCount).isZero();
-        verify(outboxRelayService, never()).relayDueProcessingRequestEvents(org.mockito.ArgumentMatchers.anyInt());
+        verifyNoInteractions(outboxRelay);
     }
 
     @Test
@@ -62,7 +65,7 @@ class ProcessingRequestRelaySchedulerTest {
                 .relayDueRequestsOnce();
 
         assertThat(processedCount).isZero();
-        verify(outboxRelayService, never()).relayDueProcessingRequestEvents(org.mockito.ArgumentMatchers.anyInt());
+        verifyNoInteractions(outboxRelay);
     }
 
     @Test
@@ -74,13 +77,14 @@ class ProcessingRequestRelaySchedulerTest {
         processingProperties.setTriggerMode(ProcessingTriggerMode.KAFKA_REQUEST);
         WorkspaceKafkaProperties kafkaProperties = new WorkspaceKafkaProperties();
         kafkaProperties.setEnabled(true);
-        when(outboxRelayService.relayDueProcessingRequestEvents(3)).thenReturn(2);
+        RelayRequest request = RelayRequest.scheduledForType(ProcessingRequestedEventContract.EVENT_TYPE, 3);
+        when(outboxRelay.relay(request)).thenReturn(RelayOutcome.batch(2));
 
         int processedCount = newScheduler(requestRelayProperties, processingProperties, kafkaProperties)
                 .relayDueRequestsOnce();
 
         assertThat(processedCount).isEqualTo(2);
-        verify(outboxRelayService).relayDueProcessingRequestEvents(3);
+        verify(outboxRelay).relay(request);
     }
 
     private ProcessingRequestRelayScheduler newScheduler(
@@ -92,7 +96,7 @@ class ProcessingRequestRelaySchedulerTest {
                 requestRelayProperties,
                 processingProperties,
                 kafkaProperties,
-                outboxRelayService
+                outboxRelay
         );
     }
 }

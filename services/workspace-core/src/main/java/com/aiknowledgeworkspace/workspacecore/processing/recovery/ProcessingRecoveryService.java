@@ -1,14 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxManualRecovery;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.StuckOutboxRecoveryRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,25 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProcessingRecoveryService {
 
     private final ProcessingResultEventHandler processingResultEventHandler;
-    private final OutboxEventRepository outboxEventRepository;
-    private final Clock clock;
+    private final OutboxManualRecovery outboxManualRecovery;
 
     @Autowired
     public ProcessingRecoveryService(
             ProcessingResultEventHandler processingResultEventHandler,
-            OutboxEventRepository outboxEventRepository
-    ) {
-        this(processingResultEventHandler, outboxEventRepository, Clock.systemUTC());
-    }
-
-    ProcessingRecoveryService(
-            ProcessingResultEventHandler processingResultEventHandler,
-            OutboxEventRepository outboxEventRepository,
-            Clock clock
+            OutboxManualRecovery outboxManualRecovery
     ) {
         this.processingResultEventHandler = processingResultEventHandler;
-        this.outboxEventRepository = outboxEventRepository;
-        this.clock = clock;
+        this.outboxManualRecovery = outboxManualRecovery;
     }
 
     public ProcessingResultHandleResult retryFailedResultEventOnce(UUID eventId) {
@@ -44,42 +32,14 @@ public class ProcessingRecoveryService {
     }
 
     @Transactional
-    public OutboxEventStatus requeueStuckOutboxEventOnce(UUID eventId, Duration minimumPublishingAge) {
-        OutboxEvent event = outboxEventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + eventId));
-        validateStuckPublishingEvent(event, resolvedMinimumPublishingAge(minimumPublishingAge), Instant.now(clock));
-
-        event.requeueFromPublishing();
-        outboxEventRepository.save(event);
-        return event.getStatus();
-    }
-
-    private void validateStuckPublishingEvent(OutboxEvent event, Duration minimumPublishingAge, Instant now) {
-        if (!OutboxEventFactory.ASSET_PROCESSING_REQUESTED.equals(event.getEventType())) {
-            throw new IllegalStateException(
-                    "Manual outbox recovery only supports asset.processing.requested events: " + event.getId()
-            );
-        }
-        if (event.getStatus() == OutboxEventStatus.PUBLISHED) {
-            throw new IllegalStateException("Outbox event is already published: " + event.getId());
-        }
-        if (event.getStatus() != OutboxEventStatus.PUBLISHING) {
-            throw new IllegalStateException(
-                    "Outbox event is not stuck in PUBLISHING: " + event.getId() + " status=" + event.getStatus()
-            );
-        }
-
-        Instant publishingSince = event.getUpdatedAt() == null ? event.getCreatedAt() : event.getUpdatedAt();
-        if (publishingSince.plus(minimumPublishingAge).isAfter(now)) {
-            throw new IllegalStateException(
-                    "Outbox event is not old enough for PUBLISHING recovery: "
-                            + event.getId()
-                            + " publishingSince="
-                            + publishingSince
-                            + " minimumAge="
-                            + minimumPublishingAge
-            );
-        }
+    public OutboxDeliveryStatus requeueStuckOutboxEventOnce(UUID eventId, Duration minimumPublishingAge) {
+        Duration resolvedMinimumAge = resolvedMinimumPublishingAge(minimumPublishingAge);
+        return outboxManualRecovery.requeueStuckPublishing(new StuckOutboxRecoveryRequest(
+                eventId,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                resolvedMinimumAge,
+                "Manual outbox recovery only supports asset.processing.requested events"
+        ));
     }
 
     private Duration resolvedMinimumPublishingAge(Duration minimumPublishingAge) {

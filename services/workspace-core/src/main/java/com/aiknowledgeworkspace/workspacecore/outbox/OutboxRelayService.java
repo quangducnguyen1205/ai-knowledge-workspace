@@ -1,18 +1,24 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayExecutionPolicy;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelaySelection;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-public class OutboxRelayService {
+public class OutboxRelayService implements OutboxRelay {
 
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxMessagePublisher outboxMessagePublisher;
@@ -60,118 +66,86 @@ public class OutboxRelayService {
         this.clock = clock;
     }
 
-    public int relayDueEvents() {
-        if (!outboxRelayProperties.isEnabled()) {
-            return 0;
+    @Override
+    public RelayOutcome relay(RelayRequest request) {
+        if (request.executionPolicy().requiresGlobalEnablement() && !outboxRelayProperties.isEnabled()) {
+            if (request.executionPolicy().failOnIneligibleCandidate()) {
+                throw new IllegalStateException("Outbox relay is disabled");
+            }
+            return RelayOutcome.batch(0);
         }
 
-        List<UUID> dueEventIds = outboxEventRepository.findDueEventIds(
-                OutboxEventStatus.PENDING,
-                Instant.now(clock),
-                PageRequest.of(0, resolvedBatchSize())
-        );
-
-        return relaySelectedEventIds(dueEventIds, null, null, false);
-    }
-
-    public int relayDueProcessingRequestEvents(int batchSize) {
-        List<UUID> dueEventIds = outboxEventRepository.findDueEventIdsByEventType(
-                OutboxEventStatus.PENDING,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                Instant.now(clock),
-                PageRequest.of(0, Math.max(1, batchSize))
-        );
-
-        return relaySelectedEventIds(
-                dueEventIds,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                "Automatic processing request relay only supports asset.processing.requested events",
-                false
-        );
-    }
-
-    public int relayDueIndexingRequestEvents(int batchSize) {
-        List<UUID> dueEventIds = outboxEventRepository.findDueEventIdsByEventType(
-                OutboxEventStatus.PENDING,
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
-                Instant.now(clock),
-                PageRequest.of(0, Math.max(1, batchSize))
-        );
-
-        return relaySelectedEventIds(
-                dueEventIds,
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
-                "Automatic indexing request relay only supports asset.indexing.requested events",
-                false
-        );
-    }
-
-    public OutboxEventStatus relayEventByIdOnce(UUID eventId) {
-        if (!outboxRelayProperties.isEnabled()) {
-            throw new IllegalStateException("Outbox relay is disabled");
+        if (request.selection() instanceof RelaySelection.ExactEvent exactEvent) {
+            OutboxEventStatus status = relaySelectedEventById(
+                    exactEvent.eventId(),
+                    EventTypeConstraint.required(
+                            exactEvent.requiredEventType(),
+                            exactEvent.eventTypeMismatchMessage()
+                    ),
+                    request.executionPolicy()
+            );
+            return RelayOutcome.single(toDeliveryStatus(status));
         }
 
-        return relaySelectedEventById(
-                eventId,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                "Manual smoke relay only supports asset.processing.requested events",
-                true
-        );
-    }
-
-    public OutboxEventStatus relayIndexingEventByIdOnce(UUID eventId) {
-        if (!outboxRelayProperties.isEnabled()) {
-            throw new IllegalStateException("Outbox relay is disabled");
+        List<UUID> dueEventIds;
+        EventTypeConstraint constraint;
+        if (request.selection() instanceof RelaySelection.DueByType dueByType) {
+            dueEventIds = outboxEventRepository.findDueEventIdsByEventType(
+                    OutboxEventStatus.PENDING,
+                    dueByType.eventType(),
+                    Instant.now(clock),
+                    PageRequest.of(0, dueByType.batchSize())
+            );
+            constraint = EventTypeConstraint.required(
+                    dueByType.eventType(),
+                    "Scheduled relay only supports the selected event type"
+            );
+        } else if (request.selection() instanceof RelaySelection.AllDue allDue) {
+            dueEventIds = outboxEventRepository.findDueEventIds(
+                    OutboxEventStatus.PENDING,
+                    Instant.now(clock),
+                    PageRequest.of(0, allDue.batchSize())
+            );
+            constraint = EventTypeConstraint.any();
+        } else {
+            throw new IllegalArgumentException("Unsupported relay selection " + request.selection().getClass().getName());
         }
 
-        return relaySelectedEventById(
-                eventId,
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
-                "Manual search smoke relay only supports asset.indexing.requested events",
-                true
-        );
+        return RelayOutcome.batch(relaySelectedEventIds(dueEventIds, constraint, request.executionPolicy()));
     }
 
     private int relaySelectedEventIds(
             List<UUID> eventIds,
-            @Nullable String requiredEventType,
-            @Nullable String eventTypeError,
-            boolean throwOnInvalidCandidate
+            EventTypeConstraint constraint,
+            RelayExecutionPolicy executionPolicy
     ) {
         int processedCount = 0;
         for (UUID eventId : eventIds) {
-            OutboxEventStatus status = relaySelectedEventById(
-                    eventId,
-                    requiredEventType,
-                    eventTypeError,
-                    throwOnInvalidCandidate
-            );
+            OutboxEventStatus status = relaySelectedEventById(eventId, constraint, executionPolicy);
             if (status != null) {
                 processedCount++;
             }
         }
-
         return processedCount;
     }
 
     private OutboxEventStatus relaySelectedEventById(
             UUID eventId,
-            @Nullable String requiredEventType,
-            @Nullable String eventTypeError,
-            boolean throwOnInvalidCandidate
+            EventTypeConstraint constraint,
+            RelayExecutionPolicy executionPolicy
     ) {
         OutboxEvent claimedEvent;
         try {
-            claimedEvent = claimEventForPublishing(eventId, requiredEventType, eventTypeError);
+            claimedEvent = claimEventForPublishing(eventId, constraint);
         } catch (IllegalStateException exception) {
-            if (throwOnInvalidCandidate) {
+            if (executionPolicy.failOnIneligibleCandidate()) {
                 throw exception;
             }
             return null;
         }
 
         if (claimedEvent == null) {
-            if (throwOnInvalidCandidate) {
+            if (executionPolicy.failOnIneligibleCandidate()) {
                 throw new IllegalStateException("Outbox event could not be claimed for publishing: " + eventId);
             }
             return null;
@@ -185,16 +159,11 @@ public class OutboxRelayService {
         }
     }
 
-    private OutboxEvent claimEventForPublishing(
-            UUID eventId,
-            @Nullable String requiredEventType,
-            @Nullable String eventTypeError
-    ) {
+    private OutboxEvent claimEventForPublishing(UUID eventId, EventTypeConstraint constraint) {
         return transactionTemplate.execute(status -> {
             OutboxEvent event = outboxEventRepository.findById(eventId)
                     .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + eventId));
-            validateSelectedEvent(event, Instant.now(clock), requiredEventType, eventTypeError);
-
+            validateSelectedEvent(event, Instant.now(clock), constraint);
             int claimedCount = outboxEventRepository.markPublishing(
                     event.getId(),
                     OutboxEventStatus.PENDING,
@@ -204,7 +173,6 @@ public class OutboxRelayService {
             if (claimedCount != 1) {
                 return null;
             }
-
             return outboxEventRepository.findById(event.getId()).orElseThrow();
         });
     }
@@ -237,14 +205,10 @@ public class OutboxRelayService {
         });
     }
 
-    private void validateSelectedEvent(
-            OutboxEvent event,
-            Instant now,
-            @Nullable String requiredEventType,
-            @Nullable String eventTypeError
-    ) {
-        if (requiredEventType != null && !requiredEventType.equals(event.getEventType())) {
-            throw new IllegalStateException(eventTypeError + ": " + event.getId());
+    private void validateSelectedEvent(OutboxEvent event, Instant now, EventTypeConstraint constraint) {
+        if (constraint.requiredEventType().isPresent()
+                && !constraint.requiredEventType().orElseThrow().equals(event.getEventType())) {
+            throw new IllegalStateException(constraint.mismatchMessage().orElseThrow() + ": " + event.getId());
         }
         if (event.getStatus() == OutboxEventStatus.PUBLISHED) {
             throw new IllegalStateException("Outbox event is already published: " + event.getId());
@@ -261,8 +225,8 @@ public class OutboxRelayService {
         }
     }
 
-    private int resolvedBatchSize() {
-        return Math.max(1, outboxRelayProperties.getBatchSize());
+    private OutboxDeliveryStatus toDeliveryStatus(OutboxEventStatus status) {
+        return OutboxDeliveryStatus.valueOf(status.name());
     }
 
     private int resolvedMaxAttempts() {
@@ -277,4 +241,13 @@ public class OutboxRelayService {
         return retryDelay;
     }
 
+    private record EventTypeConstraint(Optional<String> requiredEventType, Optional<String> mismatchMessage) {
+        private static EventTypeConstraint any() {
+            return new EventTypeConstraint(Optional.empty(), Optional.empty());
+        }
+
+        private static EventTypeConstraint required(String eventType, String mismatchMessage) {
+            return new EventTypeConstraint(Optional.of(eventType), Optional.of(mismatchMessage));
+        }
+    }
 }

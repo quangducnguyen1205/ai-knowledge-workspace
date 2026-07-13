@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
@@ -197,9 +200,9 @@ class OutboxRecoveryServiceTest {
     private OutboxEvent newProcessingEvent() {
         UUID assetId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
+                ProcessingRequestedEventContract.EVENT_TYPE,
                 1,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
@@ -209,9 +212,9 @@ class OutboxRecoveryServiceTest {
     private OutboxEvent newIndexingEvent() {
         UUID assetId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
-                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                IndexingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\",\"indexingJobId\":\"%s\",\"snapshotFingerprint\":\"abc\"}"

@@ -1,7 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.processing.smoke;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
 import java.io.IOException;
@@ -22,18 +24,18 @@ public class ProcessingSmokeCommandRunner implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingSmokeCommandRunner.class);
 
     private final ProcessingSmokeProperties properties;
-    private final OutboxRelayService outboxRelayService;
+    private final OutboxRelay outboxRelay;
     private final ProcessingResultEventHandler processingResultEventHandler;
     private final ConfigurableApplicationContext applicationContext;
 
     public ProcessingSmokeCommandRunner(
             ProcessingSmokeProperties properties,
-            OutboxRelayService outboxRelayService,
+            OutboxRelay outboxRelay,
             ProcessingResultEventHandler processingResultEventHandler,
             ConfigurableApplicationContext applicationContext
     ) {
         this.properties = properties;
-        this.outboxRelayService = outboxRelayService;
+        this.outboxRelay = outboxRelay;
         this.processingResultEventHandler = processingResultEventHandler;
         this.applicationContext = applicationContext;
     }
@@ -58,7 +60,11 @@ public class ProcessingSmokeCommandRunner implements ApplicationRunner {
 
     private void relayRequestOutboxOnce() {
         UUID eventId = resolveRequestOutboxEventId();
-        OutboxEventStatus status = outboxRelayService.relayEventByIdOnce(eventId);
+        OutboxDeliveryStatus status = outboxRelay.relay(RelayRequest.explicit(
+                eventId,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                "Manual smoke relay only supports asset.processing.requested events"
+        )).requiredDeliveryStatus();
         LOGGER.info("Manual smoke request outbox relay completed eventId={} status={}", eventId, status);
         System.out.println("SPRING_SMOKE_REQUEST_RELAY eventId=%s status=%s".formatted(eventId, status));
     }

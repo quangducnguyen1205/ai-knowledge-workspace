@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
@@ -60,9 +61,9 @@ class OutboxEventRepositoryTest {
     void persistsPendingOutboxEventWithFlywayManagedSchemaThroughRelayStateMigration() {
         UUID assetId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
@@ -84,11 +85,11 @@ class OutboxEventRepositoryTest {
         assertThat(savedEvent.getRecoveryExhaustedAt()).isNull();
 
         List<OutboxEvent> aggregateEvents = outboxEventRepository.findByAggregateTypeAndAggregateId(
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId
         );
         assertThat(aggregateEvents).hasSize(1);
-        assertThat(aggregateEvents.get(0).getEventType()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
+        assertThat(aggregateEvents.get(0).getEventType()).isEqualTo(ProcessingRequestedEventContract.EVENT_TYPE);
     }
 
     @Test
@@ -116,9 +117,9 @@ class OutboxEventRepositoryTest {
 
         OutboxEvent event = new OutboxEvent(
                 preassignedEventId,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 """

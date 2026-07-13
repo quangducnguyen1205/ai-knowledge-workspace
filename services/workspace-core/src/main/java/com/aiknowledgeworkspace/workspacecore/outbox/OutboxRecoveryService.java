@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxFailureRecovery;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -10,7 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-public class OutboxRecoveryService {
+public class OutboxRecoveryService implements OutboxFailureRecovery {
 
     private final OutboxEventRepository repository;
     private final OutboxRecoveryProperties properties;
@@ -38,6 +40,7 @@ public class OutboxRecoveryService {
         this.clock = clock;
     }
 
+    @Override
     public OutboxRecoveryResult reconcileEligibleFailures() {
         if (!properties.isEnabled()) {
             return OutboxRecoveryResult.disabledResult();

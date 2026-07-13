@@ -1,9 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.processing.request;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,18 +20,18 @@ public class ProcessingRequestRelayScheduler {
     private final ProcessingRequestRelayProperties properties;
     private final ProcessingProperties processingProperties;
     private final WorkspaceKafkaProperties kafkaProperties;
-    private final OutboxRelayService outboxRelayService;
+    private final OutboxRelay outboxRelay;
 
     public ProcessingRequestRelayScheduler(
             ProcessingRequestRelayProperties properties,
             ProcessingProperties processingProperties,
             WorkspaceKafkaProperties kafkaProperties,
-            OutboxRelayService outboxRelayService
+            OutboxRelay outboxRelay
     ) {
         this.properties = properties;
         this.processingProperties = processingProperties;
         this.kafkaProperties = kafkaProperties;
-        this.outboxRelayService = outboxRelayService;
+        this.outboxRelay = outboxRelay;
     }
 
     public void relayDueRequestsOnSchedule() {
@@ -49,6 +51,9 @@ public class ProcessingRequestRelayScheduler {
         if (!kafkaProperties.isEnabled()) {
             return 0;
         }
-        return outboxRelayService.relayDueProcessingRequestEvents(properties.getBatchSize());
+        return outboxRelay.relay(RelayRequest.scheduledForType(
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                properties.getBatchSize()
+        )).processedCount();
     }
 }

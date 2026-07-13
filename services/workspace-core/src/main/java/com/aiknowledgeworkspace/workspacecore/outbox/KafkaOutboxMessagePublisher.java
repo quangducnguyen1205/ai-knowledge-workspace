@@ -21,6 +21,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, AutoCloseable {
 
     private static final Duration DEFAULT_SEND_TIMEOUT = Duration.ofSeconds(10);
+    private static final String PROCESSING_REQUESTED_EVENT_TYPE = "asset.processing.requested";
+    private static final String INDEXING_REQUESTED_EVENT_TYPE = "asset.indexing.requested";
 
     private final KafkaSender kafkaSender;
     private final WorkspaceKafkaProperties properties;
@@ -86,8 +88,8 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
 
     private String topicFor(OutboxEvent event) {
         return switch (event.getEventType()) {
-            case OutboxEventFactory.ASSET_PROCESSING_REQUESTED -> properties.getProcessingRequestedTopic();
-            case OutboxEventFactory.ASSET_INDEXING_REQUESTED -> properties.getIndexingRequestedTopic();
+            case PROCESSING_REQUESTED_EVENT_TYPE -> properties.getProcessingRequestedTopic();
+            case INDEXING_REQUESTED_EVENT_TYPE -> properties.getIndexingRequestedTopic();
             default -> throw new PermanentOutboxPublishException(
                     "No Kafka topic configured for event type " + event.getEventType()
             );

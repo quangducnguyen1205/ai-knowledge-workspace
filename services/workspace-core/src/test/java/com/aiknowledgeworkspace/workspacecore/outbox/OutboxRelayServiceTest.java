@@ -3,6 +3,10 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,7 +54,7 @@ class OutboxRelayServiceTest {
     void relayPublishesDuePendingEventAndMarksPublished() {
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = relayAllDue();
 
         assertThat(processedCount).isEqualTo(1);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(event.getId());
@@ -69,7 +73,7 @@ class OutboxRelayServiceTest {
         fakeOutboxMessagePublisher.failWith("publisher unavailable");
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = relayAllDue();
 
         assertThat(processedCount).isEqualTo(1);
 
@@ -88,7 +92,7 @@ class OutboxRelayServiceTest {
         recordFailure(event, Instant.now().minusSeconds(5), 5);
         event = outboxEventRepository.saveAndFlush(event);
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = relayAllDue();
 
         assertThat(processedCount).isEqualTo(1);
 
@@ -107,7 +111,7 @@ class OutboxRelayServiceTest {
         recordFailure(event, Instant.now().plusSeconds(3600), 5);
         event = outboxEventRepository.saveAndFlush(event);
 
-        int processedCount = outboxRelayService.relayDueEvents();
+        int processedCount = relayAllDue();
 
         assertThat(processedCount).isZero();
         assertThat(fakeOutboxMessagePublisher.publishedEventIds()).isEmpty();
@@ -128,7 +132,7 @@ class OutboxRelayServiceTest {
         recordFailure(futureRequestEvent, Instant.now().plusSeconds(3600), 5);
         futureRequestEvent = outboxEventRepository.saveAndFlush(futureRequestEvent);
 
-        int processedCount = outboxRelayService.relayDueProcessingRequestEvents(2);
+        int processedCount = relayProcessingDue(2);
 
         assertThat(processedCount).isEqualTo(2);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds())
@@ -151,7 +155,7 @@ class OutboxRelayServiceTest {
         OutboxEvent successfulRequestEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
         fakeOutboxMessagePublisher.failEventWith(failingRequestEvent.getId(), "broker unavailable");
 
-        int processedCount = outboxRelayService.relayDueProcessingRequestEvents(10);
+        int processedCount = relayProcessingDue(10);
 
         assertThat(processedCount).isEqualTo(2);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds())
@@ -178,7 +182,7 @@ class OutboxRelayServiceTest {
         recordFailure(futureIndexingEvent, Instant.now().plusSeconds(3600), 5);
         futureIndexingEvent = outboxEventRepository.saveAndFlush(futureIndexingEvent);
 
-        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(2);
+        int processedCount = relayIndexingDue(2);
 
         assertThat(processedCount).isEqualTo(2);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds())
@@ -203,7 +207,7 @@ class OutboxRelayServiceTest {
         OutboxEvent successfulIndexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
         fakeOutboxMessagePublisher.failEventWith(failingIndexingEvent.getId(), "broker unavailable");
 
-        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(10);
+        int processedCount = relayIndexingDue(10);
 
         assertThat(processedCount).isEqualTo(2);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds())
@@ -223,7 +227,7 @@ class OutboxRelayServiceTest {
     void indexingRelayDoesNotRequireSensitivePayloadData() {
         OutboxEvent indexingEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
 
-        int processedCount = outboxRelayService.relayDueIndexingRequestEvents(1);
+        int processedCount = relayIndexingDue(1);
 
         assertThat(processedCount).isEqualTo(1);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(indexingEvent.getId());
@@ -237,9 +241,9 @@ class OutboxRelayServiceTest {
         OutboxEvent selectedEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
         OutboxEvent unrelatedDueEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        OutboxEventStatus status = outboxRelayService.relayEventByIdOnce(selectedEvent.getId());
+        OutboxDeliveryStatus status = relayProcessingExact(selectedEvent.getId());
 
-        assertThat(status).isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(status).isEqualTo(OutboxDeliveryStatus.PUBLISHED);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(selectedEvent.getId());
 
         OutboxEvent savedSelectedEvent = outboxEventRepository.findById(selectedEvent.getId()).orElseThrow();
@@ -253,7 +257,7 @@ class OutboxRelayServiceTest {
     void scopedRelayRejectsMissingEvent() {
         UUID missingEventId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(missingEventId))
+        assertThatThrownBy(() -> relayProcessingExact(missingEventId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Outbox event was not found")
                 .hasMessageContaining(missingEventId.toString());
@@ -267,13 +271,13 @@ class OutboxRelayServiceTest {
         OutboxEvent event = outboxEventRepository.saveAndFlush(new OutboxEvent(
                 "transcript.ready",
                 1,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
         ));
 
-        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(event.getId()))
+        assertThatThrownBy(() -> relayProcessingExact(event.getId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("only supports asset.processing.requested");
 
@@ -287,7 +291,7 @@ class OutboxRelayServiceTest {
         event = outboxEventRepository.saveAndFlush(event);
         UUID eventId = event.getId();
 
-        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+        assertThatThrownBy(() -> relayProcessingExact(eventId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already published");
 
@@ -301,7 +305,7 @@ class OutboxRelayServiceTest {
         event = outboxEventRepository.saveAndFlush(event);
         UUID eventId = event.getId();
 
-        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+        assertThatThrownBy(() -> relayProcessingExact(eventId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not eligible")
                 .hasMessageContaining("FAILED");
@@ -316,7 +320,7 @@ class OutboxRelayServiceTest {
         event = outboxEventRepository.saveAndFlush(event);
         UUID eventId = event.getId();
 
-        assertThatThrownBy(() -> outboxRelayService.relayEventByIdOnce(eventId))
+        assertThatThrownBy(() -> relayProcessingExact(eventId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not due for relay");
 
@@ -328,9 +332,9 @@ class OutboxRelayServiceTest {
         fakeOutboxMessagePublisher.failWith("publisher unavailable");
         OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        OutboxEventStatus status = outboxRelayService.relayEventByIdOnce(event.getId());
+        OutboxDeliveryStatus status = relayProcessingExact(event.getId());
 
-        assertThat(status).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(status).isEqualTo(OutboxDeliveryStatus.PENDING);
 
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
@@ -345,9 +349,9 @@ class OutboxRelayServiceTest {
         OutboxEvent selectedEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
         OutboxEvent unrelatedDueEvent = outboxEventRepository.saveAndFlush(newIndexingOutboxEvent());
 
-        OutboxEventStatus status = outboxRelayService.relayIndexingEventByIdOnce(selectedEvent.getId());
+        OutboxDeliveryStatus status = relayIndexingExact(selectedEvent.getId());
 
-        assertThat(status).isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(status).isEqualTo(OutboxDeliveryStatus.PUBLISHED);
         assertThat(fakeOutboxMessagePublisher.publishedEventIds()).containsExactly(selectedEvent.getId());
         assertThat(outboxEventRepository.findById(selectedEvent.getId()).orElseThrow().getStatus())
                 .isEqualTo(OutboxEventStatus.PUBLISHED);
@@ -359,7 +363,7 @@ class OutboxRelayServiceTest {
     void scopedIndexingRelayRejectsProcessingRequestEvent() {
         OutboxEvent processingEvent = outboxEventRepository.saveAndFlush(newOutboxEvent());
 
-        assertThatThrownBy(() -> outboxRelayService.relayIndexingEventByIdOnce(processingEvent.getId()))
+        assertThatThrownBy(() -> relayIndexingExact(processingEvent.getId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("asset.indexing.requested");
 
@@ -374,9 +378,9 @@ class OutboxRelayServiceTest {
     private OutboxEvent newOutboxEvent() {
         UUID assetId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED,
-                OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                ProcessingRequestedEventContract.EVENT_VERSION,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\"}".formatted(assetId)
@@ -401,9 +405,9 @@ class OutboxRelayServiceTest {
         UUID assetId = UUID.randomUUID();
         UUID indexingJobId = UUID.randomUUID();
         return new OutboxEvent(
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED_VERSION,
-                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                IndexingRequestedEventContract.EVENT_TYPE,
+                IndexingRequestedEventContract.EVENT_VERSION,
+                IndexingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\",\"indexingJobId\":\"%s\",\"snapshotFingerprint\":\"abc123\"}"
@@ -416,11 +420,45 @@ class OutboxRelayServiceTest {
         return new OutboxEvent(
                 "transcript.ready",
                 1,
-                OutboxEventFactory.ASSET_AGGREGATE_TYPE,
+                ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 "{\"assetId\":\"%s\",\"status\":\"ready\"}".formatted(assetId)
         );
+    }
+
+    private int relayAllDue() {
+        return outboxRelayService.relay(RelayRequest.scheduledAll(20)).processedCount();
+    }
+
+    private int relayProcessingDue(int batchSize) {
+        return outboxRelayService.relay(RelayRequest.scheduledForType(
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                batchSize
+        )).processedCount();
+    }
+
+    private int relayIndexingDue(int batchSize) {
+        return outboxRelayService.relay(RelayRequest.scheduledForType(
+                IndexingRequestedEventContract.EVENT_TYPE,
+                batchSize
+        )).processedCount();
+    }
+
+    private OutboxDeliveryStatus relayProcessingExact(UUID eventId) {
+        return outboxRelayService.relay(RelayRequest.explicit(
+                eventId,
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                "Manual smoke relay only supports asset.processing.requested events"
+        )).requiredDeliveryStatus();
+    }
+
+    private OutboxDeliveryStatus relayIndexingExact(UUID eventId) {
+        return outboxRelayService.relay(RelayRequest.explicit(
+                eventId,
+                IndexingRequestedEventContract.EVENT_TYPE,
+                "Manual search smoke relay only supports asset.indexing.requested events"
+        )).requiredDeliveryStatus();
     }
 
     @TestConfiguration

@@ -99,6 +99,48 @@ so the assistant module no longer depends on non-exposed FastAPI assistant
 types. The baseline remains `161` messages; strict verification is still blocked
 by older deferred edges.
 
+## P3-S5.B1 Structural Foundation Ratchet
+
+P3-S5.B1 `[VERIFIED BY TESTS]` establishes the first behavior-preserving module
+boundaries without changing HTTP, Kafka, persistence, profile, or recovery
+contracts:
+
+- `outbox::application` is the named neutral API for enqueue, relay, automatic
+  reconciliation, and retained manual recovery. Its immutable `OutboxDraft`
+  carries only the generic persisted envelope values: event identity, type and
+  version, aggregate identity, event key, and serialized payload. JPA entities
+  and repositories remain internal to outbox.
+- Processing owns the `asset.processing.requested` codec under
+  `processing::request-event`; search owns the `asset.indexing.requested` codec
+  under `search::indexing-request-event`. Contract tests freeze topic selection,
+  event/key/aggregate identities, payload field names and values, null handling,
+  and timestamp formats. In particular, processing payload `requestedAt` remains
+  numeric epoch seconds while envelope `occurredAt` remains an ISO date-time.
+- Relay callers now use `RelayRequest`, `RelaySelection`, and
+  `RelayExecutionPolicy` instead of nullable event selectors and boolean failure
+  switches. The existing claim/publish/failure state machine and publisher are
+  still single implementations inside outbox.
+- Feature-specific exception mappings now live in feature-owned advice classes.
+  `common.web` retains neutral framework, validation, authentication, and
+  fallback mappings plus the shared error response shape.
+- OIDC provisioning calls a narrow `common::workspace-provisioning` port whose
+  workspace-owned adapter creates the default workspace inside the existing
+  user-creation transaction. This removes the reverse common-to-workspace
+  repository/entity dependency without changing authentication behavior.
+
+The architecture ratchet now fingerprints the exact normalized violation set
+instead of storing thousands of repeated detail lines. It records `107`
+violation messages and `5` cycle messages, down from `161` and `51`. Direct
+`asset <-> outbox`, `common <-> search`, and `common <-> workspace` cycles are
+removed. Dedicated ArchUnit rules prevent outbox from importing product feature
+implementations and prevent `common.web` from importing feature or integration
+packages.
+
+Strict `ApplicationModules.verify()` is still intentionally red. The remaining
+cycle paths are combinations of `asset`, `processing`, `search`, and `workspace`
+orchestration and are deferred to P3-S5.B2. They are legacy debt recorded by the
+ratchet, not the target architecture and not permission to introduce new edges.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:

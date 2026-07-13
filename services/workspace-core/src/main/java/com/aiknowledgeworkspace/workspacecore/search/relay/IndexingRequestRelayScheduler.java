@@ -1,7 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search.relay;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRelayService;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,16 +17,16 @@ public class IndexingRequestRelayScheduler {
 
     private final IndexingRequestRelayProperties properties;
     private final WorkspaceKafkaProperties kafkaProperties;
-    private final OutboxRelayService outboxRelayService;
+    private final OutboxRelay outboxRelay;
 
     public IndexingRequestRelayScheduler(
             IndexingRequestRelayProperties properties,
             WorkspaceKafkaProperties kafkaProperties,
-            OutboxRelayService outboxRelayService
+            OutboxRelay outboxRelay
     ) {
         this.properties = properties;
         this.kafkaProperties = kafkaProperties;
-        this.outboxRelayService = outboxRelayService;
+        this.outboxRelay = outboxRelay;
     }
 
     public void relayDueIndexingRequestsOnSchedule() {
@@ -41,6 +43,9 @@ public class IndexingRequestRelayScheduler {
         if (!kafkaProperties.isEnabled()) {
             return 0;
         }
-        return outboxRelayService.relayDueIndexingRequestEvents(properties.getBatchSize());
+        return outboxRelay.relay(RelayRequest.scheduledForType(
+                IndexingRequestedEventContract.EVENT_TYPE,
+                properties.getBatchSize()
+        )).processedCount();
     }
 }

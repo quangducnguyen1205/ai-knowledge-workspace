@@ -12,8 +12,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.outbox.AssetIndexingRequestedPayload;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -210,13 +210,13 @@ class TranscriptIndexingServiceTest {
     ) {
         return new AssetIndexingEventEnvelope(
                 eventId,
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
-                OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE,
+                IndexingRequestedEventContract.AGGREGATE_TYPE,
                 assetId,
                 assetId.toString(),
                 Instant.parse("2026-06-22T00:00:00Z"),
-                new AssetIndexingRequestedPayload(assetId, indexingJobId, snapshotFingerprint)
+                new IndexingRequestedPayload(assetId, indexingJobId, snapshotFingerprint)
         );
     }
 

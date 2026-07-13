@@ -3,7 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.UUID;
@@ -26,15 +26,15 @@ class AssetIndexingEventParserTest {
                 assetId,
                 indexingJobId,
                 "abc123",
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
                 assetId.toString()
         ));
 
         assertThat(event.eventId()).isEqualTo(eventId);
-        assertThat(event.eventType()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_REQUESTED);
+        assertThat(event.eventType()).isEqualTo(IndexingRequestedEventContract.EVENT_TYPE);
         assertThat(event.eventVersion()).isEqualTo(1);
-        assertThat(event.aggregateType()).isEqualTo(OutboxEventFactory.ASSET_INDEXING_AGGREGATE_TYPE);
+        assertThat(event.aggregateType()).isEqualTo(IndexingRequestedEventContract.AGGREGATE_TYPE);
         assertThat(event.aggregateId()).isEqualTo(assetId);
         assertThat(event.eventKey()).isEqualTo(assetId.toString());
         assertThat(event.payload().assetId()).isEqualTo(assetId);
@@ -66,7 +66,7 @@ class AssetIndexingEventParserTest {
                 assetId,
                 UUID.randomUUID(),
                 "abc123",
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 2,
                 assetId.toString()
         )))
@@ -81,7 +81,7 @@ class AssetIndexingEventParserTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 "abc123",
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
                 UUID.randomUUID().toString()
         )))
@@ -98,7 +98,7 @@ class AssetIndexingEventParserTest {
                 assetId,
                 UUID.randomUUID(),
                 "x".repeat(129),
-                OutboxEventFactory.ASSET_INDEXING_REQUESTED,
+                IndexingRequestedEventContract.EVENT_TYPE,
                 1,
                 assetId.toString()
         )))

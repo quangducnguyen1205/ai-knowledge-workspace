@@ -8,14 +8,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventFactory;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
@@ -45,7 +45,7 @@ class AssetPersistenceServiceTest {
     private AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
 
     @Mock
-    private OutboxEventRepository outboxEventRepository;
+    private OutboxWriter outboxWriter;
 
     @Mock
     private AssetSearchIndexRequestService assetSearchIndexRequestService;
@@ -88,7 +88,7 @@ class AssetPersistenceServiceTest {
         ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
         verify(assetRepository).save(assetCaptor.capture());
         verify(processingJobRepository).save(processingJobCaptor.capture());
-        verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
+        verify(outboxWriter, never()).enqueue(any(OutboxDraft.class));
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -105,7 +105,7 @@ class AssetPersistenceServiceTest {
         assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isEqualTo("video-1");
         assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isNull();
 
-        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxEventRepository);
+        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxWriter);
         inOrder.verify(assetRepository).save(any(Asset.class));
         inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
         inOrder.verifyNoMoreInteractions();
@@ -138,10 +138,10 @@ class AssetPersistenceServiceTest {
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
         ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
-        ArgumentCaptor<OutboxEvent> outboxEventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        ArgumentCaptor<OutboxDraft> outboxEventCaptor = ArgumentCaptor.forClass(OutboxDraft.class);
         verify(assetRepository).save(assetCaptor.capture());
         verify(processingJobRepository).save(processingJobCaptor.capture());
-        verify(outboxEventRepository).save(outboxEventCaptor.capture());
+        verify(outboxWriter).enqueue(outboxEventCaptor.capture());
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -160,18 +160,16 @@ class AssetPersistenceServiceTest {
         assertThat(processingJobCaptor.getValue().getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
         assertThat(processingJobCaptor.getValue().getRawUpstreamTaskState()).isEqualTo("kafka_request_pending");
 
-        OutboxEvent outboxEvent = outboxEventCaptor.getValue();
-        assertThat(outboxEvent.getId()).isNotNull();
-        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isEqualTo(outboxEvent.getId());
-        assertThat(outboxEvent.getEventType()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED);
-        assertThat(outboxEvent.getEventVersion()).isEqualTo(OutboxEventFactory.ASSET_PROCESSING_REQUESTED_VERSION);
-        assertThat(outboxEvent.getAggregateType()).isEqualTo(OutboxEventFactory.ASSET_AGGREGATE_TYPE);
-        assertThat(outboxEvent.getAggregateId()).isEqualTo(assetId);
-        assertThat(outboxEvent.getEventKey()).isEqualTo(assetId.toString());
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
-        assertThat(outboxEvent.getAttemptCount()).isZero();
+        OutboxDraft outboxEvent = outboxEventCaptor.getValue();
+        assertThat(outboxEvent.eventId()).isNotNull();
+        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isEqualTo(outboxEvent.eventId());
+        assertThat(outboxEvent.eventType()).isEqualTo(ProcessingRequestedEventContract.EVENT_TYPE);
+        assertThat(outboxEvent.eventVersion()).isEqualTo(ProcessingRequestedEventContract.EVENT_VERSION);
+        assertThat(outboxEvent.aggregateType()).isEqualTo(ProcessingRequestedEventContract.AGGREGATE_TYPE);
+        assertThat(outboxEvent.aggregateId()).isEqualTo(assetId);
+        assertThat(outboxEvent.eventKey()).isEqualTo(assetId.toString());
 
-        JsonNode payload = objectMapper.readTree(outboxEvent.getPayload());
+        JsonNode payload = objectMapper.readTree(outboxEvent.payload());
         assertThat(payload.path("assetId").asText()).isEqualTo(assetId.toString());
         assertThat(payload.path("workspaceId").asText()).isEqualTo(workspace.getId().toString());
         assertThat(payload.path("ownerId").asText()).isEqualTo("user-1");
@@ -182,10 +180,10 @@ class AssetPersistenceServiceTest {
         assertThat(payload.path("sizeBytes").asLong()).isEqualTo(12L);
         assertThat(payload.path("requestedAt").asText()).isNotBlank();
 
-        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxEventRepository);
+        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxWriter);
         inOrder.verify(assetRepository).save(any(Asset.class));
         inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
-        inOrder.verify(outboxEventRepository).save(any(OutboxEvent.class));
+        inOrder.verify(outboxWriter).enqueue(any(OutboxDraft.class));
     }
 
     @Test
@@ -280,8 +278,8 @@ class AssetPersistenceServiceTest {
                 assetRepository,
                 processingJobRepository,
                 assetTranscriptRowSnapshotRepository,
-                outboxEventRepository,
-                new OutboxEventFactory(objectMapper),
+                outboxWriter,
+                new ProcessingRequestedEventCodec(objectMapper),
                 assetSearchIndexRequestService
         );
     }
