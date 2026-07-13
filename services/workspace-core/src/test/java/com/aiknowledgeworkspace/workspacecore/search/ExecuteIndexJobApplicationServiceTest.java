@@ -39,7 +39,7 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.web.client.RestClient;
 
 @ExtendWith(MockitoExtension.class)
-class AssetSearchIndexingExecutorTest {
+class ExecuteIndexJobApplicationServiceTest {
 
     @Mock
     private AssetSearchIndexJobRepository searchIndexJobRepository;
@@ -48,14 +48,14 @@ class AssetSearchIndexingExecutorTest {
     private IndexingAssetPort indexingAssetPort;
 
     private MockRestServiceServer mockServer;
-    private AssetSearchIndexingExecutor executor;
+    private ExecuteIndexJobApplicationService executor;
 
     @BeforeEach
     void setUp() {
         executor = executorWithMapper(new TranscriptIndexDocumentMapper());
     }
 
-    private AssetSearchIndexingExecutor executorWithMapper(TranscriptIndexDocumentMapper documentMapper) {
+    private ExecuteIndexJobApplicationService executorWithMapper(TranscriptIndexDocumentMapper documentMapper) {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
@@ -69,13 +69,15 @@ class AssetSearchIndexingExecutorTest {
                 properties,
                 new ObjectMapper()
         );
-        return new AssetSearchIndexingExecutor(
-                searchIndexJobRepository,
-                indexingAssetPort,
-                new TranscriptSnapshotFingerprintService(),
+        return new ExecuteIndexJobApplicationService(
+                new IndexingAttemptTransactionService(
+                        searchIndexJobRepository,
+                        indexingAssetPort,
+                        new TranscriptSnapshotFingerprintService(),
+                        transactionManager()
+                ),
                 searchIndexClient,
-                documentMapper,
-                transactionManager()
+                documentMapper
         );
     }
 
@@ -115,7 +117,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(result.indexedDocumentCount()).isEqualTo(2);
@@ -154,7 +156,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         verify(indexingAssetPort).markSearchable(assetId);
@@ -172,7 +174,7 @@ class AssetSearchIndexingExecutorTest {
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(result.indexedDocumentCount()).isZero();
@@ -192,7 +194,7 @@ class AssetSearchIndexingExecutorTest {
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
         when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
@@ -232,7 +234,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
@@ -249,7 +251,7 @@ class AssetSearchIndexingExecutorTest {
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
         when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.FAILED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.FAILED);
@@ -279,7 +281,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500");
 
@@ -345,7 +347,7 @@ class AssetSearchIndexingExecutorTest {
                         }
                         """.formatted(unsafeProviderReason), MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining(unsafeProviderReason);
 
@@ -406,7 +408,7 @@ class AssetSearchIndexingExecutorTest {
                         }
                         """.formatted(assetId, unsafeTranscriptRowId, unsafeProviderReason), MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining(unsafeProviderReason);
 
@@ -448,7 +450,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500")
                 .hasMessageNotContaining("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK");
@@ -507,7 +509,7 @@ class AssetSearchIndexingExecutorTest {
                         }
                         """.formatted(assetId, unsafeProviderReason), MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> executor.indexJob(indexingJob.getId()))
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
                 .isInstanceOf(ElasticsearchIntegrationException.class)
                 .hasMessageContaining(unsafeProviderReason)
                 .hasMessageNotContaining("SECOND_MAPPING_SHOULD_NOT_MASK");
@@ -556,7 +558,7 @@ class AssetSearchIndexingExecutorTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());
 
-        AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
+        AssetSearchIndexExecutionResult result = executor.execute(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);

@@ -1,9 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search.listener;
 
 import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventHandler;
 import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingHandleResult;
 import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +22,10 @@ class AssetIndexingKafkaListener {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AssetIndexingKafkaListener.class);
 
-    private final TranscriptIndexingService transcriptIndexingService;
+    private final AssetIndexingEventHandler assetIndexingEventHandler;
 
-    AssetIndexingKafkaListener(TranscriptIndexingService transcriptIndexingService) {
-        this.transcriptIndexingService = transcriptIndexingService;
+    AssetIndexingKafkaListener(AssetIndexingEventHandler assetIndexingEventHandler) {
+        this.assetIndexingEventHandler = assetIndexingEventHandler;
     }
 
     @KafkaListener(
@@ -36,7 +36,7 @@ class AssetIndexingKafkaListener {
     )
     void onMessage(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
         try {
-            AssetIndexingHandleResult result = transcriptIndexingService.handleIndexingEvent(record.value());
+            AssetIndexingHandleResult result = assetIndexingEventHandler.handle(record.value());
             acknowledgeHandledResult(record, acknowledgment, result);
         } catch (AssetIndexingEventRejectedException exception) {
             LOGGER.warn(

@@ -8,10 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventHandler;
 import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventRejectedException;
 import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingHandleResult;
 import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -25,8 +25,8 @@ import org.springframework.kafka.support.Acknowledgment;
 
 class AssetIndexingKafkaListenerTest {
 
-    private final TranscriptIndexingService transcriptIndexingService = mock(TranscriptIndexingService.class);
-    private final AssetIndexingKafkaListener listener = new AssetIndexingKafkaListener(transcriptIndexingService);
+    private final AssetIndexingEventHandler assetIndexingEventHandler = mock(AssetIndexingEventHandler.class);
+    private final AssetIndexingKafkaListener listener = new AssetIndexingKafkaListener(assetIndexingEventHandler);
 
     @Test
     void listenerIsDisabledByDefaultInConfigurationProperties() {
@@ -50,11 +50,11 @@ class AssetIndexingKafkaListenerTest {
     void indexedHandlerOutcomeAcknowledgesExactlyOnce() {
         String rawEvent = "{\"eventId\":\"event-1\"}";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.INDEXED));
+        when(assetIndexingEventHandler.handle(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.INDEXED));
 
         listener.onMessage(record(rawEvent), acknowledgment);
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(1)).acknowledge();
     }
 
@@ -62,12 +62,12 @@ class AssetIndexingKafkaListenerTest {
     void supersededNoOpAcknowledgesExactlyOnce() {
         String rawEvent = "{\"eventId\":\"event-1\"}";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent))
+        when(assetIndexingEventHandler.handle(rawEvent))
                 .thenReturn(result(AssetSearchIndexJobStatus.SUPERSEDED));
 
         listener.onMessage(record(rawEvent), acknowledgment);
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(1)).acknowledge();
     }
 
@@ -75,11 +75,11 @@ class AssetIndexingKafkaListenerTest {
     void durableFailedHandlerOutcomeAcknowledgesExactlyOnce() {
         String rawEvent = "{\"eventId\":\"event-1\"}";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.FAILED));
+        when(assetIndexingEventHandler.handle(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.FAILED));
 
         listener.onMessage(record(rawEvent), acknowledgment);
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(1)).acknowledge();
     }
 
@@ -87,12 +87,12 @@ class AssetIndexingKafkaListenerTest {
     void knownMalformedOrUnsupportedRejectionAcknowledgesExactlyOnce() {
         String rawEvent = "not-json";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent))
+        when(assetIndexingEventHandler.handle(rawEvent))
                 .thenThrow(new AssetIndexingEventRejectedException("Indexing event was not valid JSON"));
 
         listener.onMessage(record(rawEvent), acknowledgment);
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(1)).acknowledge();
     }
 
@@ -100,14 +100,14 @@ class AssetIndexingKafkaListenerTest {
     void unexpectedExceptionDoesNotAcknowledgeAndIsRethrown() {
         String rawEvent = "{\"eventId\":\"event-1\"}";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent))
+        when(assetIndexingEventHandler.handle(rawEvent))
                 .thenThrow(new IllegalStateException("elasticsearch unavailable"));
 
         assertThatThrownBy(() -> listener.onMessage(record(rawEvent), acknowledgment))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("elasticsearch unavailable");
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(0)).acknowledge();
     }
 
@@ -115,13 +115,13 @@ class AssetIndexingKafkaListenerTest {
     void unexpectedHandlerStatusDoesNotAcknowledgeAndFailsClearly() {
         String rawEvent = "{\"eventId\":\"event-1\"}";
         Acknowledgment acknowledgment = mock(Acknowledgment.class);
-        when(transcriptIndexingService.handleIndexingEvent(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.PENDING));
+        when(assetIndexingEventHandler.handle(rawEvent)).thenReturn(result(AssetSearchIndexJobStatus.PENDING));
 
         assertThatThrownBy(() -> listener.onMessage(record(rawEvent), acknowledgment))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Unexpected asset indexing job status");
 
-        verify(transcriptIndexingService).handleIndexingEvent(rawEvent);
+        verify(assetIndexingEventHandler).handle(rawEvent);
         verify(acknowledgment, times(0)).acknowledge();
     }
 

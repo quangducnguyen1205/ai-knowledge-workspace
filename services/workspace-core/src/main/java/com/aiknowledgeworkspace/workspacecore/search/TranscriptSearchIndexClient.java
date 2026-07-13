@@ -19,7 +19,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class TranscriptSearchIndexClient {
+public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
 
     private static final int DEFAULT_RESULT_SIZE = 20;
     private static final float TEXT_PHRASE_BOOST = 6.0f;
@@ -52,6 +52,7 @@ public class TranscriptSearchIndexClient {
         );
     }
 
+    @Override
     public void ensureTranscriptIndexExists() {
         String indexName = elasticsearchProperties.getTranscriptIndexName();
         if (transcriptIndexExists(indexName)) {
@@ -61,7 +62,8 @@ public class TranscriptSearchIndexClient {
         createTranscriptIndex(indexName);
     }
 
-    public void indexTranscriptRows(List<TranscriptIndexOperation> operations) {
+    @Override
+    public void indexTranscriptRows(List<TranscriptIndexWriteOperation> operations) {
         JsonNode bulkResponse = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_bulk", elasticsearchProperties.getTranscriptIndexName())
@@ -74,6 +76,7 @@ public class TranscriptSearchIndexClient {
         validateBulkResponse(bulkResponse);
     }
 
+    @Override
     public void refreshTranscriptIndex() {
         execute(
                 () -> elasticsearchRestClient.post()
@@ -84,6 +87,7 @@ public class TranscriptSearchIndexClient {
         );
     }
 
+    @Override
     public void deleteTranscriptRowsForAsset(UUID assetId) {
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
@@ -302,11 +306,11 @@ public class TranscriptSearchIndexClient {
         return Map.of(field, options);
     }
 
-    private String buildBulkRequestBody(List<TranscriptIndexOperation> operations) {
+    private String buildBulkRequestBody(List<TranscriptIndexWriteOperation> operations) {
         StringBuilder body = new StringBuilder();
 
         try {
-            for (TranscriptIndexOperation operation : operations) {
+            for (TranscriptIndexWriteOperation operation : operations) {
                 body.append(objectMapper.writeValueAsString(Map.of("index", Map.of("_id", operation.documentId()))))
                         .append('\n');
                 body.append(objectMapper.writeValueAsString(operation.document()))
@@ -460,9 +464,6 @@ public class TranscriptSearchIndexClient {
                     exception
             );
         }
-    }
-
-    public record TranscriptIndexOperation(String documentId, TranscriptIndexDocument document) {
     }
 
     @FunctionalInterface

@@ -43,7 +43,7 @@ class TranscriptIndexingServiceTest {
     private AssetSearchIndexJobRepository searchIndexJobRepository;
 
     @Mock
-    private AssetSearchIndexingExecutor searchIndexingExecutor;
+    private ExecuteIndexJobApplicationService executeIndexJobApplicationService;
 
     @Mock
     private AssetIndexingEventParser indexingEventParser;
@@ -63,7 +63,7 @@ class TranscriptIndexingServiceTest {
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
-        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
+        when(executeIndexJobApplicationService.execute(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
                 indexingJob.getId(),
                 AssetSearchIndexJobStatus.INDEXED,
                 1
@@ -73,7 +73,7 @@ class TranscriptIndexingServiceTest {
 
         assertThat(response.assetId()).isEqualTo(assetId);
         assertThat(response.indexedDocumentCount()).isEqualTo(1);
-        verify(searchIndexingExecutor).indexJob(indexingJob.getId());
+        verify(executeIndexJobApplicationService).execute(indexingJob.getId());
         verify(indexingAssetPort, never()).markSearchable(assetId);
     }
 
@@ -94,7 +94,7 @@ class TranscriptIndexingServiceTest {
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
-        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
+        when(executeIndexJobApplicationService.execute(indexingJob.getId())).thenReturn(new AssetSearchIndexExecutionResult(
                 indexingJob.getId(),
                 AssetSearchIndexJobStatus.INDEXED,
                 0
@@ -104,7 +104,7 @@ class TranscriptIndexingServiceTest {
 
         assertThat(response.assetId()).isEqualTo(assetId);
         assertThat(response.indexedDocumentCount()).isEqualTo(1);
-        verify(searchIndexingExecutor).indexJob(indexingJob.getId());
+        verify(executeIndexJobApplicationService).execute(indexingJob.getId());
         verify(indexingAssetPort, never()).markTranscriptReady(assetId);
         verify(indexingAssetPort, never()).markSearchable(assetId);
     }
@@ -125,7 +125,7 @@ class TranscriptIndexingServiceTest {
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
-        when(searchIndexingExecutor.indexJob(indexingJob.getId())).thenThrow(failure);
+        when(executeIndexJobApplicationService.execute(indexingJob.getId())).thenThrow(failure);
 
         assertThatThrownBy(() -> transcriptIndexingService().indexAssetTranscript(assetId))
                 .isSameAs(failure);
@@ -145,13 +145,13 @@ class TranscriptIndexingServiceTest {
 
         when(indexingEventParser.parse("raw-event")).thenReturn(envelope);
         when(searchIndexJobRepository.findById(indexingJobId)).thenReturn(Optional.of(indexingJob));
-        when(searchIndexingExecutor.indexJob(indexingJobId)).thenReturn(new AssetSearchIndexExecutionResult(
+        when(executeIndexJobApplicationService.execute(indexingJobId)).thenReturn(new AssetSearchIndexExecutionResult(
                 indexingJobId,
                 AssetSearchIndexJobStatus.INDEXED,
                 2
         ));
 
-        AssetIndexingHandleResult result = transcriptIndexingService().handleIndexingEvent("raw-event");
+        AssetIndexingHandleResult result = indexingEventHandler().handle("raw-event");
 
         assertThat(result.eventId()).isEqualTo(eventId);
         assertThat(result.indexingJobId()).isEqualTo(indexingJobId);
@@ -175,11 +175,11 @@ class TranscriptIndexingServiceTest {
         ));
         when(searchIndexJobRepository.findById(indexingJobId)).thenReturn(Optional.of(indexingJob));
 
-        assertThatThrownBy(() -> transcriptIndexingService().handleIndexingEvent("raw-event"))
+        assertThatThrownBy(() -> indexingEventHandler().handle("raw-event"))
                 .isInstanceOf(AssetIndexingEventRejectedException.class)
                 .hasMessageContaining("snapshot fingerprint");
 
-        verify(searchIndexingExecutor, never()).indexJob(indexingJobId);
+        verify(executeIndexJobApplicationService, never()).execute(indexingJobId);
     }
 
     private TranscriptIndexingService transcriptIndexingService() {
@@ -188,9 +188,15 @@ class TranscriptIndexingServiceTest {
                 indexingAssetPort,
                 fingerprintService,
                 searchIndexRequestService,
+                executeIndexJobApplicationService
+        );
+    }
+
+    private AssetIndexingEventHandler indexingEventHandler() {
+        return new AssetIndexingEventHandler(
+                indexingEventParser,
                 searchIndexJobRepository,
-                searchIndexingExecutor,
-                indexingEventParser
+                executeIndexJobApplicationService
         );
     }
 
