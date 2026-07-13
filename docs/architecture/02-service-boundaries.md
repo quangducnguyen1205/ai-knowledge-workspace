@@ -39,6 +39,14 @@ processing/search`, outbox product-event construction, `common.web` exception
 coupling, `common.identity -> workspace` provisioning, and `search -> processing
 repository`.
 
+P3-S5.B2A `[VERIFIED BY TESTS]` completes the dependency inversion for these
+product flows. Processing, search, and workspace own narrow asset ports that are
+implemented inside asset; asset consumes named processing/search application
+APIs instead of their repositories, entities, or concrete services. Calls remain
+synchronous and retain their prior transaction participation. The Spring
+Modulith ratchet now reports zero cycle messages; remaining strict-verification
+failures are non-cycle exposure debt reserved for later structural work.
+
 ## Current Boundary Diagram
 
 ```mermaid

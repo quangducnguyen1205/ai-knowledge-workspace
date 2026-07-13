@@ -14,11 +14,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -47,10 +45,7 @@ class AssetSearchIndexingExecutorTest {
     private AssetSearchIndexJobRepository searchIndexJobRepository;
 
     @Mock
-    private AssetReadService assetReadService;
-
-    @Mock
-    private AssetSearchabilityService assetSearchabilityService;
+    private IndexingAssetPort indexingAssetPort;
 
     private MockRestServiceServer mockServer;
     private AssetSearchIndexingExecutor executor;
@@ -76,8 +71,7 @@ class AssetSearchIndexingExecutorTest {
         );
         return new AssetSearchIndexingExecutor(
                 searchIndexJobRepository,
-                assetReadService,
-                assetSearchabilityService,
+                indexingAssetPort,
                 new TranscriptSnapshotFingerprintService(),
                 searchIndexClient,
                 documentMapper,
@@ -89,16 +83,16 @@ class AssetSearchIndexingExecutorTest {
     void indexJobDeletesStaleDocsIndexesSnapshotAndMarksAssetSearchable() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, workspaceId, "Lecture 1", List.of(
+        IndexingAssetSource indexingSource = source(assetId, workspaceId, "Lecture 1", List.of(
                 transcriptRow("row-1", 0, "Binary search tree overview"),
                 transcriptRow("row-2", 1, "Traversal example")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectDelete(assetId);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
@@ -126,7 +120,7 @@ class AssetSearchIndexingExecutorTest {
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(result.indexedDocumentCount()).isEqualTo(2);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
-        verify(assetSearchabilityService).markSearchable(assetId);
+        verify(indexingAssetPort).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -134,15 +128,15 @@ class AssetSearchIndexingExecutorTest {
     void missingIndexIsCreatedBeforeReplacingAssetDocuments() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, workspaceId, "Lecture fresh cluster", List.of(
+        IndexingAssetSource indexingSource = source(assetId, workspaceId, "Lecture fresh cluster", List.of(
                 transcriptRow("row-1", 0, "Fresh index text")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectMissingIndexCreated();
         expectDeleteRequest(assetId);
@@ -163,14 +157,14 @@ class AssetSearchIndexingExecutorTest {
         AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
-        verify(assetSearchabilityService).markSearchable(assetId);
+        verify(indexingAssetPort).markSearchable(assetId);
         mockServer.verify();
     }
 
     @Test
     void alreadyIndexedJobIsIdempotentNoOpWithoutWritingElasticsearch() {
         UUID assetId = UUID.randomUUID();
-        List<AssetTranscriptRowView> transcriptRows = List.of(transcriptRow("row-1", 0, "Indexed text"));
+        List<IndexingTranscriptRow> transcriptRows = List.of(transcriptRow("row-1", 0, "Indexed text"));
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
         indexingJob.markIndexing();
@@ -182,27 +176,27 @@ class AssetSearchIndexingExecutorTest {
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(result.indexedDocumentCount()).isZero();
-        verify(assetReadService, never()).findCurrentIndexingSource(assetId);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).findCurrentIndexingSource(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
     @Test
     void staleSnapshotFingerprintSupersedesJobWithoutWritingElasticsearch() {
         UUID assetId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 2", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 2", List.of(
                 transcriptRow("row-1", 0, "New text")
         ));
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "old-fingerprint");
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -210,18 +204,18 @@ class AssetSearchIndexingExecutorTest {
     void snapshotChangeAfterElasticsearchWriteSupersedesJobWithoutMarkingAssetSearchable() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        AssetIndexingSource originalSource = source(assetId, workspaceId, "Lecture race", List.of(
+        IndexingAssetSource originalSource = source(assetId, workspaceId, "Lecture race", List.of(
                 transcriptRow("row-1", 0, "Original text")
         ));
-        AssetIndexingSource changedSource = source(assetId, workspaceId, "Lecture race", List.of(
+        IndexingAssetSource changedSource = source(assetId, workspaceId, "Lecture race", List.of(
                 transcriptRow("row-1", 0, "Changed text")
         ));
-        List<AssetTranscriptRowView> originalRows = originalSource.transcriptRows();
+        List<IndexingTranscriptRow> originalRows = originalSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(originalRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(originalSource), Optional.of(changedSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(originalSource), Optional.of(changedSource));
 
         expectDelete(assetId);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
@@ -242,18 +236,18 @@ class AssetSearchIndexingExecutorTest {
 
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.SUPERSEDED);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
     @Test
     void emptySnapshotMarksJobFailedWithoutMarkingAssetSearchable() {
         UUID assetId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 3", List.of());
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 3", List.of());
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint");
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         AssetSearchIndexExecutionResult result = executor.indexJob(indexingJob.getId());
 
@@ -263,22 +257,22 @@ class AssetSearchIndexingExecutorTest {
                 .contains("category=INDEXING_SOURCE_INVALID")
                 .contains("failureStage=before_bulk")
                 .contains("usableRows=0");
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
     @Test
     void elasticsearchFailureIsRethrownForListenerRedelivery() {
         UUID assetId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 4", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 4", List.of(
                 transcriptRow("row-1", 0, "Text")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
@@ -301,7 +295,7 @@ class AssetSearchIndexingExecutorTest {
                 .contains("textLengthMax=4")
                 .doesNotContain("Elasticsearch returned HTTP 500")
                 .doesNotContain(assetId.toString());
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -311,12 +305,11 @@ class AssetSearchIndexingExecutorTest {
         executor = executorWithMapper(new TranscriptIndexDocumentMapper() {
             @Override
             public TranscriptIndexDocument toDocument(
-                    AssetIndexingSource asset,
-                    AssetTranscriptRowView transcriptRow,
-                    AssetStatus indexedAssetStatus
+                    IndexingAssetSource asset,
+                    IndexingTranscriptRow transcriptRow
             ) {
                 documentMappingCalls.incrementAndGet();
-                return super.toDocument(asset, transcriptRow, indexedAssetStatus);
+                return super.toDocument(asset, transcriptRow);
             }
         });
 
@@ -324,15 +317,15 @@ class AssetSearchIndexingExecutorTest {
         String unsafeTranscriptRowId = "PRE_BULK_ROW_ID_SHOULD_NOT_PERSIST";
         String unsafeTranscriptText = "PRE_BULK_TRANSCRIPT_TEXT_SHOULD_NOT_PERSIST";
         String unsafeProviderReason = "PRE_BULK_PROVIDER_REASON_SHOULD_NOT_PERSIST";
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture pre-bulk", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture pre-bulk", List.of(
                 transcriptRow(unsafeTranscriptRowId, 7, unsafeTranscriptText)
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
@@ -371,7 +364,7 @@ class AssetSearchIndexingExecutorTest {
                 .doesNotContain(unsafeTranscriptRowId)
                 .doesNotContain(assetId.toString())
                 .doesNotContain(unsafeProviderReason);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -381,15 +374,15 @@ class AssetSearchIndexingExecutorTest {
         String unsafeTranscriptRowId = "RAW_SOURCE_ID_SHOULD_NOT_PERSIST";
         String unsafeTranscriptText = "DO_NOT_PERSIST_TRANSCRIPT_TEXT";
         String unsafeProviderReason = "RAW_PROVIDER_REASON_SHOULD_NOT_PERSIST";
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 5", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 5", List.of(
                 transcriptRow(unsafeTranscriptRowId, 2, unsafeTranscriptText)
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectDelete(assetId);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
@@ -430,17 +423,17 @@ class AssetSearchIndexingExecutorTest {
                 .doesNotContain(unsafeTranscriptRowId)
                 .doesNotContain(assetId.toString())
                 .doesNotContain(unsafeProviderReason);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
     @Test
     void diagnosticPersistenceFailureDoesNotMaskOriginalIndexingFailure() {
         UUID assetId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 6", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 6", List.of(
                 transcriptRow("row-1", 0, "Text")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
@@ -448,7 +441,7 @@ class AssetSearchIndexingExecutorTest {
         when(searchIndexJobRepository.save(indexingJob))
                 .thenReturn(indexingJob)
                 .thenThrow(new IllegalStateException("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK"));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
@@ -461,7 +454,7 @@ class AssetSearchIndexingExecutorTest {
                 .hasMessageNotContaining("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK");
 
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -471,28 +464,27 @@ class AssetSearchIndexingExecutorTest {
         executor = executorWithMapper(new TranscriptIndexDocumentMapper() {
             @Override
             public TranscriptIndexDocument toDocument(
-                    AssetIndexingSource asset,
-                    AssetTranscriptRowView transcriptRow,
-                    AssetStatus indexedAssetStatus
+                    IndexingAssetSource asset,
+                    IndexingTranscriptRow transcriptRow
             ) {
                 if (documentMappingCalls.incrementAndGet() > 1) {
                     throw new IllegalStateException("SECOND_MAPPING_SHOULD_NOT_MASK");
                 }
-                return super.toDocument(asset, transcriptRow, indexedAssetStatus);
+                return super.toDocument(asset, transcriptRow);
             }
         });
 
         UUID assetId = UUID.randomUUID();
         String unsafeProviderReason = "ORIGINAL_PROVIDER_REASON_SHOULD_WIN";
-        AssetIndexingSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 7", List.of(
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 7", List.of(
                 transcriptRow("row-1", 3, "Mapped once")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectDelete(assetId);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
@@ -530,7 +522,7 @@ class AssetSearchIndexingExecutorTest {
                 .doesNotContain(unsafeProviderReason)
                 .doesNotContain("SECOND_MAPPING_SHOULD_NOT_MASK")
                 .doesNotContain(assetId.toString());
-        verify(assetSearchabilityService, never()).markSearchable(assetId);
+        verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -538,16 +530,16 @@ class AssetSearchIndexingExecutorTest {
     void interruptedIndexingJobCanBeRedeliveredAndCompleted() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        AssetIndexingSource indexingSource = source(assetId, workspaceId, "Lecture retry", List.of(
+        IndexingAssetSource indexingSource = source(assetId, workspaceId, "Lecture retry", List.of(
                 transcriptRow("row-1", 0, "Retry text")
         ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(transcriptRows);
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
         indexingJob.markIndexing();
 
         when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
-        when(assetReadService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectDelete(assetId);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_bulk"))
@@ -569,7 +561,7 @@ class AssetSearchIndexingExecutorTest {
         assertThat(result.status()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXED);
         assertThat(indexingJob.getAttemptCount()).isEqualTo(2);
-        verify(assetSearchabilityService).markSearchable(assetId);
+        verify(indexingAssetPort).markSearchable(assetId);
         mockServer.verify();
     }
 
@@ -614,21 +606,21 @@ class AssetSearchIndexingExecutorTest {
                         """, MediaType.APPLICATION_JSON));
     }
 
-    private AssetIndexingSource source(
+    private IndexingAssetSource source(
             UUID assetId,
             UUID workspaceId,
             String title,
-            List<AssetTranscriptRowView> transcriptRows
+            List<IndexingTranscriptRow> transcriptRows
     ) {
-        return new AssetIndexingSource(assetId, workspaceId, title, transcriptRows);
+        return new IndexingAssetSource(assetId, workspaceId, title, transcriptRows);
     }
 
-    private AssetTranscriptRowView transcriptRow(
+    private IndexingTranscriptRow transcriptRow(
             String transcriptRowId,
             int segmentIndex,
             String text
     ) {
-        return new AssetTranscriptRowView(
+        return new IndexingTranscriptRow(
                 transcriptRowId,
                 "video-1",
                 segmentIndex,

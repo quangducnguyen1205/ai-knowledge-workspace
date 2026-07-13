@@ -1,14 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetProcessingResultApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowInput;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingResultAssetPort;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingTranscriptRow;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -31,7 +31,7 @@ public class ProcessingResultEventHandler {
     private final ProcessingJobRepository processingJobRepository;
     private final FastApiProcessingClient fastApiProcessingClient;
     private final TranscriptArtifactValidator transcriptArtifactValidator;
-    private final AssetProcessingResultApplicationService assetProcessingResultApplicationService;
+    private final ProcessingResultAssetPort processingResultAssetPort;
 
     public ProcessingResultEventHandler(
             ProcessingResultEventParser eventParser,
@@ -39,14 +39,14 @@ public class ProcessingResultEventHandler {
             ProcessingJobRepository processingJobRepository,
             FastApiProcessingClient fastApiProcessingClient,
             TranscriptArtifactValidator transcriptArtifactValidator,
-            AssetProcessingResultApplicationService assetProcessingResultApplicationService
+            ProcessingResultAssetPort processingResultAssetPort
     ) {
         this.eventParser = eventParser;
         this.consumedEventRepository = consumedEventRepository;
         this.processingJobRepository = processingJobRepository;
         this.fastApiProcessingClient = fastApiProcessingClient;
         this.transcriptArtifactValidator = transcriptArtifactValidator;
-        this.assetProcessingResultApplicationService = assetProcessingResultApplicationService;
+        this.processingResultAssetPort = processingResultAssetPort;
     }
 
     @Transactional
@@ -181,27 +181,27 @@ public class ProcessingResultEventHandler {
 
     private void applyAssetTranscriptReady(UUID assetId, List<FastApiTranscriptRowResponse> transcriptRows) {
         try {
-            assetProcessingResultApplicationService.applyTranscriptReady(
+            processingResultAssetPort.applyTranscriptReady(
                     assetId,
                     transcriptRows.stream()
-                            .map(this::toAssetTranscriptRowInput)
+                            .map(this::toProcessingTranscriptRow)
                             .toList()
             );
-        } catch (AssetNotFoundException exception) {
+        } catch (ProcessingAssetUnavailableException exception) {
             throw new ProcessingResultEventApplyException("Asset was not found for result event", exception);
         }
     }
 
     private void applyAssetProcessingFailed(UUID assetId) {
         try {
-            assetProcessingResultApplicationService.applyProcessingFailed(assetId);
-        } catch (AssetNotFoundException exception) {
+            processingResultAssetPort.applyProcessingFailed(assetId);
+        } catch (ProcessingAssetUnavailableException exception) {
             throw new ProcessingResultEventApplyException("Asset was not found for result event", exception);
         }
     }
 
-    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
-        return new AssetTranscriptRowInput(
+    private ProcessingTranscriptRow toProcessingTranscriptRow(FastApiTranscriptRowResponse transcriptRow) {
+        return new ProcessingTranscriptRow(
                 transcriptRow.id(),
                 transcriptRow.videoId(),
                 transcriptRow.segmentIndex(),

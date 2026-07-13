@@ -1,17 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
 import org.springframework.stereotype.Component;
 
 @Component
 public class TranscriptIndexDocumentMapper {
 
     public TranscriptIndexDocument toDocument(
-            AssetIndexingSource asset,
-            AssetTranscriptRowView transcriptRow,
-            AssetStatus indexedAssetStatus
+            IndexingAssetSource asset,
+            IndexingTranscriptRow transcriptRow
     ) {
         return new TranscriptIndexDocument(
                 asset.assetId(),
@@ -21,7 +19,7 @@ public class TranscriptIndexDocumentMapper {
                 transcriptRow.segmentIndex(),
                 transcriptRow.text(),
                 transcriptRow.createdAt(),
-                indexedAssetStatus
+                "SEARCHABLE"
         );
     }
 }

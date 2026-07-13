@@ -8,8 +8,6 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -17,6 +15,9 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -42,10 +43,10 @@ class SearchServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @Mock
-    private AssetWorkspaceUsageService assetWorkspaceUsageService;
+    private WorkspaceAssetUsagePort workspaceAssetUsagePort;
 
     @Mock
-    private AssetReadService assetReadService;
+    private SearchAssetQueryPort searchAssetQueryPort;
 
     private MockRestServiceServer mockServer;
     private CurrentUserService currentUserService;
@@ -61,7 +62,7 @@ class SearchServiceTest {
         currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetWorkspaceUsageService,
+                workspaceAssetUsagePort,
                 new WorkspaceProperties(),
                 currentUserService
         );
@@ -75,7 +76,9 @@ class SearchServiceTest {
                 properties,
                 new ObjectMapper()
         );
-        searchService = new SearchService(workspaceService, assetReadService, searchIndexClient);
+        WorkspaceQueryApplication workspaceQueryApplication = requestedWorkspaceId ->
+                workspaceService.resolveWorkspaceOrDefault(requestedWorkspaceId).getId();
+        searchService = new SearchService(workspaceQueryApplication, searchAssetQueryPort, searchIndexClient);
     }
 
     @AfterEach
@@ -92,7 +95,7 @@ class SearchServiceTest {
         org.mockito.Mockito.when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
                 .thenReturn(java.util.List.of(defaultWorkspace));
         UUID assetId = UUID.randomUUID();
-        org.mockito.Mockito.when(assetReadService.findSearchableAssetIdsInWorkspace(defaultWorkspace.getId()))
+        org.mockito.Mockito.when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(defaultWorkspace.getId()))
                 .thenReturn(List.of(assetId));
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))

@@ -141,6 +141,34 @@ cycle paths are combinations of `asset`, `processing`, `search`, and `workspace`
 orchestration and are deferred to P3-S5.B2. They are legacy debt recorded by the
 ratchet, not the target architecture and not permission to introduce new edges.
 
+## P3-S5.B2A Orchestration Cycle Elimination
+
+P3-S5.B2A `[VERIFIED BY TESTS]` removes the five remaining product-orchestration
+cycle messages through consumer-owned ports and state-owning adapters. Processing,
+search, and workspace declare the asset capabilities they consume under their
+named `application` interfaces; package-private asset adapters implement those
+ports by delegating to the existing asset-owned services. Processing-result
+idempotency and parsing remain in processing, canonical transcript and lifecycle
+state remain in asset, indexing jobs and Elasticsearch writes remain in search,
+and workspace deletion still consults the single asset-owned usage query.
+
+The reverse direction is also narrowed. Asset now creates and reads processing
+jobs through `processing::application`, and invokes automatic/explicit indexing
+and search maintenance through `search::application`; it no longer imports the
+processing or search repositories, entities, or concrete orchestration services.
+All calls remain synchronous and join the same existing transaction boundaries.
+No application event, extra database transaction, schema change, or contract
+change was introduced.
+
+The reviewed ratchet is now `101` violation messages and `0` cycle messages,
+down from `107` and `5`. Strict verification remains red because non-cycle
+named-interface/exposure debt still exists. Direct architecture rules now guard
+the new directions: processing/search/workspace cannot depend on asset
+implementations, while asset may consume only the processing/search application
+boundaries (plus the existing public processing status enum used by the frozen
+asset response contract). B2B may decompose orchestration classes only after
+these zero-cycle rules and the event/error contract tests remain green.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
@@ -364,7 +392,7 @@ Initial public APIs should be small Java service contracts or named interfaces, 
 
 1. The application root package `com.aiknowledgeworkspace.workspacecore` and its direct subpackages are syntactically compatible with Spring Modulith default module detection.
 2. P3-BE1 confirmed default detection creates modules for `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
-3. A default `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` is intentionally not used as a passing test today because confirmed cycles exist among `asset`, `processing`, `search`, and `workspace`, and because `common` and `outbox` still depend on product packages.
+3. A default `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` is intentionally not used as a passing test today. P3-S5.B2A reduced cycle messages to zero, but reviewed non-cycle named-interface and exposure violations remain in the exact ratchet.
 4. P3-BE1 chooses a focused verification baseline that documents current violations and gates unreviewed drift. It does not define allowed dependencies/named interfaces, temporarily exclude product modules, mark modules open, or reclassify technical packages.
 5. Candidate first product module roots: `assistant`, `workspace`, `asset`, `processing`, `search`.
 6. Candidate technical/platform roots: `outbox`, `storage`, `integration.fastapi`, `common.config`, `common.web`, `common.health`.

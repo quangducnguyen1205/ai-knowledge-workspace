@@ -1,6 +1,5 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -231,7 +230,7 @@ public class TranscriptSearchIndexClient {
             List<UUID> eligibleAssetIds
     ) {
         List<Map<String, Object>> filterClauses = new ArrayList<>();
-        filterClauses.add(termFilter("assetStatus.keyword", AssetStatus.SEARCHABLE.name()));
+        filterClauses.add(termFilter("assetStatus.keyword", "SEARCHABLE"));
         filterClauses.add(termFilter("workspaceId.keyword", workspaceId.toString()));
 
         if (assetId != null) {

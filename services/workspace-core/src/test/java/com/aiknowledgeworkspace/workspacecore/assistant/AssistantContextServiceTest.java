@@ -23,11 +23,13 @@ import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
 import com.aiknowledgeworkspace.workspacecore.search.SearchService;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -352,16 +354,17 @@ class AssistantContextServiceTest {
         currentUserProperties.setDevFallbackEnabled(false);
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = mock(WorkspaceRepository.class);
-        AssetWorkspaceUsageService assetWorkspaceUsageService = mock(AssetWorkspaceUsageService.class);
         WorkspaceService workspaceService = new WorkspaceService(
                 workspaceRepository,
-                assetWorkspaceUsageService,
+                workspaceId -> false,
                 new WorkspaceProperties(),
                 currentUserService
         );
+        WorkspaceQueryApplication workspaceQuery = requestedId ->
+                workspaceService.resolveWorkspaceOrDefault(requestedId).getId();
         SearchService realSearchService = new SearchService(
-                workspaceService,
-                mock(AssetReadService.class),
+                workspaceQuery,
+                mock(SearchAssetQueryPort.class),
                 mock(TranscriptSearchIndexClient.class)
         );
         AssistantContextService realAssistantContextService = new AssistantContextService(

@@ -26,4 +26,22 @@ public class SearchApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
     }
+
+    @ExceptionHandler(SearchProcessingJobNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleProcessingJobNotFound(SearchProcessingJobNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("PROCESSING_JOB_NOT_FOUND", exception.getMessage()));
+    }
+
+    @ExceptionHandler(SearchTranscriptUnavailableException.class)
+    ResponseEntity<ApiErrorResponse> handleTranscriptUnavailable(SearchTranscriptUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(SearchAssetNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleAssetNotFound(SearchAssetNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("ASSET_NOT_FOUND", exception.getMessage()));
+    }
 }

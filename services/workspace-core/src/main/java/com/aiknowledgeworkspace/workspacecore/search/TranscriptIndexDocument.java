@@ -1,6 +1,5 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import java.util.UUID;
 
 public record TranscriptIndexDocument(
@@ -11,6 +10,6 @@ public record TranscriptIndexDocument(
         Integer segmentIndex,
         String text,
         String createdAt,
-        AssetStatus assetStatus
+        String assetStatus
 ) {
 }

@@ -1,9 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetDetails;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,23 +16,23 @@ public class SearchService {
 
     private static final int MAX_SEARCHABLE_ASSET_TERMS = 1_000;
 
-    private final WorkspaceService workspaceService;
-    private final AssetReadService assetReadService;
+    private final WorkspaceQueryApplication workspaceQueryApplication;
+    private final SearchAssetQueryPort searchAssetQueryPort;
     private final TranscriptSearchIndexClient transcriptSearchIndexClient;
 
     public SearchService(
-            WorkspaceService workspaceService,
-            AssetReadService assetReadService,
+            WorkspaceQueryApplication workspaceQueryApplication,
+            SearchAssetQueryPort searchAssetQueryPort,
             TranscriptSearchIndexClient transcriptSearchIndexClient
     ) {
-        this.workspaceService = workspaceService;
-        this.assetReadService = assetReadService;
+        this.workspaceQueryApplication = workspaceQueryApplication;
+        this.searchAssetQueryPort = searchAssetQueryPort;
         this.transcriptSearchIndexClient = transcriptSearchIndexClient;
     }
 
     public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
         String normalizedQuery = normalizeQuery(query);
-        UUID resolvedWorkspaceId = workspaceService.resolveWorkspaceOrDefault(workspaceId).getId();
+        UUID resolvedWorkspaceId = workspaceQueryApplication.resolveWorkspaceId(workspaceId);
         UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
         List<UUID> eligibleAssetIds = resolveEligibleAssetIds(resolvedWorkspaceId, validatedAssetId);
         if (eligibleAssetIds.isEmpty()) {
@@ -60,9 +60,9 @@ public class SearchService {
             return null;
         }
 
-        AssetDetails asset = assetReadService.getAuthorizedAssetDetails(assetId);
+        SearchAssetDetails asset = authorizedAssetDetails(assetId);
         if (!workspaceId.equals(asset.workspaceId())) {
-            throw new AssetNotFoundException();
+            throw new SearchAssetNotFoundException();
         }
 
         return assetId;
@@ -70,11 +70,11 @@ public class SearchService {
 
     private List<UUID> resolveEligibleAssetIds(UUID workspaceId, UUID assetId) {
         if (assetId != null) {
-            AssetDetails asset = assetReadService.getAuthorizedAssetDetails(assetId);
+            SearchAssetDetails asset = authorizedAssetDetails(assetId);
             return asset.searchable() ? List.of(assetId) : List.of();
         }
 
-        List<UUID> eligibleAssetIds = assetReadService.findSearchableAssetIdsInWorkspace(workspaceId);
+        List<UUID> eligibleAssetIds = searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId);
         if (eligibleAssetIds.size() > MAX_SEARCHABLE_ASSET_TERMS) {
             throw new InvalidSearchRequestException(
                     "SEARCH_SCOPE_TOO_LARGE",
@@ -82,6 +82,14 @@ public class SearchService {
             );
         }
         return eligibleAssetIds;
+    }
+
+    private SearchAssetDetails authorizedAssetDetails(UUID assetId) {
+        try {
+            return searchAssetQueryPort.getAuthorizedAssetDetails(assetId);
+        } catch (SearchAssetUnavailableException exception) {
+            throw new SearchAssetNotFoundException();
+        }
     }
 
     private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {

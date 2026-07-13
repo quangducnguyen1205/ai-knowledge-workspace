@@ -14,17 +14,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetDetails;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -41,16 +39,16 @@ class SearchControllerTest {
 
     private MockRestServiceServer mockServer;
     private MockMvc mockMvc;
-    private WorkspaceService workspaceService;
-    private AssetReadService assetReadService;
+    private WorkspaceQueryApplication workspaceQueryApplication;
+    private SearchAssetQueryPort searchAssetQueryPort;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
-        workspaceService = mock(WorkspaceService.class);
-        assetReadService = mock(AssetReadService.class);
+        workspaceQueryApplication = mock(WorkspaceQueryApplication.class);
+        searchAssetQueryPort = mock(SearchAssetQueryPort.class);
 
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://localhost:9201");
@@ -61,7 +59,7 @@ class SearchControllerTest {
                 properties,
                 new ObjectMapper()
         );
-        SearchService searchService = new SearchService(workspaceService, assetReadService, searchIndexClient);
+        SearchService searchService = new SearchService(workspaceQueryApplication, searchAssetQueryPort, searchIndexClient);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)
@@ -78,10 +76,9 @@ class SearchControllerTest {
     void searchReturnsTranscriptRowResultsFromSpring() throws Exception {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
-                .thenReturn(new Workspace(workspaceId, "Algorithms"));
-        when(assetReadService.getAuthorizedAssetDetails(assetId))
-                .thenReturn(new AssetDetails(assetId, workspaceId, "Lecture 5", AssetStatus.SEARCHABLE));
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
+                .thenReturn(new SearchAssetDetails(assetId, workspaceId, true));
         String searchResponse = """
                 {
                   "hits": {
@@ -159,9 +156,8 @@ class SearchControllerTest {
     @Test
     void searchUsesDefaultWorkspaceWhenWorkspaceIdIsOmitted() throws Exception {
         UUID defaultWorkspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        when(workspaceService.resolveWorkspaceOrDefault(null))
-                .thenReturn(new Workspace(defaultWorkspaceId, "Default Workspace"));
-        when(assetReadService.findSearchableAssetIdsInWorkspace(defaultWorkspaceId))
+        when(workspaceQueryApplication.resolveWorkspaceId(null)).thenReturn(defaultWorkspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(defaultWorkspaceId))
                 .thenReturn(List.of(UUID.randomUUID()));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
@@ -183,9 +179,8 @@ class SearchControllerTest {
     void searchWithoutAssetIdStillFiltersByResolvedWorkspaceAndSearchableAssets() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID searchableAssetId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
-                .thenReturn(new Workspace(workspaceId, "Systems"));
-        when(assetReadService.findSearchableAssetIdsInWorkspace(workspaceId))
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId))
                 .thenReturn(List.of(searchableAssetId));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
@@ -212,10 +207,9 @@ class SearchControllerTest {
         UUID workspaceId = UUID.randomUUID();
         UUID otherWorkspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
-                .thenReturn(new Workspace(workspaceId, "Algorithms"));
-        when(assetReadService.getAuthorizedAssetDetails(assetId))
-                .thenReturn(new AssetDetails(assetId, otherWorkspaceId, "Lecture 8", AssetStatus.SEARCHABLE));
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
+                .thenReturn(new SearchAssetDetails(assetId, otherWorkspaceId, true));
 
         mockMvc.perform(get("/api/search")
                         .param("q", "consensus")
@@ -232,10 +226,9 @@ class SearchControllerTest {
     void searchWithUnknownOrNonOwnedAssetReturnsOwnershipSafeNotFound() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
-                .thenReturn(new Workspace(workspaceId, "Algorithms"));
-        when(assetReadService.getAuthorizedAssetDetails(assetId))
-                .thenThrow(new AssetNotFoundException());
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
+                .thenThrow(new SearchAssetUnavailableException(new IllegalStateException("unavailable")));
 
         mockMvc.perform(get("/api/search")
                         .param("q", "consensus")
@@ -252,9 +245,8 @@ class SearchControllerTest {
     void searchAddsPhraseBoostLayerWithoutChangingResponseContract() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID searchableAssetId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
-                .thenReturn(new Workspace(workspaceId, "Systems"));
-        when(assetReadService.findSearchableAssetIdsInWorkspace(workspaceId))
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId))
                 .thenReturn(List.of(searchableAssetId));
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
@@ -302,7 +294,7 @@ class SearchControllerTest {
     @Test
     void unknownOrNonOwnedWorkspaceReturnsNotFound() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(get("/api/search")

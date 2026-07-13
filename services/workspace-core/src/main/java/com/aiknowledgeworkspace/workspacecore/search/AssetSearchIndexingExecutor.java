@@ -1,13 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.Category;
 import com.aiknowledgeworkspace.workspacecore.search.IndexingFailureDiagnostic.FailureStage;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,8 +21,7 @@ public class AssetSearchIndexingExecutor {
     private static final int MAX_ERROR_DETAIL_LENGTH = 1024;
 
     private final AssetSearchIndexJobRepository searchIndexJobRepository;
-    private final AssetReadService assetReadService;
-    private final AssetSearchabilityService assetSearchabilityService;
+    private final IndexingAssetPort indexingAssetPort;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final TranscriptSearchIndexClient transcriptSearchIndexClient;
     private final TranscriptIndexDocumentMapper transcriptIndexDocumentMapper;
@@ -32,16 +29,14 @@ public class AssetSearchIndexingExecutor {
 
     public AssetSearchIndexingExecutor(
             AssetSearchIndexJobRepository searchIndexJobRepository,
-            AssetReadService assetReadService,
-            AssetSearchabilityService assetSearchabilityService,
+            IndexingAssetPort indexingAssetPort,
             TranscriptSnapshotFingerprintService fingerprintService,
             TranscriptSearchIndexClient transcriptSearchIndexClient,
             TranscriptIndexDocumentMapper transcriptIndexDocumentMapper,
             PlatformTransactionManager transactionManager
     ) {
         this.searchIndexJobRepository = searchIndexJobRepository;
-        this.assetReadService = assetReadService;
-        this.assetSearchabilityService = assetSearchabilityService;
+        this.indexingAssetPort = indexingAssetPort;
         this.fingerprintService = fingerprintService;
         this.transcriptSearchIndexClient = transcriptSearchIndexClient;
         this.transcriptIndexDocumentMapper = transcriptIndexDocumentMapper;
@@ -88,11 +83,11 @@ public class AssetSearchIndexingExecutor {
             ));
         }
 
-        AssetIndexingSource indexingSource = assetReadService.findCurrentIndexingSource(indexingJob.getAssetId())
+        IndexingAssetSource indexingSource = indexingAssetPort.findCurrentIndexingSource(indexingJob.getAssetId())
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset was not found for search indexing job: " + indexingJob.getAssetId()
                 ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         if (transcriptRows.isEmpty()) {
             indexingJob.markFailed(IndexingFailureDiagnostic.from(
                     List.of(),
@@ -125,7 +120,7 @@ public class AssetSearchIndexingExecutor {
         return IndexingAttempt.started(indexingJob.getId(), indexingSource);
     }
 
-    private void writeToElasticsearch(AssetIndexingSource indexingSource) {
+    private void writeToElasticsearch(IndexingAssetSource indexingSource) {
         runIndexingStep(
                 FailureStage.BEFORE_BULK,
                 Category.ELASTICSEARCH_RESPONSE_INVALID,
@@ -298,11 +293,11 @@ public class AssetSearchIndexingExecutor {
                     + indexingJob.getStatus());
         }
 
-        AssetIndexingSource indexingSource = assetReadService.findCurrentIndexingSource(indexingJob.getAssetId())
+        IndexingAssetSource indexingSource = indexingAssetPort.findCurrentIndexingSource(indexingJob.getAssetId())
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset was not found for search indexing job: " + indexingJob.getAssetId()
                 ));
-        List<AssetTranscriptRowView> transcriptRows = indexingSource.transcriptRows();
+        List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         if (transcriptRows.isEmpty()) {
             indexingJob.markSuperseded();
             searchIndexJobRepository.save(indexingJob);
@@ -318,8 +313,8 @@ public class AssetSearchIndexingExecutor {
         indexingJob.markIndexed(java.time.Instant.now());
         searchIndexJobRepository.save(indexingJob);
         try {
-            assetSearchabilityService.markSearchable(indexingSource.assetId());
-        } catch (AssetNotFoundException exception) {
+            indexingAssetPort.markSearchable(indexingSource.assetId());
+        } catch (SearchAssetUnavailableException exception) {
             throw new AssetIndexingEventRejectedException(
                     "Asset was not found for search indexing job: " + indexingJob.getAssetId()
             );
@@ -331,10 +326,10 @@ public class AssetSearchIndexingExecutor {
         );
     }
 
-    private IndexingPlan toIndexOperations(AssetIndexingSource indexingSource) {
+    private IndexingPlan toIndexOperations(IndexingAssetSource indexingSource) {
         List<TranscriptSearchIndexClient.TranscriptIndexOperation> operations = new ArrayList<>();
         List<IndexingFailureDiagnostic.RowMetadata> rowMetadata = new ArrayList<>();
-        for (AssetTranscriptRowView transcriptRow : indexingSource.transcriptRows()) {
+        for (IndexingTranscriptRow transcriptRow : indexingSource.transcriptRows()) {
             String rawTranscriptRowId = transcriptRow.id();
             String transcriptRowId = StringUtils.hasText(rawTranscriptRowId)
                     ? rawTranscriptRowId
@@ -342,8 +337,7 @@ public class AssetSearchIndexingExecutor {
             String documentId = indexingSource.assetId() + "-" + transcriptRowId;
             TranscriptIndexDocument document = transcriptIndexDocumentMapper.toDocument(
                     indexingSource,
-                    transcriptRow,
-                    AssetStatus.SEARCHABLE
+                    transcriptRow
             );
             operations.add(new TranscriptSearchIndexClient.TranscriptIndexOperation(documentId, document));
             String text = document.text();
@@ -370,7 +364,7 @@ public class AssetSearchIndexingExecutor {
 
     private record IndexingAttempt(
             UUID indexingJobId,
-            AssetIndexingSource indexingSource,
+            IndexingAssetSource indexingSource,
             AssetSearchIndexExecutionResult result
     ) {
 
@@ -380,7 +374,7 @@ public class AssetSearchIndexingExecutor {
 
         static IndexingAttempt started(
                 UUID indexingJobId,
-                AssetIndexingSource indexingSource
+                IndexingAssetSource indexingSource
         ) {
             return new IndexingAttempt(indexingJobId, indexingSource, null);
         }
