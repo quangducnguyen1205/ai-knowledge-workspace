@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -15,18 +15,18 @@ public class AssetDeletionService {
 
     private final AssetService assetService;
     private final AssetPersistenceService assetPersistenceService;
-    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
+    private final AssetSearchMaintenance assetSearchMaintenance;
     private final ObjectStorageClient objectStorageClient;
 
     public AssetDeletionService(
             AssetService assetService,
             AssetPersistenceService assetPersistenceService,
-            TranscriptSearchIndexClient transcriptSearchIndexClient,
+            AssetSearchMaintenance assetSearchMaintenance,
             ObjectStorageClient objectStorageClient
     ) {
         this.assetService = assetService;
         this.assetPersistenceService = assetPersistenceService;
-        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
+        this.assetSearchMaintenance = assetSearchMaintenance;
         this.objectStorageClient = objectStorageClient;
     }
 
@@ -34,7 +34,7 @@ public class AssetDeletionService {
         Asset asset = assetService.getAsset(assetId);
 
         if (asset.getStatus() == AssetStatus.SEARCHABLE) {
-            transcriptSearchIndexClient.deleteTranscriptRowsForAsset(assetId);
+            assetSearchMaintenance.deleteTranscriptRows(assetId);
         }
 
         assetPersistenceService.deleteAssetRecords(asset);

@@ -16,11 +16,10 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegra
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
@@ -30,6 +29,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -60,7 +60,7 @@ class AssetServiceTest {
     private AssetRepository assetRepository;
 
     @Mock
-    private ProcessingJobRepository processingJobRepository;
+    private ProcessingRequestApplication processingRequestApplication;
 
     @Mock
     private FastApiProcessingClient fastApiProcessingClient;
@@ -91,7 +91,7 @@ class AssetServiceTest {
     void uploadAssociatesAssetWithResolvedWorkspace() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
@@ -161,7 +161,7 @@ class AssetServiceTest {
     void uploadUsesDefaultWorkspaceWhenWorkspaceIdIsOmitted() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
@@ -210,18 +210,16 @@ class AssetServiceTest {
 
     @Test
     void uploadInKafkaRequestModeDoesNotCallFastApiDirectUploadAndPersistsOutboxIntent() {
-        ProcessingProperties processingProperties = new ProcessingProperties();
-        processingProperties.setTriggerMode(ProcessingTriggerMode.KAFKA_REQUEST);
+        when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(true);
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
                 objectStorageClient,
                 objectKeyFactory,
-                objectStorageProperties,
-                processingProperties
+                objectStorageProperties
         );
 
         UUID workspaceId = UUID.randomUUID();
@@ -281,7 +279,7 @@ class AssetServiceTest {
     void uploadCleansStoredObjectWhenFastApiUploadFails() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
@@ -326,7 +324,7 @@ class AssetServiceTest {
     void uploadCleansStoredObjectWhenDatabasePersistenceFails() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
@@ -372,7 +370,7 @@ class AssetServiceTest {
     void getAssetRejectsAssetWithoutWorkspace() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -394,7 +392,7 @@ class AssetServiceTest {
     void getAssetReturnsOwnedAssetWithoutBackfill() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -416,7 +414,7 @@ class AssetServiceTest {
     void getAssetStatusReturnsLocalStateWhenNoDirectFastApiTaskExists() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -434,7 +432,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
 
         AssetStatusResponse response = assetService.getAssetStatus(assetId);
 
@@ -448,7 +446,7 @@ class AssetServiceTest {
     void getAssetRejectsNonOwnedAssetWithOwnershipSafeNotFound() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -473,7 +471,7 @@ class AssetServiceTest {
         CurrentUserProperties currentUserProperties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
-        AssetWorkspaceUsageService assetWorkspaceUsageService = org.mockito.Mockito.mock(AssetWorkspaceUsageService.class);
+        WorkspaceAssetUsagePort assetWorkspaceUsageService = org.mockito.Mockito.mock(WorkspaceAssetUsagePort.class);
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         WorkspaceService realWorkspaceService = new WorkspaceService(
                 workspaceRepository,
@@ -483,7 +481,7 @@ class AssetServiceTest {
         );
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 realWorkspaceService
@@ -517,7 +515,7 @@ class AssetServiceTest {
         CurrentUserProperties currentUserProperties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
         WorkspaceRepository workspaceRepository = org.mockito.Mockito.mock(WorkspaceRepository.class);
-        AssetWorkspaceUsageService assetWorkspaceUsageService = org.mockito.Mockito.mock(AssetWorkspaceUsageService.class);
+        WorkspaceAssetUsagePort assetWorkspaceUsageService = org.mockito.Mockito.mock(WorkspaceAssetUsagePort.class);
         WorkspaceService realWorkspaceService = new WorkspaceService(
                 workspaceRepository,
                 assetWorkspaceUsageService,
@@ -526,7 +524,7 @@ class AssetServiceTest {
         );
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 realWorkspaceService
@@ -547,7 +545,7 @@ class AssetServiceTest {
     void listAssetsUsesDefaultWorkspaceScopeOnly() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -596,7 +594,7 @@ class AssetServiceTest {
     void listAssetsUsesRequestedNonDefaultWorkspace() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -629,7 +627,7 @@ class AssetServiceTest {
     void listAssetsSupportsExplicitPageAndSize() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -681,7 +679,7 @@ class AssetServiceTest {
     void listAssetsFiltersByAssetStatusWithinWorkspaceScope() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -721,7 +719,7 @@ class AssetServiceTest {
     void listAssetsRejectsNegativePage() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -736,7 +734,7 @@ class AssetServiceTest {
     void listAssetsRejectsNonPositiveSize() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -751,7 +749,7 @@ class AssetServiceTest {
     void listAssetsRejectsSizeAboveMaximum() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -766,7 +764,7 @@ class AssetServiceTest {
     void listAssetsUsesDeterministicOrderingWhenCreatedAtMatches() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -809,7 +807,7 @@ class AssetServiceTest {
     void getAssetTranscriptUsesPersistedSnapshotInNormalPath() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -831,7 +829,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         List<AssetTranscriptRowResponse> response = assetService.getAssetTranscript(assetId);
@@ -846,7 +844,7 @@ class AssetServiceTest {
     void getAssetTranscriptCapturesAndPersistsSnapshotWhenLocalRowsAreMissing() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -872,7 +870,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(fastApiProcessingClient.getTranscript("video-3b")).thenReturn(upstreamRows);
         List<AssetTranscriptRowInput> transcriptRows = upstreamRows.stream()
@@ -892,7 +890,7 @@ class AssetServiceTest {
     void transcriptContextReturnsRequestedWindowAroundMatchedRow() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -917,7 +915,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "row-3", 1);
@@ -937,7 +935,7 @@ class AssetServiceTest {
     void transcriptContextUsesFallbackSegmentIdentifierWhenTranscriptRowIdIsMissing() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -960,7 +958,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         AssetTranscriptContextResponse response = assetService.getAssetTranscriptContext(assetId, "segment-0", null);
@@ -977,7 +975,7 @@ class AssetServiceTest {
     void transcriptContextDoesNotMatchSyntheticSegmentIdentifierWhenRealRowIdExists() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -999,7 +997,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "segment-0", null))
@@ -1013,7 +1011,7 @@ class AssetServiceTest {
     void transcriptContextRejectsInvalidWindow() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -1032,7 +1030,7 @@ class AssetServiceTest {
     void transcriptContextRejectsWhenTranscriptProcessingIsNotYetSuccessful() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -1050,7 +1048,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
                 .isInstanceOf(TranscriptUnavailableException.class)
@@ -1067,7 +1065,7 @@ class AssetServiceTest {
     void transcriptContextRejectsWhenTranscriptIsEmptyAndMarksAssetFailed() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -1085,7 +1083,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(fastApiProcessingClient.getTranscript("video-6")).thenReturn(List.of());
 
@@ -1103,7 +1101,7 @@ class AssetServiceTest {
     void transcriptContextCapturesOnlyUsableTranscriptRows() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -1128,7 +1126,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(fastApiProcessingClient.getTranscript("video-7")).thenReturn(List.of(
                 new FastApiTranscriptRowResponse("row-blank", "video-7", 0, "   ", "2026-04-12T00:00:00Z"),
@@ -1152,7 +1150,7 @@ class AssetServiceTest {
     void transcriptContextRejectsUnknownTranscriptRowForAsset() {
         AssetService assetService = new AssetService(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService
@@ -1174,7 +1172,7 @@ class AssetServiceTest {
         );
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
+        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(transcriptRows);
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-404", 2))
@@ -1236,6 +1234,17 @@ class AssetServiceTest {
                 transcriptRow.segmentIndex(),
                 transcriptRow.text(),
                 transcriptRow.createdAt()
+        );
+    }
+
+    private ProcessingJobView processingJobView(ProcessingJob job) {
+        return new ProcessingJobView(
+                job.getId(),
+                job.getAssetId(),
+                job.getFastapiTaskId(),
+                job.getFastapiVideoId(),
+                job.getProcessingJobStatus(),
+                job.getRawUpstreamTaskState()
         );
     }
 

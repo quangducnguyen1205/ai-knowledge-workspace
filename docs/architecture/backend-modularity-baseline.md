@@ -406,7 +406,7 @@ void verifiesApplicationModules() {
 }
 ```
 
-That strict test remains a target, not a current passing test. It should be added only after the known cycles and boundary leaks are removed or narrowed through intentional module APIs.
+That strict test remains a target, not a current passing test. It should be added only after the remaining non-cycle boundary leaks are removed or narrowed through intentional module APIs.
 
 Spring Modulith alone can express and verify module dependencies once public APIs/named interfaces are clear. ArchUnit is not needed now. ArchUnit may complement Spring Modulith later for more specific rules, for example:
 

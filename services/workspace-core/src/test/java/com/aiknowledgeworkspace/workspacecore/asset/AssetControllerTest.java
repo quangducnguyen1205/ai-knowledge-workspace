@@ -17,8 +17,11 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.SearchAssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.search.SearchProcessingJobNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.search.SearchTranscriptUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
@@ -38,7 +41,7 @@ class AssetControllerTest {
     private AssetService assetService;
     private AssetDeletionService assetDeletionService;
     private AssetTitleUpdateService assetTitleUpdateService;
-    private TranscriptIndexingService transcriptIndexingService;
+    private ExplicitIndexingApplication explicitIndexingApplication;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -46,12 +49,12 @@ class AssetControllerTest {
         assetService = mock(AssetService.class);
         assetDeletionService = mock(AssetDeletionService.class);
         assetTitleUpdateService = mock(AssetTitleUpdateService.class);
-        transcriptIndexingService = mock(TranscriptIndexingService.class);
+        explicitIndexingApplication = mock(ExplicitIndexingApplication.class);
         AssetController assetController = new AssetController(
                 assetService,
                 assetDeletionService,
                 assetTitleUpdateService,
-                transcriptIndexingService
+                explicitIndexingApplication
         );
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -560,7 +563,7 @@ class AssetControllerTest {
     @Test
     void indexAssetReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(transcriptIndexingService.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchConnectivityException(
+        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchConnectivityException(
                 "Elasticsearch is unavailable while trying to bulk index transcript rows for asset " + assetId,
                 new RuntimeException("connection refused")
         ));
@@ -577,7 +580,7 @@ class AssetControllerTest {
     @Test
     void indexAssetReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(transcriptIndexingService.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchIntegrationException(
+        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchIntegrationException(
                 "Elasticsearch bulk indexing failed for document " + assetId + "-row-1 with status 429: queue full"
         ));
 
@@ -593,14 +596,45 @@ class AssetControllerTest {
     @Test
     void indexAssetReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(transcriptIndexingService.indexAssetTranscript(assetId))
-                .thenThrow(new AssetNotFoundException());
+        when(explicitIndexingApplication.indexAssetTranscript(assetId))
+                .thenThrow(new SearchAssetNotFoundException());
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
                         "/api/assets/{assetId}/index", assetId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Asset not found"));
+    }
+
+    @Test
+    void indexAssetPreservesProcessingJobNotFoundContract() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(explicitIndexingApplication.indexAssetTranscript(assetId))
+                .thenThrow(new SearchProcessingJobNotFoundException());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/assets/{assetId}/index", assetId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PROCESSING_JOB_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Processing job not found"));
+    }
+
+    @Test
+    void indexAssetPreservesTranscriptNotReadyContract() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(explicitIndexingApplication.indexAssetTranscript(assetId))
+                .thenThrow(new SearchTranscriptUnavailableException(
+                        "TRANSCRIPT_NOT_READY",
+                        "Transcript is not ready until processing reaches terminal success"
+                ));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/assets/{assetId}/index", assetId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRANSCRIPT_NOT_READY"))
+                .andExpect(jsonPath("$.message").value(
+                        "Transcript is not ready until processing reaches terminal success"
+                ));
     }
 
     @Test

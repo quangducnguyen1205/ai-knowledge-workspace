@@ -1,14 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventData;
-import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
+import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobUpdateCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
@@ -22,26 +22,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class AssetPersistenceService {
 
     private final AssetRepository assetRepository;
-    private final ProcessingJobRepository processingJobRepository;
     private final AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
-    private final OutboxWriter outboxWriter;
-    private final ProcessingRequestedEventCodec processingRequestedEventCodec;
-    private final AssetSearchIndexRequestService assetSearchIndexRequestService;
+    private final ProcessingRequestApplication processingRequestApplication;
+    private final IndexingRequestApplication indexingRequestApplication;
 
     public AssetPersistenceService(
             AssetRepository assetRepository,
-            ProcessingJobRepository processingJobRepository,
             AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository,
-            OutboxWriter outboxWriter,
-            ProcessingRequestedEventCodec processingRequestedEventCodec,
-            AssetSearchIndexRequestService assetSearchIndexRequestService
+            ProcessingRequestApplication processingRequestApplication,
+            IndexingRequestApplication indexingRequestApplication
     ) {
         this.assetRepository = assetRepository;
-        this.processingJobRepository = processingJobRepository;
         this.assetTranscriptRowSnapshotRepository = assetTranscriptRowSnapshotRepository;
-        this.outboxWriter = outboxWriter;
-        this.processingRequestedEventCodec = processingRequestedEventCodec;
-        this.assetSearchIndexRequestService = assetSearchIndexRequestService;
+        this.processingRequestApplication = processingRequestApplication;
+        this.indexingRequestApplication = indexingRequestApplication;
     }
 
     @Transactional
@@ -68,16 +62,15 @@ public class AssetPersistenceService {
                 storedObject.eTag()
         ));
 
-        ProcessingJob processingJob = new ProcessingJob(
+        ProcessingJobView processingJob = processingRequestApplication.createDirectJob(new DirectProcessingJobCommand(
                 asset.getId(),
                 upstreamResponse.taskId(),
                 upstreamResponse.videoId(),
                 initialProcessingStatus,
                 upstreamResponse.status()
-        );
-        processingJob = processingJobRepository.save(processingJob);
+        ));
 
-        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());
+        return new AssetUploadResponse(asset.getId(), processingJob.id(), asset.getStatus(), asset.getWorkspaceId());
     }
 
     @Transactional
@@ -101,36 +94,25 @@ public class AssetPersistenceService {
                 storedObject.eTag()
         ));
 
-        OutboxDraft processingRequestedEvent = processingRequestedEventCodec.encode(new ProcessingRequestedEventData(
-                asset.getId(),
-                workspace.getId(),
-                workspace.getOwnerId(),
-                storedObject.bucket(),
-                storedObject.objectKey(),
-                asset.getOriginalFilename(),
-                storedObject.contentType(),
-                storedObject.sizeBytes()
-        ));
+        ProcessingJobView processingJob = processingRequestApplication.createKafkaJobAndRequest(
+                new KafkaProcessingRequestCommand(
+                        asset.getId(),
+                        workspace.getId(),
+                        workspace.getOwnerId(),
+                        storedObject.bucket(),
+                        storedObject.objectKey(),
+                        asset.getOriginalFilename(),
+                        storedObject.contentType(),
+                        storedObject.sizeBytes()
+                ));
 
-        ProcessingJob processingJob = new ProcessingJob(
-                asset.getId(),
-                null,
-                null,
-                ProcessingJobStatus.PENDING,
-                "kafka_request_pending"
-        );
-        processingJob.setProcessingRequestEventId(processingRequestedEvent.eventId());
-        processingJob = processingJobRepository.save(processingJob);
-
-        outboxWriter.enqueue(processingRequestedEvent);
-
-        return new AssetUploadResponse(asset.getId(), processingJob.getId(), asset.getStatus(), asset.getWorkspaceId());
+        return new AssetUploadResponse(asset.getId(), processingJob.id(), asset.getStatus(), asset.getWorkspaceId());
     }
 
     @Transactional
     public AssetStatusResponse refreshAssetStatus(
             Asset asset,
-            ProcessingJob processingJob,
+            ProcessingJobView processingJob,
             String rawUpstreamTaskState,
             ProcessingJobStatus updatedProcessingJobStatus,
             AssetStatus updatedAssetStatus
@@ -138,8 +120,7 @@ public class AssetPersistenceService {
         boolean processingJobChanged = false;
         boolean assetStatusChanged = false;
 
-        if (processingJob.getProcessingJobStatus() != updatedProcessingJobStatus) {
-            processingJob.setProcessingJobStatus(updatedProcessingJobStatus);
+        if (processingJob.status() != updatedProcessingJobStatus) {
             processingJobChanged = true;
         }
 
@@ -148,13 +129,14 @@ public class AssetPersistenceService {
             assetStatusChanged = true;
         }
 
-        if (!Objects.equals(processingJob.getRawUpstreamTaskState(), rawUpstreamTaskState)) {
-            processingJob.setRawUpstreamTaskState(rawUpstreamTaskState);
+        if (!Objects.equals(processingJob.rawUpstreamTaskState(), rawUpstreamTaskState)) {
             processingJobChanged = true;
         }
 
         if (processingJobChanged) {
-            processingJobRepository.save(processingJob);
+            processingJob = processingRequestApplication.updateJob(new ProcessingJobUpdateCommand(
+                    processingJob.id(), updatedProcessingJobStatus, rawUpstreamTaskState
+            ));
         }
 
         if (assetStatusChanged) {
@@ -163,9 +145,9 @@ public class AssetPersistenceService {
 
         return new AssetStatusResponse(
                 asset.getId(),
-                processingJob.getId(),
+                processingJob.id(),
                 asset.getStatus(),
-                processingJob.getProcessingJobStatus()
+                processingJob.status()
         );
     }
 
@@ -221,15 +203,14 @@ public class AssetPersistenceService {
         List<AssetTranscriptRowSnapshot> sortedSnapshots = sortTranscriptSnapshots(
                 assetTranscriptRowSnapshotRepository.saveAll(snapshots)
         );
-        assetSearchIndexRequestService.requestIndexingIfEnabled(asset.getId(), toTranscriptRowViews(sortedSnapshots));
+        indexingRequestApplication.requestIndexingIfEnabled(asset.getId(), toIndexingRequestRows(sortedSnapshots));
         return sortedSnapshots;
     }
 
     @Transactional
     public void deleteAssetRecords(Asset asset) {
         assetTranscriptRowSnapshotRepository.deleteByAssetId(asset.getId());
-        processingJobRepository.findByAssetId(asset.getId())
-                .ifPresent(processingJobRepository::delete);
+        processingRequestApplication.deleteForAsset(asset.getId());
         assetRepository.delete(asset);
     }
 
@@ -242,9 +223,9 @@ public class AssetPersistenceService {
                 .toList();
     }
 
-    private List<AssetTranscriptRowView> toTranscriptRowViews(List<AssetTranscriptRowSnapshot> snapshots) {
+    private List<IndexingRequestRow> toIndexingRequestRows(List<AssetTranscriptRowSnapshot> snapshots) {
         return snapshots.stream()
-                .map(snapshot -> new AssetTranscriptRowView(
+                .map(snapshot -> new IndexingRequestRow(
                         snapshot.getTranscriptRowId(),
                         snapshot.getVideoId(),
                         snapshot.getSegmentIndex(),

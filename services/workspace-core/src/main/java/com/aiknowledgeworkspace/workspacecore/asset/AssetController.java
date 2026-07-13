@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingResult;
 
 @RestController
 @RequestMapping("/api/assets")
@@ -24,18 +25,18 @@ public class AssetController {
     private final AssetService assetService;
     private final AssetDeletionService assetDeletionService;
     private final AssetTitleUpdateService assetTitleUpdateService;
-    private final TranscriptIndexingService transcriptIndexingService;
+    private final ExplicitIndexingApplication explicitIndexingApplication;
 
     public AssetController(
             AssetService assetService,
             AssetDeletionService assetDeletionService,
             AssetTitleUpdateService assetTitleUpdateService,
-            TranscriptIndexingService transcriptIndexingService
+            ExplicitIndexingApplication explicitIndexingApplication
     ) {
         this.assetService = assetService;
         this.assetDeletionService = assetDeletionService;
         this.assetTitleUpdateService = assetTitleUpdateService;
-        this.transcriptIndexingService = transcriptIndexingService;
+        this.explicitIndexingApplication = explicitIndexingApplication;
     }
 
     @GetMapping
@@ -88,7 +89,8 @@ public class AssetController {
 
     @PostMapping("/{assetId}/index")
     public AssetIndexResponse indexAssetTranscript(@PathVariable UUID assetId) {
-        return transcriptIndexingService.indexAssetTranscript(assetId);
+        ExplicitIndexingResult result = explicitIndexingApplication.indexAssetTranscript(assetId);
+        return new AssetIndexResponse(result.assetId(), AssetStatus.SEARCHABLE, result.indexedDocumentCount());
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

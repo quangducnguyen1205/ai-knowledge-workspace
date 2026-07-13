@@ -5,10 +5,9 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTaskSta
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
@@ -49,41 +48,18 @@ public class AssetService {
     private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
 
     private final AssetRepository assetRepository;
-    private final ProcessingJobRepository processingJobRepository;
+    private final ProcessingRequestApplication processingRequestApplication;
     private final FastApiProcessingClient fastApiProcessingClient;
     private final AssetPersistenceService assetPersistenceService;
     private final WorkspaceService workspaceService;
     private final ObjectStorageClient objectStorageClient;
     private final ObjectKeyFactory objectKeyFactory;
     private final ObjectStorageProperties objectStorageProperties;
-    private final ProcessingProperties processingProperties;
 
     @Autowired
     public AssetService(
             AssetRepository assetRepository,
-            ProcessingJobRepository processingJobRepository,
-            FastApiProcessingClient fastApiProcessingClient,
-            AssetPersistenceService assetPersistenceService,
-            WorkspaceService workspaceService,
-            ObjectStorageClient objectStorageClient,
-            ObjectKeyFactory objectKeyFactory,
-            ObjectStorageProperties objectStorageProperties,
-            ProcessingProperties processingProperties
-    ) {
-        this.assetRepository = assetRepository;
-        this.processingJobRepository = processingJobRepository;
-        this.fastApiProcessingClient = fastApiProcessingClient;
-        this.assetPersistenceService = assetPersistenceService;
-        this.workspaceService = workspaceService;
-        this.objectStorageClient = objectStorageClient;
-        this.objectKeyFactory = objectKeyFactory;
-        this.objectStorageProperties = objectStorageProperties;
-        this.processingProperties = processingProperties;
-    }
-
-    public AssetService(
-            AssetRepository assetRepository,
-            ProcessingJobRepository processingJobRepository,
+            ProcessingRequestApplication processingRequestApplication,
             FastApiProcessingClient fastApiProcessingClient,
             AssetPersistenceService assetPersistenceService,
             WorkspaceService workspaceService,
@@ -91,29 +67,26 @@ public class AssetService {
             ObjectKeyFactory objectKeyFactory,
             ObjectStorageProperties objectStorageProperties
     ) {
-        this(
-                assetRepository,
-                processingJobRepository,
-                fastApiProcessingClient,
-                assetPersistenceService,
-                workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties,
-                new ProcessingProperties()
-        );
+        this.assetRepository = assetRepository;
+        this.processingRequestApplication = processingRequestApplication;
+        this.fastApiProcessingClient = fastApiProcessingClient;
+        this.assetPersistenceService = assetPersistenceService;
+        this.workspaceService = workspaceService;
+        this.objectStorageClient = objectStorageClient;
+        this.objectKeyFactory = objectKeyFactory;
+        this.objectStorageProperties = objectStorageProperties;
     }
 
     public AssetService(
             AssetRepository assetRepository,
-            ProcessingJobRepository processingJobRepository,
+            ProcessingRequestApplication processingRequestApplication,
             FastApiProcessingClient fastApiProcessingClient,
             AssetPersistenceService assetPersistenceService,
             WorkspaceService workspaceService
     ) {
         this(
                 assetRepository,
-                processingJobRepository,
+                processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
@@ -128,8 +101,7 @@ public class AssetService {
                     }
                 },
                 new ObjectKeyFactory(),
-                new ObjectStorageProperties(),
-                new ProcessingProperties()
+                new ObjectStorageProperties()
         );
     }
 
@@ -184,28 +156,28 @@ public class AssetService {
 
     public AssetStatusResponse getAssetStatus(UUID assetId) {
         Asset asset = getAsset(assetId);
-        ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
+        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
                 .orElseThrow(ProcessingJobNotFoundException::new);
 
-        if (isTerminal(processingJob.getProcessingJobStatus())) {
+        if (isTerminal(processingJob.status())) {
             return new AssetStatusResponse(
                     asset.getId(),
-                    processingJob.getId(),
+                    processingJob.id(),
                     asset.getStatus(),
-                    processingJob.getProcessingJobStatus()
+                    processingJob.status()
             );
         }
 
-        if (!StringUtils.hasText(processingJob.getFastapiTaskId())) {
+        if (!StringUtils.hasText(processingJob.fastapiTaskId())) {
             return new AssetStatusResponse(
                     asset.getId(),
-                    processingJob.getId(),
+                    processingJob.id(),
                     asset.getStatus(),
-                    processingJob.getProcessingJobStatus()
+                    processingJob.status()
             );
         }
 
-        FastApiTaskStatusResponse upstreamTaskStatus = fastApiProcessingClient.getTaskStatus(processingJob.getFastapiTaskId());
+        FastApiTaskStatusResponse upstreamTaskStatus = fastApiProcessingClient.getTaskStatus(processingJob.fastapiTaskId());
         validateUpstreamTaskStatusResponse(upstreamTaskStatus);
 
         ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
@@ -222,7 +194,7 @@ public class AssetService {
 
     public List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
         Asset asset = getAsset(assetId);
-        ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
+        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
                 .orElseThrow(ProcessingJobNotFoundException::new);
 
         return loadUsableTranscriptSnapshot(asset, processingJob).stream()
@@ -262,8 +234,8 @@ public class AssetService {
         );
     }
 
-    public List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJob processingJob) {
-        if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
+    public List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJobView processingJob) {
+        if (processingJob.status() != ProcessingJobStatus.SUCCEEDED) {
             throw new TranscriptUnavailableException(
                     "TRANSCRIPT_NOT_READY",
                     "Transcript is not ready until processing reaches terminal success"
@@ -297,8 +269,8 @@ public class AssetService {
         StoredObject storedObject = storeUploadedObject(file, objectKey);
 
         try {
-            return switch (processingProperties.getTriggerMode()) {
-                case DIRECT_UPLOAD -> persistDirectUpload(
+            if (!processingRequestApplication.usesKafkaRequestMode()) {
+                return persistDirectUpload(
                         file,
                         assetId,
                         originalFilename,
@@ -306,14 +278,14 @@ public class AssetService {
                         workspace,
                         storedObject
                 );
-                case KAFKA_REQUEST -> assetPersistenceService.persistKafkaRequestUpload(
-                        assetId,
-                        originalFilename,
-                        title,
-                        workspace,
-                        storedObject
-                );
-            };
+            }
+            return assetPersistenceService.persistKafkaRequestUpload(
+                    assetId,
+                    originalFilename,
+                    title,
+                    workspace,
+                    storedObject
+            );
         } catch (RuntimeException exception) {
             cleanupStoredObjectBestEffort(storedObject);
             throw exception;
@@ -566,9 +538,9 @@ public class AssetService {
                 .toList();
     }
 
-    private List<AssetTranscriptRowSnapshot> captureUsableTranscriptSnapshot(Asset asset, ProcessingJob processingJob) {
+    private List<AssetTranscriptRowSnapshot> captureUsableTranscriptSnapshot(Asset asset, ProcessingJobView processingJob) {
         List<FastApiTranscriptRowResponse> usableTranscriptRows = fastApiProcessingClient.getTranscript(
-                processingJob.getFastapiVideoId()
+                processingJob.fastapiVideoId()
         ).stream()
                 .filter(this::isUsableTranscriptRow)
                 .toList();

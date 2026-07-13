@@ -90,7 +90,10 @@ class BackendModularityBaselineTest {
                 .sorted()
                 .toList();
 
-        return normalize("""
+        String cycleLines = cycles.stream()
+                .map(cycle -> "cycle=" + cycle)
+                .collect(Collectors.joining("\n"));
+        String header = """
                 # Spring Modulith violation baseline
                 # The aggregate SHA-256 fingerprints the exact sorted normalized violation set.
                 # Human-readable cycle paths remain listed for dependency review.
@@ -99,14 +102,12 @@ class BackendModularityBaselineTest {
                 violation-message-count=%d
                 cycle-message-count=%d
                 violation-set-sha256=%s
-
-                %s
                 """.formatted(
                 String.join(",", detectedModuleNames(modules)),
                 violationMessages.size(),
                 cycles.size(),
-                sha256(String.join("\n---\n", violationMessages)),
-                cycles.stream().map(cycle -> "cycle=" + cycle).collect(Collectors.joining("\n"))));
+                sha256(String.join("\n---\n", violationMessages)));
+        return normalize(cycleLines.isEmpty() ? header : header + "\n" + cycleLines + "\n");
     }
 
     private static String cyclePath(String violationMessage) {

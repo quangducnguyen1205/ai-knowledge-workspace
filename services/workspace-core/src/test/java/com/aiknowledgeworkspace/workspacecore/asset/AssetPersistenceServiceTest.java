@@ -4,30 +4,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
-import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexRequestService;
+import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -39,18 +33,13 @@ class AssetPersistenceServiceTest {
     private AssetRepository assetRepository;
 
     @Mock
-    private ProcessingJobRepository processingJobRepository;
+    private ProcessingRequestApplication processingRequestApplication;
 
     @Mock
     private AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
 
     @Mock
-    private OutboxWriter outboxWriter;
-
-    @Mock
-    private AssetSearchIndexRequestService assetSearchIndexRequestService;
-
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private IndexingRequestApplication indexingRequestApplication;
 
     @Test
     void persistDirectUploadResultCreatesAssetAndProcessingJobWithoutOutboxEvent() {
@@ -71,7 +60,10 @@ class AssetPersistenceServiceTest {
             Asset asset = invocation.getArgument(0);
             return asset;
         });
-        when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID processingJobId = UUID.randomUUID();
+        when(processingRequestApplication.createDirectJob(any())).thenReturn(new ProcessingJobView(
+                processingJobId, assetId, "task-1", "video-1", ProcessingJobStatus.PENDING, "pending"
+        ));
 
         AssetUploadResponse response = assetPersistenceService.persistDirectUploadResult(
                 assetId,
@@ -85,10 +77,10 @@ class AssetPersistenceServiceTest {
         );
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
-        ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
+        ArgumentCaptor<DirectProcessingJobCommand> processingJobCaptor =
+                ArgumentCaptor.forClass(DirectProcessingJobCommand.class);
         verify(assetRepository).save(assetCaptor.capture());
-        verify(processingJobRepository).save(processingJobCaptor.capture());
-        verify(outboxWriter, never()).enqueue(any(OutboxDraft.class));
+        verify(processingRequestApplication).createDirectJob(processingJobCaptor.capture());
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -100,19 +92,18 @@ class AssetPersistenceServiceTest {
         assertThat(response.workspaceId()).isEqualTo(workspace.getId());
         assertThat(response.assetId()).isEqualTo(assetId);
 
-        assertThat(processingJobCaptor.getValue().getAssetId()).isEqualTo(assetId);
-        assertThat(processingJobCaptor.getValue().getFastapiTaskId()).isEqualTo("task-1");
-        assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isEqualTo("video-1");
-        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isNull();
+        assertThat(processingJobCaptor.getValue().assetId()).isEqualTo(assetId);
+        assertThat(processingJobCaptor.getValue().fastapiTaskId()).isEqualTo("task-1");
+        assertThat(processingJobCaptor.getValue().fastapiVideoId()).isEqualTo("video-1");
 
-        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxWriter);
+        var inOrder = inOrder(assetRepository, processingRequestApplication);
         inOrder.verify(assetRepository).save(any(Asset.class));
-        inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
+        inOrder.verify(processingRequestApplication).createDirectJob(any());
         inOrder.verifyNoMoreInteractions();
     }
 
     @Test
-    void persistKafkaRequestUploadCreatesAssetProcessingJobAndOutboxEvent() throws Exception {
+    void persistKafkaRequestUploadCreatesAssetThenDelegatesAtomicProcessingIntent() {
         AssetPersistenceService assetPersistenceService = assetPersistenceService();
 
         UUID assetId = UUID.randomUUID();
@@ -126,7 +117,10 @@ class AssetPersistenceServiceTest {
         );
 
         when(assetRepository.save(any(Asset.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID processingJobId = UUID.randomUUID();
+        when(processingRequestApplication.createKafkaJobAndRequest(any())).thenReturn(new ProcessingJobView(
+                processingJobId, assetId, null, null, ProcessingJobStatus.PENDING, "kafka_request_pending"
+        ));
 
         AssetUploadResponse response = assetPersistenceService.persistKafkaRequestUpload(
                 assetId,
@@ -137,11 +131,10 @@ class AssetPersistenceServiceTest {
         );
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);
-        ArgumentCaptor<ProcessingJob> processingJobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
-        ArgumentCaptor<OutboxDraft> outboxEventCaptor = ArgumentCaptor.forClass(OutboxDraft.class);
+        ArgumentCaptor<KafkaProcessingRequestCommand> processingCommand =
+                ArgumentCaptor.forClass(KafkaProcessingRequestCommand.class);
         verify(assetRepository).save(assetCaptor.capture());
-        verify(processingJobRepository).save(processingJobCaptor.capture());
-        verify(outboxWriter).enqueue(outboxEventCaptor.capture());
+        verify(processingRequestApplication).createKafkaJobAndRequest(processingCommand.capture());
 
         assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
@@ -154,36 +147,14 @@ class AssetPersistenceServiceTest {
         assertThat(response.workspaceId()).isEqualTo(workspace.getId());
         assertThat(response.assetId()).isEqualTo(assetId);
 
-        assertThat(processingJobCaptor.getValue().getAssetId()).isEqualTo(assetId);
-        assertThat(processingJobCaptor.getValue().getFastapiTaskId()).isNull();
-        assertThat(processingJobCaptor.getValue().getFastapiVideoId()).isNull();
-        assertThat(processingJobCaptor.getValue().getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
-        assertThat(processingJobCaptor.getValue().getRawUpstreamTaskState()).isEqualTo("kafka_request_pending");
+        assertThat(processingCommand.getValue()).isEqualTo(new KafkaProcessingRequestCommand(
+                assetId, workspace.getId(), "user-1", "workspace-media", storedObject.objectKey(),
+                "lecture.mp4", "video/mp4", 12L
+        ));
 
-        OutboxDraft outboxEvent = outboxEventCaptor.getValue();
-        assertThat(outboxEvent.eventId()).isNotNull();
-        assertThat(processingJobCaptor.getValue().getProcessingRequestEventId()).isEqualTo(outboxEvent.eventId());
-        assertThat(outboxEvent.eventType()).isEqualTo(ProcessingRequestedEventContract.EVENT_TYPE);
-        assertThat(outboxEvent.eventVersion()).isEqualTo(ProcessingRequestedEventContract.EVENT_VERSION);
-        assertThat(outboxEvent.aggregateType()).isEqualTo(ProcessingRequestedEventContract.AGGREGATE_TYPE);
-        assertThat(outboxEvent.aggregateId()).isEqualTo(assetId);
-        assertThat(outboxEvent.eventKey()).isEqualTo(assetId.toString());
-
-        JsonNode payload = objectMapper.readTree(outboxEvent.payload());
-        assertThat(payload.path("assetId").asText()).isEqualTo(assetId.toString());
-        assertThat(payload.path("workspaceId").asText()).isEqualTo(workspace.getId().toString());
-        assertThat(payload.path("ownerId").asText()).isEqualTo("user-1");
-        assertThat(payload.path("storageBucket").asText()).isEqualTo("workspace-media");
-        assertThat(payload.path("objectKey").asText()).isEqualTo(storedObject.objectKey());
-        assertThat(payload.path("originalFilename").asText()).isEqualTo("lecture.mp4");
-        assertThat(payload.path("contentType").asText()).isEqualTo("video/mp4");
-        assertThat(payload.path("sizeBytes").asLong()).isEqualTo(12L);
-        assertThat(payload.path("requestedAt").asText()).isNotBlank();
-
-        InOrder inOrder = inOrder(assetRepository, processingJobRepository, outboxWriter);
+        var inOrder = inOrder(assetRepository, processingRequestApplication);
         inOrder.verify(assetRepository).save(any(Asset.class));
-        inOrder.verify(processingJobRepository).save(any(ProcessingJob.class));
-        inOrder.verify(outboxWriter).enqueue(any(OutboxDraft.class));
+        inOrder.verify(processingRequestApplication).createKafkaJobAndRequest(any());
     }
 
     @Test
@@ -206,8 +177,8 @@ class AssetPersistenceServiceTest {
         ArgumentCaptor<List<AssetTranscriptRowSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
         verify(assetTranscriptRowSnapshotRepository).deleteByAssetId(assetId);
         verify(assetTranscriptRowSnapshotRepository).saveAll(snapshotsCaptor.capture());
-        verify(assetSearchIndexRequestService).requestIndexingIfEnabled(assetId, savedRows.stream()
-                .map(snapshot -> new AssetTranscriptRowView(
+        verify(indexingRequestApplication).requestIndexingIfEnabled(assetId, savedRows.stream()
+                .map(snapshot -> new IndexingRequestRow(
                         snapshot.getTranscriptRowId(),
                         snapshot.getVideoId(),
                         snapshot.getSegmentIndex(),
@@ -254,33 +225,20 @@ class AssetPersistenceServiceTest {
 
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId);
-        ProcessingJob processingJob = new ProcessingJob(
-                assetId,
-                "task-1",
-                "video-1",
-                ProcessingJobStatus.SUCCEEDED,
-                "success"
-        );
-
-        when(processingJobRepository.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-
         assetPersistenceService.deleteAssetRecords(asset);
 
-        InOrder inOrder = inOrder(assetTranscriptRowSnapshotRepository, processingJobRepository, assetRepository);
+        var inOrder = inOrder(assetTranscriptRowSnapshotRepository, processingRequestApplication, assetRepository);
         inOrder.verify(assetTranscriptRowSnapshotRepository).deleteByAssetId(assetId);
-        inOrder.verify(processingJobRepository).findByAssetId(assetId);
-        inOrder.verify(processingJobRepository).delete(processingJob);
+        inOrder.verify(processingRequestApplication).deleteForAsset(assetId);
         inOrder.verify(assetRepository).delete(asset);
     }
 
     private AssetPersistenceService assetPersistenceService() {
         return new AssetPersistenceService(
                 assetRepository,
-                processingJobRepository,
                 assetTranscriptRowSnapshotRepository,
-                outboxWriter,
-                new ProcessingRequestedEventCodec(objectMapper),
-                assetSearchIndexRequestService
+                processingRequestApplication,
+                indexingRequestApplication
         );
     }
 

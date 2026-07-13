@@ -1,8 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventCodec;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventData;
 import java.util.List;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class AssetSearchIndexRequestService {
+public class AssetSearchIndexRequestService implements IndexingRequestApplication {
 
     private static final List<AssetSearchIndexJobStatus> ACTIVE_STATUSES = List.of(
             AssetSearchIndexJobStatus.PENDING,
@@ -40,16 +41,16 @@ public class AssetSearchIndexRequestService {
     }
 
     @Transactional
-    public Optional<AssetSearchIndexJob> requestIndexingIfEnabled(
+    public void requestIndexingIfEnabled(
             UUID assetId,
-            List<AssetTranscriptRowView> transcriptRows
+            List<IndexingRequestRow> transcriptRows
     ) {
         if (!searchIndexingProperties.isAutoRequestEnabled()) {
-            return Optional.empty();
+            return;
         }
 
         String snapshotFingerprint = fingerprintService.fingerprint(transcriptRows);
-        return Optional.of(createAutomaticRequest(assetId, snapshotFingerprint));
+        createAutomaticRequest(assetId, snapshotFingerprint);
     }
 
     @Transactional

@@ -1,25 +1,22 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetSearchabilityService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
-public class TranscriptIndexingService {
+public class TranscriptIndexingService implements ExplicitIndexingApplication {
 
-    private final ProcessingJobRepository processingJobRepository;
-    private final AssetReadService assetReadService;
-    private final AssetSearchabilityService assetSearchabilityService;
+    private final ProcessingRequestApplication processingRequestApplication;
+    private final IndexingAssetPort indexingAssetPort;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final AssetSearchIndexRequestService searchIndexRequestService;
     private final AssetSearchIndexJobRepository searchIndexJobRepository;
@@ -27,18 +24,16 @@ public class TranscriptIndexingService {
     private final AssetIndexingEventParser indexingEventParser;
 
     public TranscriptIndexingService(
-            ProcessingJobRepository processingJobRepository,
-            AssetReadService assetReadService,
-            AssetSearchabilityService assetSearchabilityService,
+            ProcessingRequestApplication processingRequestApplication,
+            IndexingAssetPort indexingAssetPort,
             TranscriptSnapshotFingerprintService fingerprintService,
             AssetSearchIndexRequestService searchIndexRequestService,
             AssetSearchIndexJobRepository searchIndexJobRepository,
             AssetSearchIndexingExecutor searchIndexingExecutor,
             AssetIndexingEventParser indexingEventParser
     ) {
-        this.processingJobRepository = processingJobRepository;
-        this.assetReadService = assetReadService;
-        this.assetSearchabilityService = assetSearchabilityService;
+        this.processingRequestApplication = processingRequestApplication;
+        this.indexingAssetPort = indexingAssetPort;
         this.fingerprintService = fingerprintService;
         this.searchIndexRequestService = searchIndexRequestService;
         this.searchIndexJobRepository = searchIndexJobRepository;
@@ -46,20 +41,25 @@ public class TranscriptIndexingService {
         this.indexingEventParser = indexingEventParser;
     }
 
-    public AssetIndexResponse indexAssetTranscript(UUID assetId) {
-        ProcessingJob processingJob = processingJobRepository.findByAssetId(assetId)
-                .orElseThrow(ProcessingJobNotFoundException::new);
-        if (processingJob.getProcessingJobStatus() != ProcessingJobStatus.SUCCEEDED) {
-            throw new TranscriptUnavailableException(
+    public ExplicitIndexingResult indexAssetTranscript(UUID assetId) {
+        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
+                .orElseThrow(SearchProcessingJobNotFoundException::new);
+        if (processingJob.status() != ProcessingJobStatus.SUCCEEDED) {
+            throw new SearchTranscriptUnavailableException(
                     "TRANSCRIPT_NOT_READY",
                     "Transcript is not ready until processing reaches terminal success"
             );
         }
 
-        AssetIndexingSource indexingSource = assetReadService.loadAuthorizedIndexingSourceForCompletedProcessing(
-                assetId,
-                processingJob.getFastapiVideoId()
-        );
+        IndexingAssetSource indexingSource;
+        try {
+            indexingSource = indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(
+                    assetId,
+                    processingJob.fastapiVideoId()
+            );
+        } catch (SearchAssetUnavailableException exception) {
+            throw new SearchAssetNotFoundException();
+        }
         String snapshotFingerprint = fingerprintService.fingerprint(indexingSource.transcriptRows());
         AssetSearchIndexJob indexingJob = searchIndexRequestService.createExplicitJob(assetId, snapshotFingerprint);
 
@@ -69,11 +69,15 @@ public class TranscriptIndexingService {
                 throw new ElasticsearchIntegrationException("Asset transcript indexing did not complete: " + result.status());
             }
         } catch (ElasticsearchIntegrationException exception) {
-            assetSearchabilityService.markTranscriptReady(assetId);
+            try {
+                indexingAssetPort.markTranscriptReady(assetId);
+            } catch (SearchAssetUnavailableException assetUnavailable) {
+                throw new SearchAssetNotFoundException();
+            }
             throw exception;
         }
 
-        return new AssetIndexResponse(assetId, AssetStatus.SEARCHABLE, indexingSource.transcriptRows().size());
+        return new ExplicitIndexingResult(assetId, indexingSource.transcriptRows().size());
     }
 
     public AssetIndexingHandleResult handleIndexingEvent(String rawEventJson) {

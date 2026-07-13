@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -12,16 +12,16 @@ public class AssetTitleUpdateService {
 
     private final AssetService assetService;
     private final AssetPersistenceService assetPersistenceService;
-    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
+    private final AssetSearchMaintenance assetSearchMaintenance;
 
     public AssetTitleUpdateService(
             AssetService assetService,
             AssetPersistenceService assetPersistenceService,
-            TranscriptSearchIndexClient transcriptSearchIndexClient
+            AssetSearchMaintenance assetSearchMaintenance
     ) {
         this.assetService = assetService;
         this.assetPersistenceService = assetPersistenceService;
-        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
+        this.assetSearchMaintenance = assetSearchMaintenance;
     }
 
     public Asset updateAssetTitle(UUID assetId, UpdateAssetTitleRequest request) {
@@ -33,7 +33,7 @@ public class AssetTitleUpdateService {
         }
 
         if (asset.getStatus() == AssetStatus.SEARCHABLE) {
-            transcriptSearchIndexClient.updateAssetTitle(assetId, normalizedTitle);
+            assetSearchMaintenance.updateAssetTitle(assetId, normalizedTitle);
         }
 
         return assetPersistenceService.updateAssetTitle(asset, normalizedTitle);

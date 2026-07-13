@@ -17,6 +17,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
@@ -60,10 +61,21 @@ class AssetTitleUpdateServiceTest {
                 properties,
                 new ObjectMapper()
         );
+        AssetSearchMaintenance maintenance = new AssetSearchMaintenance() {
+            @Override
+            public void deleteTranscriptRows(UUID assetId) {
+                searchIndexClient.deleteTranscriptRowsForAsset(assetId);
+            }
+
+            @Override
+            public void updateAssetTitle(UUID assetId, String title) {
+                searchIndexClient.updateAssetTitle(assetId, title);
+            }
+        };
         assetTitleUpdateService = new AssetTitleUpdateService(
                 assetService,
                 assetPersistenceService,
-                searchIndexClient
+                maintenance
         );
     }
 
