@@ -10,23 +10,23 @@ public class AssetTitleUpdateService {
 
     private static final int MAX_ASSET_TITLE_LENGTH = 255;
 
-    private final AssetService assetService;
+    private final AssetQueryApplicationService assetQueryApplicationService;
     private final AssetPersistenceService assetPersistenceService;
     private final AssetSearchMaintenance assetSearchMaintenance;
 
     public AssetTitleUpdateService(
-            AssetService assetService,
+            AssetQueryApplicationService assetQueryApplicationService,
             AssetPersistenceService assetPersistenceService,
             AssetSearchMaintenance assetSearchMaintenance
     ) {
-        this.assetService = assetService;
+        this.assetQueryApplicationService = assetQueryApplicationService;
         this.assetPersistenceService = assetPersistenceService;
         this.assetSearchMaintenance = assetSearchMaintenance;
     }
 
     public Asset updateAssetTitle(UUID assetId, UpdateAssetTitleRequest request) {
         String normalizedTitle = normalizeTitle(request);
-        Asset asset = assetService.getAsset(assetId);
+        Asset asset = assetQueryApplicationService.getAsset(assetId);
 
         if (normalizedTitle.equals(asset.getTitle())) {
             return asset;

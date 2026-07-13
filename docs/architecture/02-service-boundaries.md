@@ -47,6 +47,20 @@ synchronous and retain their prior transaction participation. The Spring
 Modulith ratchet now reports zero cycle messages; remaining strict-verification
 failures are non-cycle exposure debt reserved for later structural work.
 
+P3-S5.B2B `[VERIFIED BY TESTS]` decomposes the asset application layer without
+changing those boundaries. `UploadAssetApplicationService` owns upload
+orchestration, `AssetQueryApplicationService` owns client-facing asset reads and
+status projection, and the canonical transcript lifecycle is split between
+`AssetTranscriptSnapshotService` for validated writes/lifecycle/indexing intent
+and `AssetTranscriptQueryService` for ordered canonical reads. The deprecated
+direct-processing path is isolated behind the package-private
+`DirectProcessingCompatibilityAdapter`; both compatibility capture and async
+processing results use the same snapshot owner. Controllers inject use-case
+services rather than repositories, transaction participation remains
+synchronous, and the ratchet is reduced to `83` non-cycle messages. A thin
+internal `AssetService` facade remains only for legacy unit fixtures and is a
+B2C cleanup candidate; it contains no product logic and is not a Spring bean.
+
 ## Current Boundary Diagram
 
 ```mermaid

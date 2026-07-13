@@ -3,6 +3,6 @@
 # Human-readable cycle paths remain listed for dependency review.
 # This is a strict ratchet, not proof of a clean modular architecture.
 detected-modules=asset,assistant,common,integration,outbox,processing,search,storage,workspace
-violation-message-count=101
+violation-message-count=83
 cycle-message-count=0
-violation-set-sha256=8e45bab99b03bd59a716f99294812513e23c340b16441577b3c2c14a27ec5b1b
+violation-set-sha256=86415c1b1bbf4b86eb8e23a8892f4fb8ca869e15b824b16ff0239c4d3879fb44

@@ -7,7 +7,6 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
@@ -42,7 +41,9 @@ class AssetPersistenceServiceTest {
 
         UUID assetId = UUID.randomUUID();
         Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
-        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
+        DirectProcessingUploadResult directResult = new DirectProcessingUploadResult(
+                "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+        );
         StoredObject storedObject = new StoredObject(
                 "workspace-media",
                 "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
@@ -64,11 +65,9 @@ class AssetPersistenceServiceTest {
                 assetId,
                 "lecture.mp4",
                 "Lecture",
-                AssetStatus.PROCESSING,
-                ProcessingJobStatus.PENDING,
                 workspace,
                 storedObject,
-                upstreamResponse
+                directResult
         );
 
         ArgumentCaptor<Asset> assetCaptor = ArgumentCaptor.forClass(Asset.class);

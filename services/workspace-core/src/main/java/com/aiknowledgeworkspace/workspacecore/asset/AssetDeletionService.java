@@ -13,25 +13,25 @@ public class AssetDeletionService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AssetDeletionService.class);
 
-    private final AssetService assetService;
+    private final AssetQueryApplicationService assetQueryApplicationService;
     private final AssetPersistenceService assetPersistenceService;
     private final AssetSearchMaintenance assetSearchMaintenance;
     private final ObjectStorageClient objectStorageClient;
 
     public AssetDeletionService(
-            AssetService assetService,
+            AssetQueryApplicationService assetQueryApplicationService,
             AssetPersistenceService assetPersistenceService,
             AssetSearchMaintenance assetSearchMaintenance,
             ObjectStorageClient objectStorageClient
     ) {
-        this.assetService = assetService;
+        this.assetQueryApplicationService = assetQueryApplicationService;
         this.assetPersistenceService = assetPersistenceService;
         this.assetSearchMaintenance = assetSearchMaintenance;
         this.objectStorageClient = objectStorageClient;
     }
 
     public void deleteAsset(UUID assetId) {
-        Asset asset = assetService.getAsset(assetId);
+        Asset asset = assetQueryApplicationService.getAsset(assetId);
 
         if (asset.getStatus() == AssetStatus.SEARCHABLE) {
             assetSearchMaintenance.deleteTranscriptRows(assetId);

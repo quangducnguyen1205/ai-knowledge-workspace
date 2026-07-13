@@ -38,7 +38,7 @@ import org.springframework.web.server.ResponseStatusException;
 class AssetTitleUpdateServiceTest {
 
     @Mock
-    private AssetService assetService;
+    private AssetQueryApplicationService assetQueryApplicationService;
 
     @Mock
     private AssetPersistenceService assetPersistenceService;
@@ -73,7 +73,7 @@ class AssetTitleUpdateServiceTest {
             }
         };
         assetTitleUpdateService = new AssetTitleUpdateService(
-                assetService,
+                assetQueryApplicationService,
                 assetPersistenceService,
                 maintenance
         );
@@ -85,7 +85,7 @@ class AssetTitleUpdateServiceTest {
         Asset asset = asset(assetId, "Old Title", AssetStatus.TRANSCRIPT_READY);
         Asset updatedAsset = asset(assetId, "New Title", AssetStatus.TRANSCRIPT_READY);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         when(assetPersistenceService.updateAssetTitle(asset, "New Title")).thenReturn(updatedAsset);
 
         Asset response = assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("  New Title  "));
@@ -101,7 +101,7 @@ class AssetTitleUpdateServiceTest {
         Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
         Asset updatedAsset = asset(assetId, "New Title", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         when(assetPersistenceService.updateAssetTitle(asset, "New Title")).thenReturn(updatedAsset);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
@@ -130,7 +130,7 @@ class AssetTitleUpdateServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, "Lecture 1", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
 
         Asset response = assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("  Lecture 1 "));
 
@@ -147,7 +147,7 @@ class AssetTitleUpdateServiceTest {
         )).isInstanceOf(InvalidAssetTitleException.class)
                 .hasMessage("title must not be blank");
 
-        verifyNoInteractions(assetService, assetPersistenceService);
+        verifyNoInteractions(assetQueryApplicationService, assetPersistenceService);
     }
 
     @Test
@@ -158,7 +158,7 @@ class AssetTitleUpdateServiceTest {
         )).isInstanceOf(InvalidAssetTitleException.class)
                 .hasMessage("title is required");
 
-        verifyNoInteractions(assetService, assetPersistenceService);
+        verifyNoInteractions(assetQueryApplicationService, assetPersistenceService);
     }
 
     @Test
@@ -171,13 +171,14 @@ class AssetTitleUpdateServiceTest {
         )).isInstanceOf(InvalidAssetTitleException.class)
                 .hasMessage("title must be less than or equal to 255 characters");
 
-        verifyNoInteractions(assetService, assetPersistenceService);
+        verifyNoInteractions(assetQueryApplicationService, assetPersistenceService);
     }
 
     @Test
     void assetNotFoundReturnsNotFound() {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAsset(assetId)).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
+        when(assetQueryApplicationService.getAsset(assetId))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found"));
 
         assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
@@ -194,7 +195,7 @@ class AssetTitleUpdateServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
@@ -212,7 +213,7 @@ class AssetTitleUpdateServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""
@@ -239,7 +240,7 @@ class AssetTitleUpdateServiceTest {
         Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
         Asset updatedAsset = asset(assetId, "New Title", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         when(assetPersistenceService.updateAssetTitle(asset, "New Title")).thenReturn(updatedAsset);
 
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
@@ -266,7 +267,7 @@ class AssetTitleUpdateServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, "Old Title", AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_update_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""

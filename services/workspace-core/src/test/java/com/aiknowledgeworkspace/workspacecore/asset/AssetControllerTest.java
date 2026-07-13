@@ -38,7 +38,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AssetControllerTest {
 
-    private AssetService assetService;
+    private AssetQueryApplicationService assetQueryApplicationService;
+    private UploadAssetApplicationService uploadAssetApplicationService;
     private AssetDeletionService assetDeletionService;
     private AssetTitleUpdateService assetTitleUpdateService;
     private ExplicitIndexingApplication explicitIndexingApplication;
@@ -46,12 +47,14 @@ class AssetControllerTest {
 
     @BeforeEach
     void setUp() {
-        assetService = mock(AssetService.class);
+        assetQueryApplicationService = mock(AssetQueryApplicationService.class);
+        uploadAssetApplicationService = mock(UploadAssetApplicationService.class);
         assetDeletionService = mock(AssetDeletionService.class);
         assetTitleUpdateService = mock(AssetTitleUpdateService.class);
         explicitIndexingApplication = mock(ExplicitIndexingApplication.class);
         AssetController assetController = new AssetController(
-                assetService,
+                assetQueryApplicationService,
+                uploadAssetApplicationService,
                 assetDeletionService,
                 assetTitleUpdateService,
                 explicitIndexingApplication
@@ -82,7 +85,7 @@ class AssetControllerTest {
                 "video/mp4",
                 "video-bytes".getBytes()
         );
-        when(assetService.uploadAsset(workspaceId, file, "Lecture 1"))
+        when(uploadAssetApplicationService.uploadAsset(workspaceId, file, "Lecture 1"))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(multipart("/api/assets/upload")
@@ -102,7 +105,7 @@ class AssetControllerTest {
                 "video/mp4",
                 "video-bytes".getBytes()
         );
-        when(assetService.uploadAsset(null, file, "Lecture 1"))
+        when(uploadAssetApplicationService.uploadAsset(null, file, "Lecture 1"))
                 .thenThrow(new ObjectStorageException("Object storage upload failed", new RuntimeException("minio")));
 
         mockMvc.perform(multipart("/api/assets/upload")
@@ -126,7 +129,7 @@ class AssetControllerTest {
     void listAssetsReturnsPaginatedWorkspaceScopedAssetSummaries() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(assetService.listAssets(workspaceId, null, null, null)).thenReturn(new AssetListResponse(
+        when(assetQueryApplicationService.listAssets(workspaceId, null, null, null)).thenReturn(new AssetListResponse(
                 List.of(new AssetSummaryResponse(
                         assetId,
                         "Lecture 1",
@@ -159,7 +162,7 @@ class AssetControllerTest {
     @Test
     void listAssetsSupportsExplicitPageSizeAndAssetStatusFilter() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(assetService.listAssets(workspaceId, 1, 10, AssetStatus.SEARCHABLE)).thenReturn(new AssetListResponse(
+        when(assetQueryApplicationService.listAssets(workspaceId, 1, 10, AssetStatus.SEARCHABLE)).thenReturn(new AssetListResponse(
                 List.of(),
                 1,
                 10,
@@ -194,7 +197,7 @@ class AssetControllerTest {
     @Test
     void listAssetsReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(assetService.listAssets(workspaceId, null, null, null))
+        when(assetQueryApplicationService.listAssets(workspaceId, null, null, null))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(get("/api/assets")
@@ -206,7 +209,7 @@ class AssetControllerTest {
 
     @Test
     void listAssetsReturnsStructuredBadRequestForInvalidPage() throws Exception {
-        when(assetService.listAssets(null, -1, null, null))
+        when(assetQueryApplicationService.listAssets(null, -1, null, null))
                 .thenThrow(new AssetListRequestException(
                         "INVALID_ASSET_PAGE",
                         "page must be greater than or equal to 0"
@@ -221,7 +224,7 @@ class AssetControllerTest {
 
     @Test
     void listAssetsReturnsStructuredBadRequestForInvalidSize() throws Exception {
-        when(assetService.listAssets(null, null, 0, null))
+        when(assetQueryApplicationService.listAssets(null, null, 0, null))
                 .thenThrow(new AssetListRequestException(
                         "INVALID_ASSET_SIZE",
                         "size must be greater than 0"
@@ -258,7 +261,7 @@ class AssetControllerTest {
         org.springframework.test.util.ReflectionTestUtils.setField(asset, "id", assetId);
         org.springframework.test.util.ReflectionTestUtils.setField(asset, "createdAt", Instant.parse("2026-04-10T03:00:00Z"));
         org.springframework.test.util.ReflectionTestUtils.setField(asset, "updatedAt", Instant.parse("2026-04-10T03:05:00Z"));
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
 
         mockMvc.perform(get("/api/assets/{assetId}", assetId))
                 .andExpect(status().isOk())
@@ -271,7 +274,7 @@ class AssetControllerTest {
     @Test
     void getAssetReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
+        when(assetQueryApplicationService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}", assetId))
                 .andExpect(status().isNotFound())
@@ -283,7 +286,7 @@ class AssetControllerTest {
     void getAssetStatusReturnsOwnedAssetStatus() throws Exception {
         UUID assetId = UUID.randomUUID();
         UUID processingJobId = UUID.randomUUID();
-        when(assetService.getAssetStatus(assetId)).thenReturn(new AssetStatusResponse(
+        when(assetQueryApplicationService.getAssetStatus(assetId)).thenReturn(new AssetStatusResponse(
                 assetId,
                 processingJobId,
                 AssetStatus.TRANSCRIPT_READY,
@@ -301,7 +304,7 @@ class AssetControllerTest {
     @Test
     void getAssetStatusReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetStatus(assetId)).thenThrow(new AssetNotFoundException());
+        when(assetQueryApplicationService.getAssetStatus(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/status", assetId))
                 .andExpect(status().isNotFound())
@@ -312,7 +315,7 @@ class AssetControllerTest {
     @Test
     void getAssetTranscriptReturnsOwnedTranscript() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscript(assetId)).thenReturn(List.of(
+        when(assetQueryApplicationService.getAssetTranscript(assetId)).thenReturn(List.of(
                 new AssetTranscriptRowResponse(
                         "row-1",
                         "video-1",
@@ -333,7 +336,7 @@ class AssetControllerTest {
     @Test
     void getAssetTranscriptReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscript(assetId)).thenThrow(new AssetNotFoundException());
+        when(assetQueryApplicationService.getAssetTranscript(assetId)).thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript", assetId))
                 .andExpect(status().isNotFound())
@@ -344,7 +347,7 @@ class AssetControllerTest {
     @Test
     void getAssetTranscriptReturnsStructuredConflictWhenTranscriptIsNotReady() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscript(assetId)).thenThrow(new TranscriptUnavailableException(
+        when(assetQueryApplicationService.getAssetTranscript(assetId)).thenThrow(new TranscriptUnavailableException(
                 "TRANSCRIPT_NOT_READY",
                 "Transcript is not ready until processing reaches terminal success"
         ));
@@ -640,7 +643,7 @@ class AssetControllerTest {
     @Test
     void transcriptContextReturnsTranscriptWindow() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscriptContext(assetId, "row-2", 2))
+        when(assetQueryApplicationService.getAssetTranscriptContext(assetId, "row-2", 2))
                 .thenReturn(new AssetTranscriptContextResponse(
                         assetId,
                         "row-2",
@@ -679,7 +682,7 @@ class AssetControllerTest {
     @Test
     void transcriptContextReturnsStructuredBadRequestForInvalidWindow() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscriptContext(assetId, "row-2", 0))
+        when(assetQueryApplicationService.getAssetTranscriptContext(assetId, "row-2", 0))
                 .thenThrow(new InvalidTranscriptContextWindowException("window must be greater than 0"));
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
@@ -693,7 +696,7 @@ class AssetControllerTest {
     @Test
     void transcriptContextReturnsStructuredNotFoundForMissingTranscriptRow() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscriptContext(assetId, "row-404", 2))
+        when(assetQueryApplicationService.getAssetTranscriptContext(assetId, "row-404", 2))
                 .thenThrow(new TranscriptRowNotFoundException(assetId, "row-404"));
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)
@@ -707,7 +710,7 @@ class AssetControllerTest {
     @Test
     void transcriptContextReturnsNotFoundWhenAssetIsNotOwned() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAssetTranscriptContext(assetId, "row-2", 2))
+        when(assetQueryApplicationService.getAssetTranscriptContext(assetId, "row-2", 2))
                 .thenThrow(new AssetNotFoundException());
 
         mockMvc.perform(get("/api/assets/{assetId}/transcript/context", assetId)

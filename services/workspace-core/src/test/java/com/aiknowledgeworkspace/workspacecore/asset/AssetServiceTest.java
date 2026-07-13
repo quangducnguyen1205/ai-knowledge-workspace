@@ -127,11 +127,11 @@ class AssetServiceTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(AssetStatus.PROCESSING),
-                eq(ProcessingJobStatus.PENDING),
                 eq(workspace),
                 eq(storedObject),
-                eq(upstreamResponse)
+                eq(new DirectProcessingUploadResult(
+                        "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+                ))
         )).thenReturn(persistedResponse);
 
         AssetUploadResponse response = assetService.uploadAsset(workspaceId, file, "Lecture 1");
@@ -195,11 +195,11 @@ class AssetServiceTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 2"),
-                eq(AssetStatus.PROCESSING),
-                eq(ProcessingJobStatus.PENDING),
                 eq(workspace),
                 eq(storedObject),
-                eq(upstreamResponse)
+                eq(new DirectProcessingUploadResult(
+                        "task-2", "video-2", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+                ))
         )).thenReturn(persistedResponse);
 
         AssetUploadResponse response = assetService.uploadAsset(null, file, "Lecture 2");
@@ -262,8 +262,6 @@ class AssetServiceTest {
                 any(),
                 any(),
                 any(),
-                any(),
-                any(),
                 any()
         );
         verify(assetPersistenceService).persistKafkaRequestUpload(
@@ -314,8 +312,6 @@ class AssetServiceTest {
                 any(),
                 any(),
                 any(),
-                any(),
-                any(),
                 any()
         );
     }
@@ -353,11 +349,11 @@ class AssetServiceTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(AssetStatus.PROCESSING),
-                eq(ProcessingJobStatus.PENDING),
                 eq(workspace),
                 eq(storedObject),
-                eq(upstreamResponse)
+                eq(new DirectProcessingUploadResult(
+                        "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+                ))
         )).thenThrow(persistenceFailure);
 
         assertThatThrownBy(() -> assetService.uploadAsset(workspaceId, file, "Lecture 1"))
@@ -835,7 +831,7 @@ class AssetServiceTest {
         List<AssetTranscriptRowResponse> response = assetService.getAssetTranscript(assetId);
 
         assertThat(response).extracting(AssetTranscriptRowResponse::id)
-                .containsExactly("row-2", "row-1");
+                .containsExactly("row-1", "row-2");
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
         verifyNoInteractions(fastApiProcessingClient);
     }

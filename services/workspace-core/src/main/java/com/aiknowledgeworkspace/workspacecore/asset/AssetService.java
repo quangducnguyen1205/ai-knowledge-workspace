@@ -1,11 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTaskStatusResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
@@ -13,51 +8,33 @@ import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
 import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-@Service
-public class AssetService {
+/**
+ * Temporary internal compatibility facade for pre-decomposition unit fixtures.
+ * Production adapters and controllers use the dedicated application services directly.
+ */
+@Deprecated(forRemoval = false)
+class AssetService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AssetService.class);
-    private static final int DEFAULT_ASSET_LIST_PAGE = 0;
-    private static final int DEFAULT_ASSET_LIST_SIZE = 20;
-    private static final int MAX_ASSET_LIST_SIZE = 100;
-    private static final Sort ASSET_LIST_SORT = Sort.by(
-            Sort.Order.desc("createdAt"),
-            Sort.Order.desc("id")
-    );
-    private static final Comparator<Asset> ASSET_LIST_COMPARATOR = Comparator
-            .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
-            .thenComparing(Asset::getId, Comparator.reverseOrder());
-    private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
-    private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
+    private final UploadAssetApplicationService uploadApplicationService;
+    private final AssetQueryApplicationService queryApplicationService;
+    private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
 
-    private final AssetRepository assetRepository;
-    private final ProcessingRequestApplication processingRequestApplication;
-    private final FastApiProcessingClient fastApiProcessingClient;
-    private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceService workspaceService;
-    private final ObjectStorageClient objectStorageClient;
-    private final ObjectKeyFactory objectKeyFactory;
-    private final ObjectStorageProperties objectStorageProperties;
+    AssetService(
+            UploadAssetApplicationService uploadApplicationService,
+            AssetQueryApplicationService queryApplicationService,
+            DirectProcessingCompatibilityAdapter compatibilityAdapter
+    ) {
+        this.uploadApplicationService = uploadApplicationService;
+        this.queryApplicationService = queryApplicationService;
+        this.compatibilityAdapter = compatibilityAdapter;
+    }
 
-    @Autowired
-    public AssetService(
+    AssetService(
             AssetRepository assetRepository,
             ProcessingRequestApplication processingRequestApplication,
             FastApiProcessingClient fastApiProcessingClient,
@@ -67,17 +44,19 @@ public class AssetService {
             ObjectKeyFactory objectKeyFactory,
             ObjectStorageProperties objectStorageProperties
     ) {
-        this.assetRepository = assetRepository;
-        this.processingRequestApplication = processingRequestApplication;
-        this.fastApiProcessingClient = fastApiProcessingClient;
-        this.assetPersistenceService = assetPersistenceService;
-        this.workspaceService = workspaceService;
-        this.objectStorageClient = objectStorageClient;
-        this.objectKeyFactory = objectKeyFactory;
-        this.objectStorageProperties = objectStorageProperties;
+        this(legacyWiring(
+                assetRepository,
+                processingRequestApplication,
+                fastApiProcessingClient,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
+        ));
     }
 
-    public AssetService(
+    AssetService(
             AssetRepository assetRepository,
             ProcessingRequestApplication processingRequestApplication,
             FastApiProcessingClient fastApiProcessingClient,
@@ -105,483 +84,83 @@ public class AssetService {
         );
     }
 
-    public Asset getAsset(UUID assetId) {
-        Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(AssetNotFoundException::new);
-
-        if (asset.getWorkspace() != null) {
-            if (!workspaceService.isOwnedByCurrentUser(asset.getWorkspace())) {
-                throw new AssetNotFoundException();
-            }
-            return asset;
-        }
-
-        throw new AssetNotFoundException();
+    private AssetService(LegacyWiring wiring) {
+        this(wiring.uploadApplicationService(), wiring.queryApplicationService(), wiring.compatibilityAdapter());
     }
 
-    public AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
-        int resolvedPage = resolveAssetListPage(page);
-        int resolvedSize = resolveAssetListSize(size);
-
-        Workspace resolvedWorkspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
-        List<Asset> assets = loadAssetsForWorkspace(resolvedWorkspace);
-
-        List<Asset> filteredAssets = assets.stream()
-                .filter(asset -> assetStatus == null || asset.getStatus() == assetStatus)
-                .toList();
-
-        int totalElements = filteredAssets.size();
-        int totalPages = totalElements == 0
-                ? 0
-                : (int) Math.ceil((double) totalElements / resolvedSize);
-
-        int startIndex = (int) Math.min((long) resolvedPage * resolvedSize, totalElements);
-        int endIndex = Math.min(startIndex + resolvedSize, totalElements);
-
-        List<AssetSummaryResponse> items = filteredAssets.subList(startIndex, endIndex).stream()
-                .map(this::toAssetSummaryResponse)
-                .toList();
-
-        boolean hasNext = resolvedPage + 1 < totalPages;
-
-        return new AssetListResponse(
-                items,
-                resolvedPage,
-                resolvedSize,
-                totalElements,
-                totalPages,
-                hasNext
-        );
+    Asset getAsset(UUID assetId) {
+        return queryApplicationService.getAsset(assetId);
     }
 
-    public AssetStatusResponse getAssetStatus(UUID assetId) {
-        Asset asset = getAsset(assetId);
-        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
-                .orElseThrow(ProcessingJobNotFoundException::new);
-
-        if (isTerminal(processingJob.status())) {
-            return new AssetStatusResponse(
-                    asset.getId(),
-                    processingJob.id(),
-                    asset.getStatus(),
-                    processingJob.status()
-            );
-        }
-
-        if (!StringUtils.hasText(processingJob.fastapiTaskId())) {
-            return new AssetStatusResponse(
-                    asset.getId(),
-                    processingJob.id(),
-                    asset.getStatus(),
-                    processingJob.status()
-            );
-        }
-
-        FastApiTaskStatusResponse upstreamTaskStatus = fastApiProcessingClient.getTaskStatus(processingJob.fastapiTaskId());
-        validateUpstreamTaskStatusResponse(upstreamTaskStatus);
-
-        ProcessingJobStatus updatedProcessingJobStatus = mapUpstreamTaskStatus(upstreamTaskStatus.status());
-        AssetStatus updatedAssetStatus = mapAssetStatusFromTaskStatus(updatedProcessingJobStatus);
-
-        return assetPersistenceService.refreshAssetStatus(
-                asset,
-                processingJob,
-                upstreamTaskStatus.status(),
-                updatedProcessingJobStatus,
-                updatedAssetStatus
-        );
+    AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus status) {
+        return queryApplicationService.listAssets(workspaceId, page, size, status);
     }
 
-    public List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
-        Asset asset = getAsset(assetId);
-        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
-                .orElseThrow(ProcessingJobNotFoundException::new);
-
-        return loadUsableTranscriptSnapshot(asset, processingJob).stream()
-                .map(this::toAssetTranscriptRowResponse)
-                .toList();
+    AssetStatusResponse getAssetStatus(UUID assetId) {
+        return queryApplicationService.getAssetStatus(assetId);
     }
 
-    public AssetTranscriptContextResponse getAssetTranscriptContext(
-            UUID assetId,
-            String transcriptRowId,
-            Integer window
+    List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
+        return queryApplicationService.getAssetTranscript(assetId);
+    }
+
+    AssetTranscriptContextResponse getAssetTranscriptContext(UUID assetId, String transcriptRowId, Integer window) {
+        return queryApplicationService.getAssetTranscriptContext(assetId, transcriptRowId, window);
+    }
+
+    List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJobView processingJob) {
+        return compatibilityAdapter.loadOrCaptureTranscript(asset, processingJob);
+    }
+
+    AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
+        return uploadApplicationService.uploadAsset(workspaceId, file, requestedTitle);
+    }
+
+    private static LegacyWiring legacyWiring(
+            AssetRepository assetRepository,
+            ProcessingRequestApplication processingRequestApplication,
+            FastApiProcessingClient fastApiProcessingClient,
+            AssetPersistenceService assetPersistenceService,
+            WorkspaceService workspaceService,
+            ObjectStorageClient objectStorageClient,
+            ObjectKeyFactory objectKeyFactory,
+            ObjectStorageProperties objectStorageProperties
     ) {
-        int resolvedWindow = resolveTranscriptContextWindow(window);
-        List<AssetTranscriptRowResponse> sortedRows = new ArrayList<>(getAssetTranscript(assetId));
-        sortedRows.sort(Comparator.comparing(
-                AssetTranscriptRowResponse::segmentIndex,
-                Comparator.nullsLast(Integer::compareTo)
-        ));
-        int hitRowIndex = findTranscriptRowIndex(sortedRows, transcriptRowId);
-        if (hitRowIndex < 0) {
-            throw new TranscriptRowNotFoundException(assetId, transcriptRowId);
-        }
-
-        AssetTranscriptRowResponse hitRow = sortedRows.get(hitRowIndex);
-        int startIndex = Math.max(0, hitRowIndex - resolvedWindow);
-        int endIndexExclusive = Math.min(sortedRows.size(), hitRowIndex + resolvedWindow + 1);
-        List<AssetTranscriptRowResponse> contextRows = new ArrayList<>(
-                sortedRows.subList(startIndex, endIndexExclusive)
+        AssetTranscriptQueryService transcriptQueryService = new AssetTranscriptQueryService(
+                assetRepository, assetPersistenceService, workspaceService
         );
-
-        return new AssetTranscriptContextResponse(
-                assetId,
-                transcriptRowId,
-                hitRow.segmentIndex(),
-                resolvedWindow,
-                contextRows
+        AssetTranscriptSnapshotService transcriptSnapshotService = new AssetTranscriptSnapshotService(
+                assetRepository,
+                assetPersistenceService,
+                (assetId, rows) -> {
+                }
         );
+        DirectProcessingCompatibilityAdapter compatibilityAdapter = new DirectProcessingCompatibilityAdapter(
+                fastApiProcessingClient, transcriptQueryService, transcriptSnapshotService
+        );
+        UploadAssetApplicationService uploadApplicationService = new UploadAssetApplicationService(
+                processingRequestApplication,
+                compatibilityAdapter,
+                assetPersistenceService,
+                workspaceService,
+                objectStorageClient,
+                objectKeyFactory,
+                objectStorageProperties
+        );
+        AssetQueryApplicationService queryApplicationService = new AssetQueryApplicationService(
+                assetRepository,
+                processingRequestApplication,
+                compatibilityAdapter,
+                assetPersistenceService,
+                workspaceService
+        );
+        return new LegacyWiring(uploadApplicationService, queryApplicationService, compatibilityAdapter);
     }
 
-    public List<AssetTranscriptRowSnapshot> loadUsableTranscriptSnapshot(Asset asset, ProcessingJobView processingJob) {
-        if (processingJob.status() != ProcessingJobStatus.SUCCEEDED) {
-            throw new TranscriptUnavailableException(
-                    "TRANSCRIPT_NOT_READY",
-                    "Transcript is not ready until processing reaches terminal success"
-            );
-        }
-
-        List<AssetTranscriptRowSnapshot> transcriptRows = loadUsablePersistedTranscriptSnapshot(asset.getId());
-        if (transcriptRows.isEmpty()) {
-            transcriptRows = captureUsableTranscriptSnapshot(asset, processingJob);
-        }
-
-        markAssetTranscriptUsable(asset);
-        return transcriptRows;
-    }
-
-    public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
-        if (file == null || file.isEmpty()) {
-            throw new InvalidUploadRequestException("A non-empty file is required");
-        }
-
-        String originalFilename = resolveOriginalFilename(file);
-        String title = resolveTitle(requestedTitle, originalFilename);
-        Workspace workspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
-        UUID assetId = UUID.randomUUID();
-        String objectKey = objectKeyFactory.rawMediaKey(
-                workspace.getOwnerId(),
-                workspace.getId(),
-                assetId,
-                originalFilename
-        );
-        StoredObject storedObject = storeUploadedObject(file, objectKey);
-
-        try {
-            if (!processingRequestApplication.usesKafkaRequestMode()) {
-                return persistDirectUpload(
-                        file,
-                        assetId,
-                        originalFilename,
-                        title,
-                        workspace,
-                        storedObject
-                );
-            }
-            return assetPersistenceService.persistKafkaRequestUpload(
-                    assetId,
-                    originalFilename,
-                    title,
-                    workspace,
-                    storedObject
-            );
-        } catch (RuntimeException exception) {
-            cleanupStoredObjectBestEffort(storedObject);
-            throw exception;
-        }
-    }
-
-    private AssetUploadResponse persistDirectUpload(
-            MultipartFile file,
-            UUID assetId,
-            String originalFilename,
-            String title,
-            Workspace workspace,
-            StoredObject storedObject
+    private record LegacyWiring(
+            UploadAssetApplicationService uploadApplicationService,
+            AssetQueryApplicationService queryApplicationService,
+            DirectProcessingCompatibilityAdapter compatibilityAdapter
     ) {
-        FastApiUploadResponse upstreamResponse = fastApiProcessingClient.uploadVideo(
-                file.getResource(),
-                originalFilename,
-                title
-        );
-
-        validateUpstreamUploadResponse(upstreamResponse);
-
-        ProcessingJobStatus initialProcessingStatus = mapUpstreamTaskStatus(upstreamResponse.status());
-        AssetStatus initialAssetStatus = initialProcessingStatus == ProcessingJobStatus.FAILED
-                ? AssetStatus.FAILED
-                : AssetStatus.PROCESSING;
-        return assetPersistenceService.persistDirectUploadResult(
-                assetId,
-                originalFilename,
-                title,
-                initialAssetStatus,
-                initialProcessingStatus,
-                workspace,
-                storedObject,
-                upstreamResponse
-        );
-    }
-
-    private StoredObject storeUploadedObject(MultipartFile file, String objectKey) {
-        try (InputStream inputStream = file.getInputStream()) {
-            return objectStorageClient.store(new StoreObjectRequest(
-                    objectStorageProperties.getBucket(),
-                    objectKey,
-                    inputStream,
-                    file.getSize(),
-                    resolveContentType(file)
-            ));
-        } catch (IOException exception) {
-            throw new InvalidUploadRequestException("Uploaded file could not be read");
-        }
-    }
-
-    private String resolveContentType(MultipartFile file) {
-        if (StringUtils.hasText(file.getContentType())) {
-            return file.getContentType();
-        }
-        return "application/octet-stream";
-    }
-
-    private void cleanupStoredObjectBestEffort(StoredObject storedObject) {
-        try {
-            objectStorageClient.delete(storedObject.bucket(), storedObject.objectKey());
-        } catch (RuntimeException cleanupException) {
-            LOGGER.warn(
-                    "Failed to clean up uploaded object {}/{} after upload flow failure",
-                    storedObject.bucket(),
-                    storedObject.objectKey(),
-                    cleanupException
-            );
-        }
-    }
-
-    private void validateUpstreamUploadResponse(FastApiUploadResponse upstreamResponse) {
-        if (upstreamResponse == null) {
-            throw new InvalidFastApiResponseException("FastAPI upload response body was empty");
-        }
-        if (!StringUtils.hasText(upstreamResponse.taskId())) {
-            throw new InvalidFastApiResponseException("FastAPI upload response did not include task_id");
-        }
-        if (!StringUtils.hasText(upstreamResponse.videoId())) {
-            throw new InvalidFastApiResponseException("FastAPI upload response did not include video_id");
-        }
-    }
-
-    private void validateUpstreamTaskStatusResponse(FastApiTaskStatusResponse upstreamResponse) {
-        if (upstreamResponse == null) {
-            throw new InvalidFastApiResponseException("FastAPI task status response body was empty");
-        }
-        if (!StringUtils.hasText(upstreamResponse.status())) {
-            throw new InvalidFastApiResponseException("FastAPI task status response did not include status");
-        }
-    }
-
-    private String resolveOriginalFilename(MultipartFile file) {
-        String originalFilename = file.getOriginalFilename();
-        // Strip any path information that might be included by the client
-        String cleanedFilename = StringUtils.getFilename(originalFilename);
-
-        // Fallback to a safe default if nothing usable is provided
-        if (!StringUtils.hasText(cleanedFilename)) {
-            return "upload.bin";
-        }
-
-        // Enforce a maximum length (matches typical @Column(length = 255) constraints)
-        final int MAX_FILENAME_LENGTH = 255;
-        if (cleanedFilename.length() <= MAX_FILENAME_LENGTH) {
-            return cleanedFilename;
-        }
-
-        // Try to preserve the file extension when truncating
-        int lastDotIndex = cleanedFilename.lastIndexOf('.');
-        if (lastDotIndex > 0 && lastDotIndex < cleanedFilename.length() - 1) {
-            String extension = cleanedFilename.substring(lastDotIndex);
-            int truncatedLength = MAX_FILENAME_LENGTH - extension.length();
-            if (truncatedLength > 0) {
-                return cleanedFilename.substring(0, truncatedLength) + extension;
-            }
-        }
-        return cleanedFilename.substring(0, MAX_FILENAME_LENGTH);
-    }
-
-    private String resolveTitle(String requestedTitle, String originalFilename) {
-        String title;
-        if (StringUtils.hasText(requestedTitle)) {
-            title = requestedTitle.trim();
-        } else {
-            title = originalFilename;
-        }
-        int maxLength = 255;
-        if (title.length() > maxLength) {
-            title = title.substring(0, maxLength);
-        }
-        return title;
-    }
-
-    private ProcessingJobStatus mapUpstreamTaskStatus(String upstreamStatus) {
-        if (!StringUtils.hasText(upstreamStatus)) {
-            return ProcessingJobStatus.PENDING;
-        }
-
-        String normalized = upstreamStatus.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "pending", "queued", "created" -> ProcessingJobStatus.PENDING;
-            case "running", "processing", "started", "in_progress" -> ProcessingJobStatus.RUNNING;
-            case "success", "succeeded", "completed", "complete", "ready" -> ProcessingJobStatus.SUCCEEDED;
-            case "failed", "error" -> ProcessingJobStatus.FAILED;
-            default -> ProcessingJobStatus.RUNNING;
-        };
-    }
-
-    private AssetStatus mapAssetStatusFromTaskStatus(ProcessingJobStatus processingJobStatus) {
-        return switch (processingJobStatus) {
-            case FAILED -> AssetStatus.FAILED;
-            case PENDING, RUNNING, SUCCEEDED -> AssetStatus.PROCESSING;
-        };
-    }
-
-    private boolean isTerminal(ProcessingJobStatus processingJobStatus) {
-        return processingJobStatus == ProcessingJobStatus.SUCCEEDED
-                || processingJobStatus == ProcessingJobStatus.FAILED;
-    }
-
-    private int resolveTranscriptContextWindow(Integer window) {
-        if (window == null) {
-            return DEFAULT_TRANSCRIPT_CONTEXT_WINDOW;
-        }
-        if (window <= 0) {
-            throw new InvalidTranscriptContextWindowException("window must be greater than 0");
-        }
-        if (window > MAX_TRANSCRIPT_CONTEXT_WINDOW) {
-            throw new InvalidTranscriptContextWindowException(
-                    "window must be less than or equal to " + MAX_TRANSCRIPT_CONTEXT_WINDOW
-            );
-        }
-        return window;
-    }
-
-    private int findTranscriptRowIndex(List<AssetTranscriptRowResponse> rows, String transcriptRowId) {
-        for (int index = 0; index < rows.size(); index++) {
-            if (matchesTranscriptRowId(rows.get(index), transcriptRowId)) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private boolean matchesTranscriptRowId(AssetTranscriptRowResponse row, String transcriptRowId) {
-        if (StringUtils.hasText(row.id())) {
-            return row.id().equals(transcriptRowId);
-        }
-        return row.segmentIndex() != null
-                && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
-    }
-
-    private int resolveAssetListPage(Integer page) {
-        if (page == null) {
-            return DEFAULT_ASSET_LIST_PAGE;
-        }
-        if (page < 0) {
-            throw new AssetListRequestException("INVALID_ASSET_PAGE", "page must be greater than or equal to 0");
-        }
-        return page;
-    }
-
-    private int resolveAssetListSize(Integer size) {
-        if (size == null) {
-            return DEFAULT_ASSET_LIST_SIZE;
-        }
-        if (size <= 0) {
-            throw new AssetListRequestException("INVALID_ASSET_SIZE", "size must be greater than 0");
-        }
-        if (size > MAX_ASSET_LIST_SIZE) {
-            throw new AssetListRequestException(
-                    "INVALID_ASSET_SIZE",
-                    "size must be less than or equal to " + MAX_ASSET_LIST_SIZE
-            );
-        }
-        return size;
-    }
-
-    private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
-        List<Asset> assets = new ArrayList<>(assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT));
-        assets.sort(ASSET_LIST_COMPARATOR);
-        return assets;
-    }
-
-    private AssetSummaryResponse toAssetSummaryResponse(Asset asset) {
-        return new AssetSummaryResponse(
-                asset.getId(),
-                asset.getTitle(),
-                asset.getStatus(),
-                asset.getWorkspaceId(),
-                asset.getCreatedAt()
-        );
-    }
-
-    private AssetTranscriptRowResponse toAssetTranscriptRowResponse(AssetTranscriptRowSnapshot transcriptRow) {
-        return new AssetTranscriptRowResponse(
-                transcriptRow.getTranscriptRowId(),
-                transcriptRow.getVideoId(),
-                transcriptRow.getSegmentIndex(),
-                transcriptRow.getText(),
-                transcriptRow.getCreatedAt()
-        );
-    }
-
-    private List<AssetTranscriptRowSnapshot> loadUsablePersistedTranscriptSnapshot(UUID assetId) {
-        return assetPersistenceService.loadTranscriptSnapshot(assetId).stream()
-                .filter(this::isUsableTranscriptSnapshot)
-                .toList();
-    }
-
-    private List<AssetTranscriptRowSnapshot> captureUsableTranscriptSnapshot(Asset asset, ProcessingJobView processingJob) {
-        List<FastApiTranscriptRowResponse> usableTranscriptRows = fastApiProcessingClient.getTranscript(
-                processingJob.fastapiVideoId()
-        ).stream()
-                .filter(this::isUsableTranscriptRow)
-                .toList();
-
-        if (usableTranscriptRows.isEmpty()) {
-            assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
-            throw new TranscriptUnavailableException(
-                    "TRANSCRIPT_NOT_USABLE",
-                    "Transcript is empty or unusable for this asset"
-            );
-        }
-
-        return assetPersistenceService.replaceTranscriptSnapshot(asset, usableTranscriptRows.stream()
-                .map(this::toAssetTranscriptRowInput)
-                .toList());
-    }
-
-    private void markAssetTranscriptUsable(Asset asset) {
-        AssetStatus updatedAssetStatus = asset.getStatus() == AssetStatus.SEARCHABLE
-                ? AssetStatus.SEARCHABLE
-                : AssetStatus.TRANSCRIPT_READY;
-        assetPersistenceService.updateAssetStatus(asset, updatedAssetStatus);
-    }
-
-    private boolean isUsableTranscriptSnapshot(AssetTranscriptRowSnapshot transcriptRow) {
-        return transcriptRow.getSegmentIndex() != null && StringUtils.hasText(transcriptRow.getText());
-    }
-
-    private boolean isUsableTranscriptRow(FastApiTranscriptRowResponse transcriptRow) {
-        return transcriptRow != null
-                && transcriptRow.segmentIndex() != null
-                && StringUtils.hasText(transcriptRow.text());
-    }
-
-    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
-        return new AssetTranscriptRowInput(
-                transcriptRow.id(),
-                transcriptRow.videoId(),
-                transcriptRow.segmentIndex(),
-                transcriptRow.text(),
-                transcriptRow.createdAt()
-        );
     }
 }

@@ -1,6 +1,5 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
@@ -38,17 +37,15 @@ public class AssetPersistenceService {
             UUID assetId,
             String originalFilename,
             String title,
-            AssetStatus initialAssetStatus,
-            ProcessingJobStatus initialProcessingStatus,
             Workspace workspace,
             StoredObject storedObject,
-            FastApiUploadResponse upstreamResponse
+            DirectProcessingUploadResult directResult
     ) {
         Asset asset = assetRepository.save(new Asset(
                 assetId,
                 originalFilename,
                 title,
-                initialAssetStatus,
+                directResult.assetStatus(),
                 workspace,
                 storedObject.bucket(),
                 storedObject.objectKey(),
@@ -59,10 +56,10 @@ public class AssetPersistenceService {
 
         ProcessingJobView processingJob = processingRequestApplication.createDirectJob(new DirectProcessingJobCommand(
                 asset.getId(),
-                upstreamResponse.taskId(),
-                upstreamResponse.videoId(),
-                initialProcessingStatus,
-                upstreamResponse.status()
+                directResult.taskId(),
+                directResult.videoId(),
+                directResult.processingStatus(),
+                directResult.rawStatus()
         ));
 
         return new AssetUploadResponse(asset.getId(), processingJob.id(), asset.getStatus(), asset.getWorkspaceId());

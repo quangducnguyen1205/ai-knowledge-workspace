@@ -22,18 +22,21 @@ import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexin
 @RequestMapping("/api/assets")
 public class AssetController {
 
-    private final AssetService assetService;
+    private final AssetQueryApplicationService assetQueryApplicationService;
+    private final UploadAssetApplicationService uploadAssetApplicationService;
     private final AssetDeletionService assetDeletionService;
     private final AssetTitleUpdateService assetTitleUpdateService;
     private final ExplicitIndexingApplication explicitIndexingApplication;
 
     public AssetController(
-            AssetService assetService,
+            AssetQueryApplicationService assetQueryApplicationService,
+            UploadAssetApplicationService uploadAssetApplicationService,
             AssetDeletionService assetDeletionService,
             AssetTitleUpdateService assetTitleUpdateService,
             ExplicitIndexingApplication explicitIndexingApplication
     ) {
-        this.assetService = assetService;
+        this.assetQueryApplicationService = assetQueryApplicationService;
+        this.uploadAssetApplicationService = uploadAssetApplicationService;
         this.assetDeletionService = assetDeletionService;
         this.assetTitleUpdateService = assetTitleUpdateService;
         this.explicitIndexingApplication = explicitIndexingApplication;
@@ -46,12 +49,12 @@ public class AssetController {
             @RequestParam(value = "size", required = false) Integer size,
             @RequestParam(value = "assetStatus", required = false) AssetStatus assetStatus
     ) {
-        return assetService.listAssets(workspaceId, page, size, assetStatus);
+        return assetQueryApplicationService.listAssets(workspaceId, page, size, assetStatus);
     }
 
     @GetMapping("/{assetId}")
     public Asset getAsset(@PathVariable UUID assetId) {
-        return assetService.getAsset(assetId);
+        return assetQueryApplicationService.getAsset(assetId);
     }
 
     @PatchMapping("/{assetId}")
@@ -70,12 +73,12 @@ public class AssetController {
 
     @GetMapping("/{assetId}/status")
     public AssetStatusResponse getAssetStatus(@PathVariable UUID assetId) {
-        return assetService.getAssetStatus(assetId);
+        return assetQueryApplicationService.getAssetStatus(assetId);
     }
 
     @GetMapping("/{assetId}/transcript")
     public List<AssetTranscriptRowResponse> getAssetTranscript(@PathVariable UUID assetId) {
-        return assetService.getAssetTranscript(assetId);
+        return assetQueryApplicationService.getAssetTranscript(assetId);
     }
 
     @GetMapping("/{assetId}/transcript/context")
@@ -84,7 +87,7 @@ public class AssetController {
             @RequestParam("transcriptRowId") String transcriptRowId,
             @RequestParam(value = "window", required = false) Integer window
     ) {
-        return assetService.getAssetTranscriptContext(assetId, transcriptRowId, window);
+        return assetQueryApplicationService.getAssetTranscriptContext(assetId, transcriptRowId, window);
     }
 
     @PostMapping("/{assetId}/index")
@@ -99,7 +102,7 @@ public class AssetController {
             @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "title", required = false) String title
     ) {
-        AssetUploadResponse response = assetService.uploadAsset(workspaceId, file, title);
+        AssetUploadResponse response = uploadAssetApplicationService.uploadAsset(workspaceId, file, title);
         return ResponseEntity.accepted().body(response);
     }
 }

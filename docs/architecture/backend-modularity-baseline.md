@@ -169,13 +169,43 @@ boundaries (plus the existing public processing status enum used by the frozen
 asset response contract). B2B may decompose orchestration classes only after
 these zero-cycle rules and the event/error contract tests remain green.
 
+## P3-S5.B2B Asset And Transcript Decomposition
+
+P3-S5.B2B `[VERIFIED BY TESTS]` keeps the B2A dependency graph and makes the
+normal asset flow readable through dedicated application use cases:
+
+- `UploadAssetApplicationService` owns validation, workspace resolution, object
+  storage, trigger selection, persistence delegation, and failure cleanup.
+- `AssetQueryApplicationService` owns list/detail/status/transcript response
+  projection; `AssetController`, title update, and deletion call it rather than
+  the former god service.
+- `AssetTranscriptSnapshotService` is the single canonical snapshot write owner.
+  It filters unusable compatibility rows, replaces the PostgreSQL snapshot,
+  creates automatic indexing intent through the existing search application
+  API, and applies transcript-ready/failed lifecycle rules.
+- `AssetTranscriptQueryService` is the single ordered canonical read owner for
+  indexing sources, transcript context, assistant context, and search adapters.
+- `DirectProcessingCompatibilityAdapter` contains the deprecated FastAPI direct
+  upload/status/transcript mapping. It is package-private and delegates every
+  captured transcript to the canonical snapshot service.
+
+The upload coordinator and controller transcript fallback remain outside an
+enclosing database transaction, while asset/job/outbox persistence, async result
+application, and indexing fallback retain their existing transactional
+participation. No event, HTTP, schema, profile, or compatibility contract is
+changed. The reviewed ratchet is `83` violation messages and `0` cycle messages,
+down from `101` and `0`. Strict verification remains red only for reviewed
+non-cycle exposure debt. A thin non-bean `AssetService` facade remains for legacy
+unit fixtures and is explicitly deferred to B2C; it delegates all methods and
+contains no business rules.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 
 | Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
 |---|---:|---|---|---|---|---|---|
-| `asset` | 35 | Asset metadata, upload orchestration, object-storage reference handling, transcript snapshot persistence/read APIs, asset title/delete/index API entrypoints, and public application contracts for processing-result apply, indexing-source reads, searchability state, transcript context, and workspace usage. | `AssetController` | `AssetService`, `AssetPersistenceService`, `AssetReadService`, `AssetProcessingResultApplicationService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Upload responses, transcript/context responses, asset-status DTOs, immutable asset read contracts; invokes storage, FastAPI direct path, processing jobs, outbox, and search indexing request service. | Domain-specific, currently also orchestration-heavy. |
+| `asset` | 44 | Asset metadata, focused upload/query use cases, canonical transcript snapshot write/read ownership, object-storage reference handling, compatibility adaptation, lifecycle persistence, and title/delete/index API entrypoints. | `AssetController` | `UploadAssetApplicationService`, `AssetQueryApplicationService`, `AssetTranscriptSnapshotService`, `AssetTranscriptQueryService`, `AssetPersistenceService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService`; package-private `DirectProcessingCompatibilityAdapter`; thin non-bean `AssetService` test facade | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Controllers and B2A adapters consume focused asset use cases; FastAPI DTO mapping is confined to the compatibility adapter and canonical services contain no provider contracts. | Domain/application-specific with persistence and compatibility adapters kept explicit. |
 | `assistant` | 13 | Assistant context pack API and grounded answer orchestration. | `AssistantContextController`, `AssistantAnswerController` | `AssistantContextService`, `AssistantAnswerService` | none | DTOs for context/answer request, source, citation, response; reuses search and asset context services; calls the named `integration::assistant` FastAPI contract for answer generation. | Domain/application-specific. |
 | `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
 | `integration` | 14 | FastAPI client boundary, assistant FastAPI named interface, processing FastAPI DTOs/exceptions, and HTTP implementations. | none | `FastApiProcessingClientImpl`, internal `FastApiAssistantClientImpl` components | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses; exposes only assistant answer transport records/client via `integration::assistant`. | Technical adapter, provider-specific. |

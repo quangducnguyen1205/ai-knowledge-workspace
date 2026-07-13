@@ -37,7 +37,7 @@ import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 class AssetDeletionServiceTest {
 
     @Mock
-    private AssetService assetService;
+    private AssetQueryApplicationService assetQueryApplicationService;
 
     @Mock
     private AssetPersistenceService assetPersistenceService;
@@ -75,7 +75,7 @@ class AssetDeletionServiceTest {
             }
         };
         assetDeletionService = new AssetDeletionService(
-                assetService,
+                assetQueryApplicationService,
                 assetPersistenceService,
                 maintenance,
                 objectStorageClient
@@ -87,7 +87,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -101,7 +101,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.TRANSCRIPT_READY);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -114,7 +114,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
@@ -138,7 +138,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
@@ -156,7 +156,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""
@@ -181,7 +181,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.FAILED);
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -194,7 +194,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
 
-        when(assetService.getAsset(assetId)).thenReturn(asset);
+        when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         doThrow(new ObjectStorageException("delete failed", new RuntimeException("minio down")))
                 .when(objectStorageClient)
                 .delete("workspace-media", "objects/raw.mp4");
@@ -208,7 +208,7 @@ class AssetDeletionServiceTest {
     @Test
     void deletingMissingAssetReturnsNotFound() {
         UUID assetId = UUID.randomUUID();
-        when(assetService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
+        when(assetQueryApplicationService.getAsset(assetId)).thenThrow(new AssetNotFoundException());
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
                 .isInstanceOf(AssetNotFoundException.class)
@@ -220,7 +220,7 @@ class AssetDeletionServiceTest {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING);
 
-        when(assetService.getAsset(assetId))
+        when(assetQueryApplicationService.getAsset(assetId))
                 .thenReturn(asset)
                 .thenThrow(new AssetNotFoundException());
 
