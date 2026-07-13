@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
@@ -34,7 +34,7 @@ class AssistantAnswerServiceTest {
     private SearchService searchService;
 
     @Mock
-    private AssetReadService assetReadService;
+    private AssetTranscriptQueryService assetReadService;
 
     @Mock
     private FastApiAssistantClient fastApiAssistantClient;

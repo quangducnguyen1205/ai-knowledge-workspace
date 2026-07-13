@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.List;
@@ -21,7 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
-class AssetReadServiceTest {
+class AssetTranscriptQueryServiceTest {
 
     @Mock
     private AssetRepository assetRepository;
@@ -35,40 +36,32 @@ class AssetReadServiceTest {
     @Mock
     private WorkspaceService workspaceService;
 
+    @Mock
+    private IndexingRequestApplication indexingRequestApplication;
+
     @Test
-    void currentIndexingSourceReturnsImmutableApplicationRowsWithoutJpaEntities() {
+    void currentIndexingSourceReturnsOrderedUsableCanonicalRows() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
         Asset asset = asset(assetId, workspaceId, AssetStatus.TRANSCRIPT_READY);
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of(
-                snapshot(assetId, "row-1", 0, "Searchable transcript"),
-                snapshot(assetId, "row-blank", 1, " ")
+                snapshot(assetId, "row-blank", 1, " "),
+                snapshot(assetId, "row-2", 2, "second"),
+                snapshot(assetId, "row-1", 0, "first")
         ));
 
-        AssetIndexingSource source = service().findCurrentIndexingSource(assetId).orElseThrow();
+        AssetIndexingSource source = queryService().findCurrentIndexingSource(assetId).orElseThrow();
 
-        assertThat(source.assetId()).isEqualTo(assetId);
-        assertThat(source.workspaceId()).isEqualTo(workspaceId);
-        assertThat(source.assetTitle()).isEqualTo("Lecture");
-        assertThat(source.transcriptRows()).containsExactly(new AssetTranscriptRowView(
-                "row-1",
-                "video-1",
-                0,
-                "Searchable transcript",
-                "2026-06-26T00:00:00Z"
-        ));
+        assertThat(source.transcriptRows()).extracting(AssetTranscriptRowView::id)
+                .containsExactly("row-1", "row-2");
         assertThatThrownBy(() -> source.transcriptRows().add(new AssetTranscriptRowView(
-                "row-2",
-                "video-1",
-                1,
-                "extra",
-                "2026-06-26T00:00:01Z"
+                "row-3", "video-1", 3, "third", "2026-06-26T00:00:03Z"
         ))).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void searchableTranscriptContextRespectsWorkspaceAndAssetSearchabilityGate() {
+    void searchableTranscriptContextUsesTheCanonicalOrderedSnapshot() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
         Asset asset = asset(assetId, workspaceId, AssetStatus.SEARCHABLE);
@@ -79,26 +72,20 @@ class AssetReadServiceTest {
                 snapshot(assetId, "row-3", 3, "after")
         ));
 
-        Optional<AssetTranscriptContext> context = service().findSearchableTranscriptContext(
-                assetId,
-                workspaceId,
-                "row-2",
-                1
+        Optional<AssetTranscriptContext> context = queryService().findSearchableTranscriptContext(
+                assetId, workspaceId, "row-2", 1
         );
 
         assertThat(context).isPresent();
         assertThat(context.orElseThrow().rows()).extracting(AssetTranscriptRowView::id)
                 .containsExactly("row-1", "row-2", "row-3");
-        assertThat(service().findSearchableTranscriptContext(assetId, UUID.randomUUID(), "row-2", 1)).isEmpty();
-
-        Asset nonSearchable = asset(UUID.randomUUID(), workspaceId, AssetStatus.TRANSCRIPT_READY);
-        when(assetRepository.findById(nonSearchable.getId())).thenReturn(Optional.of(nonSearchable));
-        assertThat(service().findSearchableTranscriptContext(nonSearchable.getId(), workspaceId, "row-2", 1))
-                .isEmpty();
+        assertThat(queryService().findSearchableTranscriptContext(
+                assetId, UUID.randomUUID(), "row-2", 1
+        )).isEmpty();
     }
 
     @Test
-    void authorizedIndexingSourceCapturesFallbackTranscriptThroughAssetInputContract() {
+    void compatibilityFallbackCapturesThroughTheCanonicalSnapshotService() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
         Asset asset = asset(assetId, workspaceId, AssetStatus.PROCESSING);
@@ -113,24 +100,31 @@ class AssetReadServiceTest {
                 org.mockito.Mockito.eq(asset),
                 anyList()
         )).thenReturn(List.of(snapshot(assetId, "row-1", 1, "usable")));
+        AssetTranscriptQueryService queryService = queryService();
+        AssetTranscriptSnapshotService snapshotService = new AssetTranscriptSnapshotService(
+                assetRepository, assetPersistenceService, indexingRequestApplication
+        );
+        DirectProcessingCompatibilityAdapter adapter = new DirectProcessingCompatibilityAdapter(
+                fastApiProcessingClient, queryService, snapshotService
+        );
 
-        AssetIndexingSource source = service().loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1");
+        AssetIndexingSource source = adapter.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1");
 
         assertThat(source.transcriptRows()).extracting(AssetTranscriptRowView::text).containsExactly("usable");
-        ArgumentCaptor<List<AssetTranscriptRowInput>> captor = ArgumentCaptor.forClass(List.class);
-        verify(assetPersistenceService).replaceTranscriptSnapshot(org.mockito.Mockito.eq(asset), captor.capture());
-        assertThat(captor.getValue()).containsExactly(new AssetTranscriptRowInput(
-                "row-1",
-                "video-1",
-                1,
-                "usable",
-                "2026-06-26T00:00:01Z"
+        ArgumentCaptor<List<AssetTranscriptRowInput>> rows = ArgumentCaptor.forClass(List.class);
+        verify(assetPersistenceService).replaceTranscriptSnapshot(org.mockito.Mockito.eq(asset), rows.capture());
+        assertThat(rows.getValue()).containsExactly(new AssetTranscriptRowInput(
+                "row-1", "video-1", 1, "usable", "2026-06-26T00:00:01Z"
         ));
+        verify(indexingRequestApplication).requestIndexingIfEnabled(
+                org.mockito.Mockito.eq(assetId),
+                anyList()
+        );
         verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
     }
 
-    private AssetReadService service() {
-        return new AssetReadService(assetRepository, assetPersistenceService, fastApiProcessingClient, workspaceService);
+    private AssetTranscriptQueryService queryService() {
+        return new AssetTranscriptQueryService(assetRepository, assetPersistenceService, workspaceService);
     }
 
     private Asset asset(UUID assetId, UUID workspaceId, AssetStatus status) {
@@ -141,12 +135,7 @@ class AssetReadServiceTest {
 
     private AssetTranscriptRowSnapshot snapshot(UUID assetId, String rowId, Integer segmentIndex, String text) {
         return new AssetTranscriptRowSnapshot(
-                assetId,
-                rowId,
-                "video-1",
-                segmentIndex,
-                text,
-                "2026-06-26T00:00:00Z"
+                assetId, rowId, "video-1", segmentIndex, text, "2026-06-26T00:00:00Z"
         );
     }
 }

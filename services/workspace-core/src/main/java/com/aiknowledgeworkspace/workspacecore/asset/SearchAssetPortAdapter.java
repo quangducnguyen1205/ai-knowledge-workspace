@@ -14,23 +14,29 @@ import org.springframework.stereotype.Component;
 @Component
 class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQueryPort {
 
-    private final AssetReadService assetReadService;
+    private final AssetTranscriptQueryService transcriptQueryService;
+    private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
     private final AssetSearchabilityService assetSearchabilityService;
 
-    SearchAssetPortAdapter(AssetReadService assetReadService, AssetSearchabilityService assetSearchabilityService) {
-        this.assetReadService = assetReadService;
+    SearchAssetPortAdapter(
+            AssetTranscriptQueryService transcriptQueryService,
+            DirectProcessingCompatibilityAdapter compatibilityAdapter,
+            AssetSearchabilityService assetSearchabilityService
+    ) {
+        this.transcriptQueryService = transcriptQueryService;
+        this.compatibilityAdapter = compatibilityAdapter;
         this.assetSearchabilityService = assetSearchabilityService;
     }
 
     @Override
     public Optional<IndexingAssetSource> findCurrentIndexingSource(UUID assetId) {
-        return assetReadService.findCurrentIndexingSource(assetId).map(this::toSource);
+        return transcriptQueryService.findCurrentIndexingSource(assetId).map(this::toSource);
     }
 
     @Override
     public IndexingAssetSource loadAuthorizedIndexingSourceForCompletedProcessing(UUID assetId, String videoId) {
         try {
-            return toSource(assetReadService.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, videoId));
+            return toSource(compatibilityAdapter.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, videoId));
         } catch (AssetNotFoundException exception) {
             throw new SearchAssetUnavailableException(exception);
         }
@@ -57,7 +63,7 @@ class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQueryPort 
     @Override
     public SearchAssetDetails getAuthorizedAssetDetails(UUID assetId) {
         try {
-            AssetDetails details = assetReadService.getAuthorizedAssetDetails(assetId);
+            AssetDetails details = transcriptQueryService.getAuthorizedAssetDetails(assetId);
             return new SearchAssetDetails(details.assetId(), details.workspaceId(), details.searchable());
         } catch (AssetNotFoundException exception) {
             throw new SearchAssetUnavailableException(exception);
@@ -66,7 +72,7 @@ class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQueryPort 
 
     @Override
     public List<UUID> findSearchableAssetIdsInWorkspace(UUID workspaceId) {
-        return assetReadService.findSearchableAssetIdsInWorkspace(workspaceId);
+        return transcriptQueryService.findSearchableAssetIdsInWorkspace(workspaceId);
     }
 
     private IndexingAssetSource toSource(AssetIndexingSource source) {

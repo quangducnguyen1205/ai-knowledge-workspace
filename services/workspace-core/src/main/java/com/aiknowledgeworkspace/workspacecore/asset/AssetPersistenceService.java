@@ -7,8 +7,6 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProces
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobUpdateCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
@@ -24,18 +22,15 @@ public class AssetPersistenceService {
     private final AssetRepository assetRepository;
     private final AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
     private final ProcessingRequestApplication processingRequestApplication;
-    private final IndexingRequestApplication indexingRequestApplication;
 
     public AssetPersistenceService(
             AssetRepository assetRepository,
             AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository,
-            ProcessingRequestApplication processingRequestApplication,
-            IndexingRequestApplication indexingRequestApplication
+            ProcessingRequestApplication processingRequestApplication
     ) {
         this.assetRepository = assetRepository;
         this.assetTranscriptRowSnapshotRepository = assetTranscriptRowSnapshotRepository;
         this.processingRequestApplication = processingRequestApplication;
-        this.indexingRequestApplication = indexingRequestApplication;
     }
 
     @Transactional
@@ -203,7 +198,6 @@ public class AssetPersistenceService {
         List<AssetTranscriptRowSnapshot> sortedSnapshots = sortTranscriptSnapshots(
                 assetTranscriptRowSnapshotRepository.saveAll(snapshots)
         );
-        indexingRequestApplication.requestIndexingIfEnabled(asset.getId(), toIndexingRequestRows(sortedSnapshots));
         return sortedSnapshots;
     }
 
@@ -219,18 +213,6 @@ public class AssetPersistenceService {
                 .sorted(Comparator.comparing(
                         AssetTranscriptRowSnapshot::getSegmentIndex,
                         Comparator.nullsLast(Integer::compareTo)
-                ))
-                .toList();
-    }
-
-    private List<IndexingRequestRow> toIndexingRequestRows(List<AssetTranscriptRowSnapshot> snapshots) {
-        return snapshots.stream()
-                .map(snapshot -> new IndexingRequestRow(
-                        snapshot.getTranscriptRowId(),
-                        snapshot.getVideoId(),
-                        snapshot.getSegmentIndex(),
-                        snapshot.getText(),
-                        snapshot.getCreatedAt()
                 ))
                 .toList();
     }

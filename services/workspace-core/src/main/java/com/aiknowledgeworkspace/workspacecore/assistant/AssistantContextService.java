@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
@@ -26,11 +26,14 @@ public class AssistantContextService {
     static final int MAX_SOURCE_TEXT_LENGTH = 2_000;
 
     private final SearchService searchService;
-    private final AssetReadService assetReadService;
+    private final AssetTranscriptQueryService assetTranscriptQueryService;
 
-    public AssistantContextService(SearchService searchService, AssetReadService assetReadService) {
+    public AssistantContextService(
+            SearchService searchService,
+            AssetTranscriptQueryService assetTranscriptQueryService
+    ) {
         this.searchService = searchService;
-        this.assetReadService = assetReadService;
+        this.assetTranscriptQueryService = assetTranscriptQueryService;
     }
 
     public AssistantContextResponse buildContext(AssistantContextRequest request) {
@@ -82,7 +85,7 @@ public class AssistantContextService {
             return Optional.empty();
         }
 
-        Optional<AssetTranscriptContext> context = assetReadService.findSearchableTranscriptContext(
+        Optional<AssetTranscriptContext> context = assetTranscriptQueryService.findSearchableTranscriptContext(
                 result.assetId(),
                 workspaceId,
                 transcriptRowId,

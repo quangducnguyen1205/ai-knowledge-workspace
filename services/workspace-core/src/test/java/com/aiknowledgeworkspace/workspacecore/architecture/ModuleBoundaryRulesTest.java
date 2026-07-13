@@ -10,6 +10,7 @@ import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
+import java.lang.reflect.Modifier;
 import java.util.List;
 
 class ModuleBoundaryRulesTest {
@@ -79,6 +80,31 @@ class ModuleBoundaryRulesTest {
         assertThat(forbiddenDependencies)
                 .as("asset may use processing/search application APIs, but not their entities, repositories, or services")
                 .isEmpty();
+    }
+
+    @Test
+    void canonicalTranscriptServicesDoNotDependOnFastApiContracts() {
+        noClasses()
+                .that().haveSimpleName("AssetTranscriptSnapshotService")
+                .or().haveSimpleName("AssetTranscriptQueryService")
+                .should().dependOnClassesThat().resideInAPackage("..integration.fastapi..")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void assetControllerDoesNotDependOnPersistenceRepositories() {
+        noClasses()
+                .that().haveSimpleName("AssetController")
+                .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void directProcessingCompatibilityAdapterRemainsInternal() throws ClassNotFoundException {
+        Class<?> adapter = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.DirectProcessingCompatibilityAdapter"
+        );
+        assertThat(Modifier.isPublic(adapter.getModifiers())).isFalse();
     }
 
     private static boolean isProcessingOrSearch(String packageName) {

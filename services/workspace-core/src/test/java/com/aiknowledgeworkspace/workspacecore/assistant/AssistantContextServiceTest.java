@@ -12,7 +12,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
@@ -48,7 +48,7 @@ class AssistantContextServiceTest {
     private SearchService searchService;
 
     @Mock
-    private AssetReadService assetReadService;
+    private AssetTranscriptQueryService assetReadService;
 
     private AssistantContextService assistantContextService;
 
@@ -369,7 +369,7 @@ class AssistantContextServiceTest {
         );
         AssistantContextService realAssistantContextService = new AssistantContextService(
                 realSearchService,
-                mock(AssetReadService.class)
+                mock(AssetTranscriptQueryService.class)
         );
 
         assertThatThrownBy(() -> realAssistantContextService.buildContext(new AssistantContextRequest(

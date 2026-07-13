@@ -13,8 +13,6 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProce
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.List;
@@ -37,9 +35,6 @@ class AssetPersistenceServiceTest {
 
     @Mock
     private AssetTranscriptRowSnapshotRepository assetTranscriptRowSnapshotRepository;
-
-    @Mock
-    private IndexingRequestApplication indexingRequestApplication;
 
     @Test
     void persistDirectUploadResultCreatesAssetAndProcessingJobWithoutOutboxEvent() {
@@ -177,16 +172,6 @@ class AssetPersistenceServiceTest {
         ArgumentCaptor<List<AssetTranscriptRowSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
         verify(assetTranscriptRowSnapshotRepository).deleteByAssetId(assetId);
         verify(assetTranscriptRowSnapshotRepository).saveAll(snapshotsCaptor.capture());
-        verify(indexingRequestApplication).requestIndexingIfEnabled(assetId, savedRows.stream()
-                .map(snapshot -> new IndexingRequestRow(
-                        snapshot.getTranscriptRowId(),
-                        snapshot.getVideoId(),
-                        snapshot.getSegmentIndex(),
-                        snapshot.getText(),
-                        snapshot.getCreatedAt()
-                ))
-                .toList());
-
         assertThat(savedRows).extracting(AssetTranscriptRowSnapshot::getSegmentIndex)
                 .containsExactly(1, 2);
         assertThat(snapshotsCaptor.getValue()).hasSize(2);
@@ -237,8 +222,7 @@ class AssetPersistenceServiceTest {
         return new AssetPersistenceService(
                 assetRepository,
                 assetTranscriptRowSnapshotRepository,
-                processingRequestApplication,
-                indexingRequestApplication
+                processingRequestApplication
         );
     }
 

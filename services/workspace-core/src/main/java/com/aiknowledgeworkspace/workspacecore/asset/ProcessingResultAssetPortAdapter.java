@@ -10,16 +10,17 @@ import org.springframework.stereotype.Component;
 @Component
 class ProcessingResultAssetPortAdapter implements ProcessingResultAssetPort {
 
-    private final AssetProcessingResultApplicationService delegate;
+    private final AssetTranscriptSnapshotService transcriptSnapshotService;
 
-    ProcessingResultAssetPortAdapter(AssetProcessingResultApplicationService delegate) {
-        this.delegate = delegate;
+    ProcessingResultAssetPortAdapter(AssetTranscriptSnapshotService transcriptSnapshotService) {
+        this.transcriptSnapshotService = transcriptSnapshotService;
     }
 
     @Override
     public void applyTranscriptReady(UUID assetId, List<ProcessingTranscriptRow> transcriptRows) {
         try {
-            delegate.applyTranscriptReady(assetId, transcriptRows.stream()
+            Asset asset = transcriptSnapshotService.loadAsset(assetId);
+            transcriptSnapshotService.applySuccessfulProcessingResult(asset, transcriptRows.stream()
                     .map(row -> new AssetTranscriptRowInput(
                             row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
                     ))
@@ -32,7 +33,7 @@ class ProcessingResultAssetPortAdapter implements ProcessingResultAssetPort {
     @Override
     public void applyProcessingFailed(UUID assetId) {
         try {
-            delegate.applyProcessingFailed(assetId);
+            transcriptSnapshotService.markProcessingFailed(assetId);
         } catch (AssetNotFoundException exception) {
             throw new ProcessingAssetUnavailableException(exception);
         }
