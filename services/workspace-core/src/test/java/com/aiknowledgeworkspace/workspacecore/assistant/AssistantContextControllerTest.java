@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -31,7 +32,11 @@ class AssistantContextControllerTest {
         AssistantContextController assistantContextController = new AssistantContextController(assistantContextService);
         ObjectMapper objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders.standaloneSetup(assistantContextController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(
+                        new ApiExceptionHandler(),
+                        new AssistantApiExceptionHandler(),
+                        new WorkspaceApiExceptionHandler()
+                )
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }

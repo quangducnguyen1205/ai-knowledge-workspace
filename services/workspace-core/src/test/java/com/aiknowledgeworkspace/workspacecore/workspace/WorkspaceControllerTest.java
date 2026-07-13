@@ -38,7 +38,7 @@ class WorkspaceControllerTest {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         mockMvc = MockMvcBuilders.standaloneSetup(workspaceController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(new ApiExceptionHandler(), new WorkspaceApiExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }

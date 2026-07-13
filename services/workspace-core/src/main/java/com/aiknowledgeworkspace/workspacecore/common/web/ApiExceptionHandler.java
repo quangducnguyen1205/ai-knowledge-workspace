@@ -1,135 +1,22 @@
 package com.aiknowledgeworkspace.workspacecore.common.web;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetListRequestException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidAssetTitleException;
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidUploadRequestException;
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantProviderUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthModeUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.EmailAlreadyRegisteredException;
-import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidAuthRequestException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCredentialsException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.search.InvalidSearchRequestException;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
-import com.aiknowledgeworkspace.workspacecore.workspace.DefaultWorkspaceConflictException;
-import com.aiknowledgeworkspace.workspacecore.workspace.InvalidWorkspaceNameException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceDeleteConflictException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
-import org.springframework.web.multipart.support.MissingServletRequestPartException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
-
-    @ExceptionHandler(FastApiConnectivityException.class)
-    public ResponseEntity<ApiErrorResponse> handleFastApiConnectivity(FastApiConnectivityException exception) {
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
-                .body(new ApiErrorResponse("FASTAPI_CONNECTIVITY_ERROR", exception.getMessage()));
-    }
-
-    @ExceptionHandler(FastApiIntegrationException.class)
-    public ResponseEntity<ApiErrorResponse> handleFastApiIntegration(FastApiIntegrationException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("FASTAPI_INTEGRATION_ERROR", exception.getMessage()));
-    }
-
-    @ExceptionHandler(AssistantProviderUnavailableException.class)
-    public ResponseEntity<ApiErrorResponse> handleAssistantProviderUnavailable(
-            AssistantProviderUnavailableException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ApiErrorResponse("ASSISTANT_PROVIDER_UNAVAILABLE", exception.getMessage()));
-    }
-
-    @ExceptionHandler(ElasticsearchConnectivityException.class)
-    public ResponseEntity<ApiErrorResponse> handleElasticsearchConnectivity(
-            ElasticsearchConnectivityException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ApiErrorResponse("ELASTICSEARCH_UNAVAILABLE", exception.getMessage()));
-    }
-
-    @ExceptionHandler(ElasticsearchIntegrationException.class)
-    public ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(
-            ElasticsearchIntegrationException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
-    }
-
-    @ExceptionHandler(ObjectStorageException.class)
-    public ResponseEntity<ApiErrorResponse> handleObjectStorage(ObjectStorageException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("OBJECT_STORAGE_ERROR", exception.getMessage()));
-    }
-
-    @ExceptionHandler(WorkspaceNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleWorkspaceNotFound(WorkspaceNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("WORKSPACE_NOT_FOUND", exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidWorkspaceNameException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidWorkspaceName(InvalidWorkspaceNameException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_WORKSPACE_NAME", exception.getMessage()));
-    }
-
-    @ExceptionHandler(AssetNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleAssetNotFound(AssetNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("ASSET_NOT_FOUND", exception.getMessage()));
-    }
-
-    @ExceptionHandler(ProcessingJobNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleProcessingJobNotFound(ProcessingJobNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("PROCESSING_JOB_NOT_FOUND", exception.getMessage()));
-    }
-
-    @ExceptionHandler(WorkspaceDeleteConflictException.class)
-    public ResponseEntity<ApiErrorResponse> handleWorkspaceDeleteConflict(WorkspaceDeleteConflictException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
-    }
-
-    @ExceptionHandler(DefaultWorkspaceConflictException.class)
-    public ResponseEntity<ApiErrorResponse> handleDefaultWorkspaceConflict(
-            DefaultWorkspaceConflictException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidAssetTitleException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidAssetTitle(InvalidAssetTitleException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_ASSET_TITLE", exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidUploadRequestException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidUploadRequest(InvalidUploadRequestException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_UPLOAD_FILE", exception.getMessage()));
-    }
 
     @ExceptionHandler(InvalidCurrentUserIdException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidCurrentUserId(InvalidCurrentUserIdException exception) {
@@ -165,46 +52,6 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleAuthModeUnavailable(AuthModeUnavailableException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiErrorResponse("AUTH_MODE_UNAVAILABLE", exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidSearchRequestException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidSearchRequest(InvalidSearchRequestException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidAssistantContextRequestException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidAssistantContextRequest(
-            InvalidAssistantContextRequestException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidTranscriptContextWindowException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidTranscriptContextWindow(
-            InvalidTranscriptContextWindowException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_TRANSCRIPT_CONTEXT_WINDOW", exception.getMessage()));
-    }
-
-    @ExceptionHandler(TranscriptUnavailableException.class)
-    public ResponseEntity<ApiErrorResponse> handleTranscriptUnavailable(TranscriptUnavailableException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
-    }
-
-    @ExceptionHandler(TranscriptRowNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleTranscriptRowNotFound(TranscriptRowNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("TRANSCRIPT_ROW_NOT_FOUND", exception.getMessage()));
-    }
-
-    @ExceptionHandler(AssetListRequestException.class)
-    public ResponseEntity<ApiErrorResponse> handleAssetListRequest(AssetListRequestException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -267,8 +114,7 @@ public class ApiExceptionHandler {
         } else if ("size".equals(exception.getName())) {
             errorCode = "INVALID_ASSET_SIZE";
             message = "size must be a valid integer";
-        } else if ("assetStatus".equals(exception.getName())
-                && AssetStatus.class.equals(exception.getRequiredType())) {
+        } else if ("assetStatus".equals(exception.getName())) {
             errorCode = "INVALID_ASSET_STATUS";
             message = "assetStatus must be one of: PROCESSING, TRANSCRIPT_READY, SEARCHABLE, FAILED";
         } else {

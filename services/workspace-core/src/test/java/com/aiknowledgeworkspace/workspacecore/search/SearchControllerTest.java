@@ -16,12 +16,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetDetails;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetReadService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -63,7 +65,12 @@ class SearchControllerTest {
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(
+                        new ApiExceptionHandler(),
+                        new SearchApiExceptionHandler(),
+                        new AssetApiExceptionHandler(),
+                        new WorkspaceApiExceptionHandler()
+                )
                 .build();
     }
 

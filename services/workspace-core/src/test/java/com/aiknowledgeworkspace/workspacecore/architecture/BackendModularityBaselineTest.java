@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.aiknowledgeworkspace.workspacecore.WorkspaceCoreApplication;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.HexFormat;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,7 @@ class BackendModularityBaselineTest {
 
     private static final Pattern JAVA_SOURCE_LOCATION =
             Pattern.compile("\\(([^()\\n]+\\.java):\\d+\\)");
+    private static final Pattern CYCLE_SLICE = Pattern.compile("Slice ([a-z]+)");
 
     @Test
     void defaultDirectPackageDetectionFindsCurrentModuleRoots() {
@@ -80,22 +84,45 @@ class BackendModularityBaselineTest {
                 .map(BackendModularityBaselineTest::normalize)
                 .sorted()
                 .toList();
+        List<String> cycles = violationMessages.stream()
+                .filter(message -> message.startsWith("Cycle detected:"))
+                .map(BackendModularityBaselineTest::cyclePath)
+                .sorted()
+                .toList();
 
         return normalize("""
                 # Spring Modulith violation baseline
-                # Generated from ApplicationModules.of(WorkspaceCoreApplication.class).detectViolations().
-                # This is a ratchet, not proof of a clean modular architecture.
-                # Do not regenerate automatically; update only after intentional architecture review.
+                # The aggregate SHA-256 fingerprints the exact sorted normalized violation set.
+                # Human-readable cycle paths remain listed for dependency review.
+                # This is a strict ratchet, not proof of a clean modular architecture.
                 detected-modules=%s
                 violation-message-count=%d
+                cycle-message-count=%d
+                violation-set-sha256=%s
 
                 %s
                 """.formatted(
                 String.join(",", detectedModuleNames(modules)),
                 violationMessages.size(),
-                violationMessages.stream()
-                        .map(message -> "---\n" + message)
-                        .collect(Collectors.joining("\n"))));
+                cycles.size(),
+                sha256(String.join("\n---\n", violationMessages)),
+                cycles.stream().map(cycle -> "cycle=" + cycle).collect(Collectors.joining("\n"))));
+    }
+
+    private static String cyclePath(String violationMessage) {
+        String cycleHeader = violationMessage.split("\\n  1\\.", 2)[0];
+        return CYCLE_SLICE.matcher(cycleHeader).results()
+                .map(match -> match.group(1))
+                .collect(Collectors.joining(" -> "));
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     private static String normalize(String value) {

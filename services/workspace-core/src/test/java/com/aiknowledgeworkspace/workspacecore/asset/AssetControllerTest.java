@@ -11,14 +11,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.SearchApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptIndexingService;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
+import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -54,7 +58,14 @@ class AssetControllerTest {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         mockMvc = MockMvcBuilders.standaloneSetup(assetController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(
+                        new ApiExceptionHandler(),
+                        new AssetApiExceptionHandler(),
+                        new FastApiExceptionHandler(),
+                        new SearchApiExceptionHandler(),
+                        new ObjectStorageApiExceptionHandler(),
+                        new WorkspaceApiExceptionHandler()
+                )
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }

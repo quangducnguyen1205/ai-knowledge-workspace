@@ -29,7 +29,7 @@ class AssistantAnswerControllerTest {
         AssistantAnswerController assistantAnswerController = new AssistantAnswerController(assistantAnswerService);
         ObjectMapper objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders.standaloneSetup(assistantAnswerController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(new ApiExceptionHandler(), new AssistantApiExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }
