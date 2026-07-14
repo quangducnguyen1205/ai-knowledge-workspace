@@ -1,9 +1,9 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
 
 import java.util.List;
 import org.springframework.core.io.Resource;
 
-public interface FastApiProcessingClient {
+interface FastApiProcessingClient {
 
     FastApiUploadResponse uploadVideo(Resource videoResource, String filename, String title);
 

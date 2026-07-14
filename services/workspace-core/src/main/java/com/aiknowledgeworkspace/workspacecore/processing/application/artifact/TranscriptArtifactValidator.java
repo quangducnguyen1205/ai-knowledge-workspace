@@ -1,6 +1,6 @@
-package com.aiknowledgeworkspace.workspacecore.processing.result;
+package com.aiknowledgeworkspace.workspacecore.processing.application.artifact;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventApplyException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
-class TranscriptArtifactValidator {
+public class TranscriptArtifactValidator {
 
     private static final int MAX_TRANSCRIPT_ROWS = 20_000;
     private static final int MAX_TRANSCRIPT_ROW_ID_LENGTH = 255;
@@ -16,28 +16,25 @@ class TranscriptArtifactValidator {
     private static final int MAX_TEXT_LENGTH = 20_000;
     private static final int MAX_CREATED_AT_LENGTH = 64;
 
-    List<FastApiTranscriptRowResponse> validate(List<FastApiTranscriptRowResponse> rows) {
+    public List<ProcessingTranscriptRow> validate(List<ProcessingTranscriptRow> rows) {
         if (rows == null || rows.isEmpty()) {
             throw new ProcessingResultEventApplyException("Transcript artifact rows were empty");
         }
         if (rows.size() > MAX_TRANSCRIPT_ROWS) {
             throw new ProcessingResultEventApplyException("Transcript artifact row count exceeded the safe limit");
         }
-
         Set<Integer> segmentIndexes = new HashSet<>();
         Set<String> transcriptRowIds = new HashSet<>();
         Integer previousSegmentIndex = null;
-
-        for (FastApiTranscriptRowResponse row : rows) {
+        for (ProcessingTranscriptRow row : rows) {
             validateRow(row, previousSegmentIndex, segmentIndexes, transcriptRowIds);
             previousSegmentIndex = row.segmentIndex();
         }
-
         return List.copyOf(rows);
     }
 
     private void validateRow(
-            FastApiTranscriptRowResponse row,
+            ProcessingTranscriptRow row,
             Integer previousSegmentIndex,
             Set<Integer> segmentIndexes,
             Set<String> transcriptRowIds

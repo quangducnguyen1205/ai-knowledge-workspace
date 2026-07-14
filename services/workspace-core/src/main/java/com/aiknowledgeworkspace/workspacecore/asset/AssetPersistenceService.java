@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProces
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobUpdateCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;

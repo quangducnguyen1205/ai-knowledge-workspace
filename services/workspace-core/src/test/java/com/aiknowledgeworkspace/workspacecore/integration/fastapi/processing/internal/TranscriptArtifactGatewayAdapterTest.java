@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.processing.result;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,18 +6,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactValidator;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-class FastApiTranscriptArtifactGatewayTest {
+class TranscriptArtifactGatewayAdapterTest {
 
     private final FastApiProcessingClient client = mock(FastApiProcessingClient.class);
-    private final FastApiTranscriptArtifactGateway gateway = new FastApiTranscriptArtifactGateway(
-            client,
-            new TranscriptArtifactValidator()
+    private final TranscriptArtifactGatewayAdapter gateway = new TranscriptArtifactGatewayAdapter(
+            client, new TranscriptArtifactValidator()
     );
 
     @Test

@@ -1,10 +1,9 @@
-package com.aiknowledgeworkspace.workspacecore.asset;
+package com.aiknowledgeworkspace.workspacecore.asset.application.compatibility;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 
-record DirectProcessingUploadResult(
-        String taskId,
-        String videoId,
+public record DirectProcessingTaskState(
         String rawStatus,
         ProcessingJobStatus processingStatus,
         AssetStatus assetStatus

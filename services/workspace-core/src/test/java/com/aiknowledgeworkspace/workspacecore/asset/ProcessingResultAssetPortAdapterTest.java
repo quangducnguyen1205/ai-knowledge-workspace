@@ -4,7 +4,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.List;
 import java.util.UUID;

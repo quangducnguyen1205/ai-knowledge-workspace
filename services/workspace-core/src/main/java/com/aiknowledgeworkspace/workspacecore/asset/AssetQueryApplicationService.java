@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.ArrayList;

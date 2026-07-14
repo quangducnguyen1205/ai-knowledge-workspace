@@ -6,8 +6,8 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
@@ -31,7 +31,7 @@ class AssetTranscriptQueryServiceTest {
     private AssetPersistenceService assetPersistenceService;
 
     @Mock
-    private FastApiProcessingClient fastApiProcessingClient;
+    private DirectProcessingCompatibilityGateway compatibilityGateway;
 
     @Mock
     private WorkspaceService workspaceService;
@@ -92,9 +92,9 @@ class AssetTranscriptQueryServiceTest {
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(workspaceService.isOwnedByCurrentUser(asset.getWorkspace())).thenReturn(true);
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
-        when(fastApiProcessingClient.getTranscript("video-1")).thenReturn(List.of(
-                new FastApiTranscriptRowResponse("blank", "video-1", 0, " ", "2026-06-26T00:00:00Z"),
-                new FastApiTranscriptRowResponse("row-1", "video-1", 1, "usable", "2026-06-26T00:00:01Z")
+        when(compatibilityGateway.transcriptRows("video-1")).thenReturn(List.of(
+                new DirectProcessingTranscriptRow("blank", "video-1", 0, " ", "2026-06-26T00:00:00Z"),
+                new DirectProcessingTranscriptRow("row-1", "video-1", 1, "usable", "2026-06-26T00:00:01Z")
         ));
         when(assetPersistenceService.replaceTranscriptSnapshot(
                 org.mockito.Mockito.eq(asset),
@@ -105,7 +105,7 @@ class AssetTranscriptQueryServiceTest {
                 assetRepository, assetPersistenceService, indexingRequestApplication
         );
         DirectProcessingCompatibilityAdapter adapter = new DirectProcessingCompatibilityAdapter(
-                fastApiProcessingClient, queryService, snapshotService
+                compatibilityGateway, queryService, snapshotService
         );
 
         AssetIndexingSource source = adapter.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1");

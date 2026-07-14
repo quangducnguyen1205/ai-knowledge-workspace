@@ -13,9 +13,9 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactGateway;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
@@ -61,7 +61,7 @@ class ProcessingResultEventHandlerTest {
     private WorkspaceRepository workspaceRepository;
 
     @MockBean
-    private FastApiProcessingClient fastApiProcessingClient;
+    private TranscriptArtifactGateway transcriptArtifactGateway;
 
     @BeforeEach
     void setUp() {
@@ -70,7 +70,7 @@ class ProcessingResultEventHandlerTest {
         processingJobRepository.deleteAll();
         assetRepository.deleteAll();
         workspaceRepository.deleteAll();
-        reset(fastApiProcessingClient);
+        reset(transcriptArtifactGateway);
     }
 
     @Test
@@ -78,7 +78,7 @@ class ProcessingResultEventHandlerTest {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString())).thenReturn(List.of(
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId)).thenReturn(List.of(
                 transcriptRow("row-1", 0, "Welcome to graph search"),
                 transcriptRow("row-2", 1, "Then we compare breadth first search")
         ));
@@ -117,7 +117,7 @@ class ProcessingResultEventHandlerTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         String eventJson = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString())).thenReturn(List.of(
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId)).thenReturn(List.of(
                 transcriptRow("row-1", 0, "One durable transcript row")
         ));
 
@@ -127,7 +127,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(firstResult.applied()).isTrue();
         assertThat(duplicateResult.applied()).isFalse();
         assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
-        verify(fastApiProcessingClient, times(1)).getTranscriptArtifactRows(processingRequestEventId.toString());
+        verify(transcriptArtifactGateway, times(1)).loadValidatedRows(processingRequestEventId);
         assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).hasSize(1);
     }
 
@@ -136,10 +136,8 @@ class ProcessingResultEventHandlerTest {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString())).thenReturn(List.of(
-                transcriptRow("row-1", 0, "Useful row"),
-                transcriptRow("row-2", 1, " ")
-        ));
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new ProcessingResultEventApplyException("Transcript artifact row text was empty or too large"));
 
         ProcessingResultHandleResult result = processingResultEventHandler.handle(
                 transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
@@ -161,7 +159,7 @@ class ProcessingResultEventHandlerTest {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
                 .thenThrow(new IllegalStateException("database unavailable"));
 
         assertThatThrownBy(() -> processingResultEventHandler.handle(
@@ -183,8 +181,8 @@ class ProcessingResultEventHandlerTest {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
-                .thenThrow(new FastApiIntegrationException("FastAPI returned HTTP 503 while trying to read transcript artifact rows"));
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException("FastAPI returned HTTP 503 while trying to read transcript artifact rows"));
 
         ProcessingResultHandleResult result = processingResultEventHandler.handle(
                 transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
@@ -213,8 +211,8 @@ class ProcessingResultEventHandlerTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
-                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException("FastAPI unavailable"))
                 .thenReturn(List.of(transcriptRow("row-1", 0, "Recovered row")));
 
         ProcessingResultHandleResult failedResult = processingResultEventHandler.handle(rawEvent);
@@ -223,7 +221,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(failedResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(duplicateResult.applied()).isFalse();
-        verify(fastApiProcessingClient, times(1)).getTranscriptArtifactRows(processingRequestEventId.toString());
+        verify(transcriptArtifactGateway, times(1)).loadValidatedRows(processingRequestEventId);
         assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
@@ -235,8 +233,8 @@ class ProcessingResultEventHandlerTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
-                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException("FastAPI unavailable"))
                 .thenReturn(List.of(
                         transcriptRow("row-1", 0, "Recovered transcript row"),
                         transcriptRow("row-2", 1, "Still ordered")
@@ -248,7 +246,7 @@ class ProcessingResultEventHandlerTest {
 
         assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         assertThat(result.applied()).isTrue();
-        verify(fastApiProcessingClient, times(2)).getTranscriptArtifactRows(processingRequestEventId.toString());
+        verify(transcriptArtifactGateway, times(2)).loadValidatedRows(processingRequestEventId);
 
         ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
         assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
@@ -309,9 +307,9 @@ class ProcessingResultEventHandlerTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
-                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
-                .thenReturn(List.of(transcriptRow("row-1", 0, " ")));
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException("FastAPI unavailable"))
+                .thenThrow(new ProcessingResultEventApplyException("Transcript artifact row text was empty or too large"));
 
         processingResultEventHandler.handle(rawEvent);
 
@@ -334,8 +332,8 @@ class ProcessingResultEventHandlerTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         String rawEvent = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
-        when(fastApiProcessingClient.getTranscriptArtifactRows(processingRequestEventId.toString()))
-                .thenThrow(new FastApiIntegrationException("FastAPI unavailable"))
+        when(transcriptArtifactGateway.loadValidatedRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException("FastAPI unavailable"))
                 .thenThrow(new IllegalStateException("database unavailable"));
 
         processingResultEventHandler.handle(rawEvent);
@@ -379,7 +377,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(processingJob.getRawUpstreamTaskState()).isEqualTo("whisper_timeout");
         assertThat(consumedEventRepository.findById(eventId).orElseThrow().getStatus())
                 .isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
-        verify(fastApiProcessingClient, never()).getTranscriptArtifactRows(processingRequestEventId.toString());
+        verify(transcriptArtifactGateway, never()).loadValidatedRows(processingRequestEventId);
     }
 
     @Test
@@ -431,7 +429,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
         assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
                 .contains("request correlation");
-        verify(fastApiProcessingClient, never()).getTranscriptArtifactRows(resultRequestEventId.toString());
+        verify(transcriptArtifactGateway, never()).loadValidatedRows(resultRequestEventId);
     }
 
     @Test
@@ -484,8 +482,8 @@ class ProcessingResultEventHandlerTest {
         return asset;
     }
 
-    private FastApiTranscriptRowResponse transcriptRow(String id, int segmentIndex, String text) {
-        return new FastApiTranscriptRowResponse(
+    private ProcessingTranscriptRow transcriptRow(String id, int segmentIndex, String text) {
+        return new ProcessingTranscriptRow(
                 id,
                 "video-1",
                 segmentIndex,

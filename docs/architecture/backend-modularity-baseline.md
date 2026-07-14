@@ -4,7 +4,7 @@ Status: historical ratchet record plus current v1 pointer. This document is evid
 the Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas,
 or event contracts.
 
-> **Current v1 result:** 79 reviewed non-cycle exposure messages and 0 cycle messages.
+> **Current v1.1.A1 result:** 23 reviewed non-cycle exposure messages and 0 cycle messages.
 > The canonical submission and validation documents are
 > [`project3-final-baseline.md`](../submission/project3-final-baseline.md) and
 > [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
@@ -215,7 +215,7 @@ orchestration while preserving the previously characterized behavior:
 - `ProcessingResultKafkaListener` retains offset acknowledgement and listener
   error semantics only. `ProcessingResultEventHandler` parses and selects
   exact-ID recovery input; `ProcessingResultInbox` owns durable consumed-event
-  idempotency; `FastApiTranscriptArtifactGateway` maps the existing HTTP
+  idempotency; `TranscriptArtifactGatewayAdapter` maps the existing HTTP
   transport to processing-owned rows; and
   `ApplyProcessingResultApplicationService` applies both normal and manually
   recovered outcomes in the same required transaction participation.
@@ -233,18 +233,34 @@ The reviewed ratchet is `79` violation messages and `0` cycle messages, down
 from `83` and `0`. Strict verification remains red for non-cycle module exposure
 debt; it is not relaxed or suppressed.
 
+## P3-V1.1.A1 FastAPI Processing Transport Internalization
+
+P3-V1.1.A1 `[VERIFIED BY TESTS]` removes product-module dependencies on FastAPI
+processing wire contracts. Asset consumes the named `asset::compatibility` gateway;
+processing consumes the named `processing::artifact` gateway and neutral transcript
+rows. FastAPI HTTP calls, response validation, wire DTO mapping, and integration-error
+translation are implemented only by adapters under
+`integration.fastapi.processing.internal`.
+
+The existing processing-result artifact call remains in its characterized transaction
+participation. Direct-upload compatibility remains deprecated, profile-gated, and
+functionally unchanged; the normal Kafka path and all public contracts are unchanged.
+The reviewed ratchet is now `23` non-cycle messages and `0` cycle messages. The remaining
+messages are the previously reviewed configuration/current-user exposure debt deferred to
+the next bounded cleanup phase.
+
 ## Current Package Inventory
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 
 | Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
 |---|---:|---|---|---|---|---|---|
-| `asset` | 43 | Asset metadata, focused upload/query use cases, canonical transcript snapshot write/read ownership, object-storage reference handling, compatibility adaptation, lifecycle persistence, and title/delete/index API entrypoints. | `AssetController` | `UploadAssetApplicationService`, `AssetQueryApplicationService`, `AssetTranscriptSnapshotService`, `AssetTranscriptQueryService`, `AssetPersistenceService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService`; package-private `DirectProcessingCompatibilityAdapter` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Controllers and B2A adapters consume focused asset use cases; FastAPI DTO mapping is confined to the compatibility adapter and canonical services contain no provider contracts. The obsolete `AssetService` facade is removed. | Domain/application-specific with persistence and compatibility adapters kept explicit. |
+| `asset` | 43 | Asset metadata, focused upload/query use cases, canonical transcript snapshot write/read ownership, object-storage reference handling, compatibility adaptation, lifecycle persistence, and title/delete/index API entrypoints. | `AssetController` | `UploadAssetApplicationService`, `AssetQueryApplicationService`, `AssetTranscriptSnapshotService`, `AssetTranscriptQueryService`, `AssetPersistenceService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService`; package-private `DirectProcessingCompatibilityAdapter` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Controllers and B2A adapters consume focused asset use cases; compatibility uses the asset-owned gateway and receives no FastAPI wire types. The obsolete `AssetService` facade is removed. | Domain/application-specific with persistence and compatibility adapters kept explicit. |
 | `assistant` | 13 | Assistant context pack API and grounded answer orchestration. | `AssistantContextController`, `AssistantAnswerController` | `AssistantContextService`, `AssistantAnswerService` | none | DTOs for context/answer request, source, citation, response; reuses search and asset context services; calls the named `integration::assistant` FastAPI contract for answer generation. | Domain/application-specific. |
 | `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
-| `integration` | 14 | FastAPI client boundary, assistant FastAPI named interface, processing FastAPI DTOs/exceptions, and HTTP implementations. | none | `FastApiProcessingClientImpl`, internal `FastApiAssistantClientImpl` components | none | Uses `RestClient`; DTOs for FastAPI upload/status/transcript artifact responses; exposes only assistant answer transport records/client via `integration::assistant`. | Technical adapter, provider-specific. |
+| `integration` | 14 | FastAPI client boundary, assistant FastAPI named interface, internal processing transport DTOs, and HTTP implementations. | none | internal processing/assistant client components | none | Uses `RestClient`; processing wire DTOs and adapters remain under `integration.fastapi.processing.internal`; exposes only assistant answer transport records/client via `integration::assistant`. | Technical adapter, provider-specific. |
 | `outbox` | 16 | Durable outbox event model, event factory, relay state machine, Kafka/logging/failing publishers, Kafka topic settings. | none | `OutboxRelayService` | `OutboxEventRepository`; entity `OutboxEvent` | Owns `asset.processing.requested` and `asset.indexing.requested` payload records and relay status transitions. | Technical platform with product event-contract knowledge. |
-| `processing` | 52 | Processing job entity/state, trigger mode config, request relay scheduler, result event parsing/application, durable result inbox, artifact gateway, result listener, recovery/smoke commands. | none | `ApplyProcessingResultApplicationService`, `ProcessingResultEventHandler`, `ProcessingResultInbox`, `ProcessingRecoveryService`, request relay scheduler | `ProcessingJobRepository`; entity `ProcessingJob`; `ConsumedProcessingResultEventRepository`; entity `ConsumedProcessingResultEvent` | Kafka listener for `asset.processing.result.v1`, result envelope/payload contracts, and `FastApiTranscriptArtifactGateway` transport adaptation. | Domain/application integration. |
+| `processing` | 52 | Processing job entity/state, trigger mode config, request relay scheduler, result event parsing/application, durable result inbox, artifact gateway, result listener, recovery/smoke commands. | none | `ApplyProcessingResultApplicationService`, `ProcessingResultEventHandler`, `ProcessingResultInbox`, `ProcessingRecoveryService`, request relay scheduler | `ProcessingJobRepository`; entity `ProcessingJob`; `ConsumedProcessingResultEventRepository`; entity `ConsumedProcessingResultEvent` | Kafka listener for `asset.processing.result.v1`, result envelope/payload contracts, and the neutral `processing::artifact` gateway; FastAPI transport implementation is outside this module. | Domain/application integration. |
 | `search` | 61 | Search API, Elasticsearch client, transcript index documents/mapping, indexing jobs, event and explicit entry adapters, shared execution use case, indexing relay/smoke. | `SearchController` | `SearchService`, `TranscriptIndexingService`, `AssetIndexingEventHandler`, `ExecuteIndexJobApplicationService`, `IndexingAttemptTransactionService`, `AssetSearchIndexRequestService`, relay scheduler | `AssetSearchIndexJobRepository`; entity `AssetSearchIndexJob` | Kafka listener for `asset.indexing.requested.v1`; `TranscriptIndexWriter` is the indexing-write boundary implemented by the existing Elasticsearch client. | Domain/application plus technical adapter. |
 | `storage` | 8 | Object storage abstraction, S3/MinIO adapter, object key generation and properties. | none | `S3ObjectStorageClient` component | none | Uses AWS S3 SDK `S3Client`; exposes object-storage request/result records. | Technical adapter. |
 | `workspace` | 15 | Workspace model, ownership/access policy, default workspace, workspace CRUD. | `WorkspaceController` | `WorkspaceService`, `WorkspaceAccessPolicy` | `WorkspaceRepository`; entity `Workspace` | Public workspace DTOs and validation exceptions. | Domain-specific. |
@@ -273,14 +289,14 @@ The table below records meaningful cross-package dependencies in production code
 |---|---|---|---|---|
 | `asset` | `workspace` | Ownership and workspace resolution application service/entity. | Intentional product dependency; workspace state remains workspace-owned. | `asset/UploadAssetApplicationService.java`, `asset/AssetQueryApplicationService.java`, `asset/Asset.java` |
 | `asset` | `storage` | Object key generation, object storage write/delete, stored object metadata. | Acceptable platform dependency. | `asset/UploadAssetApplicationService.java`, `asset/AssetDeletionService.java` |
-| `asset` | `integration.fastapi` | Deprecated direct-upload and compatibility transcript capture only. | Transitional compatibility boundary isolated in one package-private adapter. | `asset/DirectProcessingCompatibilityAdapter.java` |
+| `integration.fastapi.processing.internal` | `asset::compatibility`, `processing::artifact` | Deprecated direct-upload and processing-result artifact transport adapters only. | Internal integration boundary maps FastAPI wire DTOs to neutral product-owned contracts; product modules do not import this package. | `integration/fastapi/processing/internal/DirectProcessingCompatibilityGatewayAdapter.java`, `integration/fastapi/processing/internal/TranscriptArtifactGatewayAdapter.java` |
 | `asset` | `processing` | Processing request creation and read projections through `processing::application`. | Intentional application API dependency; asset no longer imports processing repositories or entities. | `asset/UploadAssetApplicationService.java`, `asset/AssetQueryApplicationService.java` |
 | `asset` | `outbox` | Creates and stores processing request outbox rows. | Questionable; durable outbox mechanics are platform, but product event creation is currently inside asset persistence. | `asset/AssetPersistenceService.java:5-7`, `asset/AssetPersistenceService.java:104-120` |
 | `asset` | `search` | Explicit/automatic indexing and search maintenance through `search::application`. | Intentional one-way application API dependency protected by architecture rules. | `asset/AssetController.java`, `asset/AssetTranscriptSnapshotService.java`, `asset/AssetDeletionService.java`, `asset/AssetTitleUpdateService.java` |
 | `workspace` | `common.identity` | Current user and access policy. | Acceptable if identity is a named public API. | `workspace/WorkspaceService.java:4`, `workspace/WorkspaceAccessPolicy.java:3` |
 | `workspace` | `asset` | State-owning asset adapter implements the workspace-owned delete-usage port. | Inverted in P3-S5.B2A; workspace production code has no asset implementation dependency. | `workspace/application/WorkspaceAssetUsagePort.java`, `asset/WorkspaceAssetUsagePortAdapter.java` |
 | `processing` | `asset` | State-owning asset adapter implements the processing-owned result port. | Inverted in P3-S5.B2A; processing application code depends only on its own port. | `processing/application/ProcessingResultAssetPort.java`, `asset/ProcessingResultAssetPortAdapter.java` |
-| `processing` | `integration.fastapi` | `FastApiTranscriptArtifactGateway` retrieves and validates artifact rows, then returns processing-owned records. | Acceptable internal adapter dependency; application orchestration consumes no FastAPI transport DTO. | `processing/result/FastApiTranscriptArtifactGateway.java`, `processing/result/TranscriptArtifactValidator.java` |
+| `integration.fastapi.processing.internal` | `processing::artifact` | `TranscriptArtifactGatewayAdapter` maps and validates artifact rows, then returns processing-owned records. | Acceptable internal adapter dependency; application orchestration consumes no FastAPI transport DTO. | `integration/fastapi/processing/internal/TranscriptArtifactGatewayAdapter.java`, `processing/application/artifact/TranscriptArtifactValidator.java` |
 | `processing` | `outbox` | Recovery, smoke, request relay, listener config use outbox state and Kafka properties. | Acceptable platform dependency, but should be through named outbox relay API. | `processing/request/ProcessingRequestRelayScheduler.java:3-4`, `processing/recovery/ProcessingRecoveryService.java:3-6` |
 | `search` | `asset` | State-owning asset adapters implement search-owned query/indexing ports. | Inverted in P3-S5.B2A; search application code has no asset implementation dependency. | `search/application/IndexingAssetPort.java`, `asset/SearchAssetPortAdapter.java` |
 | `search` | `processing` | Explicit indexing reads processing readiness through `processing::application`. | Intentional application API dependency; no processing repository access remains. | `search/TranscriptIndexingService.java` |
@@ -292,7 +308,7 @@ The table below records meaningful cross-package dependencies in production code
 | `common.web` | all domain packages | Global exception handler imports domain exceptions and infrastructure exceptions. | Confirmed boundary-leak risk for default Modulith verification; common technical code depends inward on all modules. | `common/web/ApiExceptionHandler.java:3-28` |
 | `common.identity` | `workspace` | OIDC first-login provisioning uses workspace repository/properties. | Questionable but intentional product flow; should become identity -> workspace public API. | `common/identity/TransactionalOidcUserCreationExecutor.java:3-5` |
 | `assistant` | `integration.fastapi.assistant` | Calls the explicit named FastAPI assistant transport API for grounded answer generation. | Acceptable after P3-F2A.1; only the assistant-specific client and transport records are exposed, while HTTP implementation remains internal. | `assistant/AssistantAnswerService.java`, `integration/fastapi/assistant/package-info.java` |
-| `integration.fastapi` | Spring `RestClient` | External HTTP adapter. | Acceptable technical adapter. | `integration/fastapi/FastApiProcessingClientImpl.java`, `integration/fastapi/assistant/internal/FastApiAssistantClientImpl.java` |
+| `integration.fastapi` | Spring `RestClient` | External HTTP adapter. | Acceptable technical adapter. | `integration/fastapi/processing/internal/FastApiProcessingClientImpl.java`, `integration/fastapi/assistant/internal/FastApiAssistantClientImpl.java` |
 | `storage` | AWS S3 SDK | MinIO/S3 adapter. | Acceptable technical adapter. | `storage/ObjectStorageConfig.java`, `storage/S3ObjectStorageClient.java` |
 
 ## Boundary Strengths Already Present
@@ -309,8 +325,8 @@ The table below records meaningful cross-package dependencies in production code
 
 ### Confirmed
 
-- Spring Modulith reports no dependency cycle, while `79` reviewed non-cycle
-  named-interface and exposure messages remain.
+- Spring Modulith reports no dependency cycle, while `23` reviewed non-cycle
+  configuration/current-user exposure messages remain after the A1 transport cleanup.
 - `TranscriptSearchIndexClient` still combines search-query and indexing-write
   adapter responsibilities; B2C deliberately introduces only the narrow writer
   port and does not split the client.

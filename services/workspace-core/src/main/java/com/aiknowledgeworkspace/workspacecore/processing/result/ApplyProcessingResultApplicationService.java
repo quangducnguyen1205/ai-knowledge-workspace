@@ -5,7 +5,9 @@ import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingAssetUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingResultAssetPort;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactGateway;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;

@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -49,6 +51,16 @@ public class AssetApiExceptionHandler {
     @ExceptionHandler(AssetListRequestException.class)
     ResponseEntity<ApiErrorResponse> handleAssetListRequest(AssetListRequestException exception) {
         return response(HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage());
+    }
+
+    @ExceptionHandler(DirectProcessingConnectivityException.class)
+    ResponseEntity<ApiErrorResponse> handleDirectProcessingConnectivity(DirectProcessingConnectivityException exception) {
+        return response(HttpStatus.GATEWAY_TIMEOUT, "FASTAPI_CONNECTIVITY_ERROR", exception.getMessage());
+    }
+
+    @ExceptionHandler(DirectProcessingIntegrationException.class)
+    ResponseEntity<ApiErrorResponse> handleDirectProcessingIntegration(DirectProcessingIntegrationException exception) {
+        return response(HttpStatus.BAD_GATEWAY, "FASTAPI_INTEGRATION_ERROR", exception.getMessage());
     }
 
     private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {

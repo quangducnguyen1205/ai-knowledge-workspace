@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;

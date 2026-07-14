@@ -61,6 +61,7 @@ class ModuleBoundaryRulesTest {
     void processingSearchAndWorkspaceDoNotDependOnAssetImplementations() {
         noClasses()
                 .that().resideInAnyPackage("..processing..", "..search..", "..workspace..")
+                .and().resideOutsideOfPackage("..integration.fastapi.processing..")
                 .should().dependOnClassesThat().resideInAPackage("..asset..")
                 .check(WORKSPACE_CORE_CLASSES);
     }
@@ -89,6 +90,25 @@ class ModuleBoundaryRulesTest {
                 .or().haveSimpleName("AssetTranscriptQueryService")
                 .should().dependOnClassesThat().resideInAPackage("..integration.fastapi..")
                 .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void productModulesDoNotDependOnFastApiProcessingTransportPackages() {
+        noClasses()
+                .that().resideInAnyPackage("..asset..", "..processing..")
+                .and().resideOutsideOfPackage("..integration.fastapi.processing..")
+                .should().dependOnClassesThat().resideInAnyPackage("..integration.fastapi.processing..")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void fastApiProcessingTransportIsInternalToIntegration() throws ClassNotFoundException {
+        assertThat(Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal.FastApiProcessingClient"
+        ).getPackageName()).endsWith("integration.fastapi.processing.internal");
+        assertThat(Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal.FastApiTranscriptRowResponse"
+        ).getPackageName()).endsWith("integration.fastapi.processing.internal");
     }
 
     @Test
@@ -159,6 +179,7 @@ class ModuleBoundaryRulesTest {
 
     private static boolean isExposedApplicationType(String packageName) {
         return packageName.equals("com.aiknowledgeworkspace.workspacecore.processing.application")
+                || packageName.equals("com.aiknowledgeworkspace.workspacecore.processing.application.artifact")
                 || packageName.equals("com.aiknowledgeworkspace.workspacecore.search.application");
     }
 

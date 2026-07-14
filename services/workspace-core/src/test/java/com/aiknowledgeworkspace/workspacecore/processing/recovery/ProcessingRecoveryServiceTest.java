@@ -11,7 +11,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.integration.request.Pro
 import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import java.sql.Timestamp;
@@ -60,7 +60,7 @@ class ProcessingRecoveryServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @MockBean
-    private FastApiProcessingClient fastApiProcessingClient;
+    private DirectProcessingCompatibilityGateway compatibilityGateway;
 
     @BeforeEach
     void setUp() {

@@ -1,6 +1,6 @@
-package com.aiknowledgeworkspace.workspacecore.processing.application;
+package com.aiknowledgeworkspace.workspacecore.asset.application.compatibility;
 
-public record ProcessingTranscriptRow(
+public record DirectProcessingTranscriptRow(
         String id,
         String videoId,
         Integer segmentIndex,

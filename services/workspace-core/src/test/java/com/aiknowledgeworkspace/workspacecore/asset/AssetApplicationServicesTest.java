@@ -12,10 +12,10 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
@@ -64,7 +64,7 @@ class AssetApplicationServicesTest {
     private ProcessingRequestApplication processingRequestApplication;
 
     @Mock
-    private FastApiProcessingClient fastApiProcessingClient;
+    private DirectProcessingCompatibilityGateway fastApiProcessingClient;
 
     @Mock
     private AssetPersistenceService assetPersistenceService;
@@ -111,7 +111,6 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 "video-bytes".getBytes(StandardCharsets.UTF_8)
         );
-        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
         StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 11L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
@@ -122,8 +121,9 @@ class AssetApplicationServicesTest {
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
-        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
-                .thenReturn(upstreamResponse);
+        when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
+                "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+        ));
         when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
@@ -139,7 +139,7 @@ class AssetApplicationServicesTest {
 
         assertThat(response.workspaceId()).isEqualTo(workspaceId);
         verify(workspaceService).resolveWorkspaceOrDefault(workspaceId);
-        verify(fastApiProcessingClient).uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1"));
+        verify(fastApiProcessingClient).upload(any());
         verify(assetPersistenceService, never()).persistKafkaRequestUpload(
                 any(),
                 any(),
@@ -179,7 +179,6 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 "video-bytes".getBytes(StandardCharsets.UTF_8)
         );
-        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-2", "pending", "video-2");
         StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 UUID.randomUUID(),
@@ -190,8 +189,9 @@ class AssetApplicationServicesTest {
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(workspace);
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
-        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 2")))
-                .thenReturn(upstreamResponse);
+        when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
+                "task-2", "video-2", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+        ));
         when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
@@ -299,11 +299,11 @@ class AssetApplicationServicesTest {
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
-        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
-                .thenThrow(new FastApiIntegrationException("FastAPI failed"));
+        when(fastApiProcessingClient.upload(any()))
+                .thenThrow(new DirectProcessingIntegrationException("FastAPI failed", null));
 
         assertThatThrownBy(() -> assetService.uploadAsset(workspaceId, file, "Lecture 1"))
-                .isInstanceOf(FastApiIntegrationException.class)
+                .isInstanceOf(DirectProcessingIntegrationException.class)
                 .hasMessage("FastAPI failed");
 
         verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
@@ -338,14 +338,14 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 "video-bytes".getBytes(StandardCharsets.UTF_8)
         );
-        FastApiUploadResponse upstreamResponse = new FastApiUploadResponse("task-1", "pending", "video-1");
         StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
         RuntimeException persistenceFailure = new RuntimeException("db down");
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
         when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
-        when(fastApiProcessingClient.uploadVideo(any(Resource.class), eq("lecture.mp4"), eq("Lecture 1")))
-                .thenReturn(upstreamResponse);
+        when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
+                "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
+        ));
         when(assetPersistenceService.persistDirectUploadResult(
                 any(UUID.class),
                 eq("lecture.mp4"),
@@ -857,7 +857,7 @@ class AssetApplicationServicesTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        List<FastApiTranscriptRowResponse> upstreamRows = List.of(
+        List<DirectProcessingTranscriptRow> upstreamRows = List.of(
                 transcriptRow("row-1", "video-3b", 1, "first"),
                 transcriptRow("row-2", "video-3b", 2, "second")
         );
@@ -869,7 +869,7 @@ class AssetApplicationServicesTest {
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
-        when(fastApiProcessingClient.getTranscript("video-3b")).thenReturn(upstreamRows);
+        when(fastApiProcessingClient.transcriptRows("video-3b")).thenReturn(upstreamRows);
         List<AssetTranscriptRowInput> transcriptRows = upstreamRows.stream()
                 .map(this::toAssetTranscriptRowInput)
                 .toList();
@@ -1082,7 +1082,7 @@ class AssetApplicationServicesTest {
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
-        when(fastApiProcessingClient.getTranscript("video-6")).thenReturn(List.of());
+        when(fastApiProcessingClient.transcriptRows("video-6")).thenReturn(List.of());
 
         assertThatThrownBy(() -> assetService.getAssetTranscriptContext(assetId, "row-1", 2))
                 .isInstanceOf(TranscriptUnavailableException.class)
@@ -1114,7 +1114,7 @@ class AssetApplicationServicesTest {
                 ProcessingJobStatus.SUCCEEDED,
                 "success"
         );
-        FastApiTranscriptRowResponse usableRow = new FastApiTranscriptRowResponse(
+        DirectProcessingTranscriptRow usableRow = new DirectProcessingTranscriptRow(
                 "row-1",
                 "video-7",
                 1,
@@ -1125,9 +1125,9 @@ class AssetApplicationServicesTest {
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJobView(processingJob)));
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
-        when(fastApiProcessingClient.getTranscript("video-7")).thenReturn(List.of(
-                new FastApiTranscriptRowResponse("row-blank", "video-7", 0, "   ", "2026-04-12T00:00:00Z"),
-                new FastApiTranscriptRowResponse("row-missing-segment", "video-7", null, "Still bad", "2026-04-12T00:00:01Z"),
+        when(fastApiProcessingClient.transcriptRows("video-7")).thenReturn(List.of(
+                new DirectProcessingTranscriptRow("row-blank", "video-7", 0, "   ", "2026-04-12T00:00:00Z"),
+                new DirectProcessingTranscriptRow("row-missing-segment", "video-7", null, "Still bad", "2026-04-12T00:00:01Z"),
                 usableRow
         ));
         List<AssetTranscriptRowInput> usableRows = List.of(toAssetTranscriptRowInput(usableRow));
@@ -1191,7 +1191,7 @@ class AssetApplicationServicesTest {
         private AssetApplicationFixture(
                 AssetRepository assetRepository,
                 ProcessingRequestApplication processingRequestApplication,
-                FastApiProcessingClient fastApiProcessingClient,
+                DirectProcessingCompatibilityGateway fastApiProcessingClient,
                 AssetPersistenceService assetPersistenceService,
                 WorkspaceService workspaceService,
                 ObjectStorageClient objectStorageClient,
@@ -1235,7 +1235,7 @@ class AssetApplicationServicesTest {
         private AssetApplicationFixture(
                 AssetRepository assetRepository,
                 ProcessingRequestApplication processingRequestApplication,
-                FastApiProcessingClient fastApiProcessingClient,
+                DirectProcessingCompatibilityGateway fastApiProcessingClient,
                 AssetPersistenceService assetPersistenceService,
                 WorkspaceService workspaceService
         ) {
@@ -1325,8 +1325,8 @@ class AssetApplicationServicesTest {
         );
     }
 
-    private FastApiTranscriptRowResponse transcriptRow(String id, String videoId, int segmentIndex, String text) {
-        return new FastApiTranscriptRowResponse(
+    private DirectProcessingTranscriptRow transcriptRow(String id, String videoId, int segmentIndex, String text) {
+        return new DirectProcessingTranscriptRow(
                 id,
                 videoId,
                 segmentIndex,
@@ -1335,7 +1335,7 @@ class AssetApplicationServicesTest {
         );
     }
 
-    private AssetTranscriptRowInput toAssetTranscriptRowInput(FastApiTranscriptRowResponse transcriptRow) {
+    private AssetTranscriptRowInput toAssetTranscriptRowInput(DirectProcessingTranscriptRow transcriptRow) {
         return new AssetTranscriptRowInput(
                 transcriptRow.id(),
                 transcriptRow.videoId(),

@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingAssetUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingResultAssetPort;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Component;

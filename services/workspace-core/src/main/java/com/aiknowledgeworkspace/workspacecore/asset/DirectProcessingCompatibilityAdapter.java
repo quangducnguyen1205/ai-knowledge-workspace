@@ -1,58 +1,41 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiProcessingClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTaskStatusResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiTranscriptRowResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiUploadResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadCommand;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Component
 class DirectProcessingCompatibilityAdapter {
 
-    private final FastApiProcessingClient fastApiProcessingClient;
+    private final DirectProcessingCompatibilityGateway compatibilityGateway;
     private final AssetTranscriptQueryService transcriptQueryService;
     private final AssetTranscriptSnapshotService transcriptSnapshotService;
 
     DirectProcessingCompatibilityAdapter(
-            FastApiProcessingClient fastApiProcessingClient,
+            DirectProcessingCompatibilityGateway compatibilityGateway,
             AssetTranscriptQueryService transcriptQueryService,
             AssetTranscriptSnapshotService transcriptSnapshotService
     ) {
-        this.fastApiProcessingClient = fastApiProcessingClient;
+        this.compatibilityGateway = compatibilityGateway;
         this.transcriptQueryService = transcriptQueryService;
         this.transcriptSnapshotService = transcriptSnapshotService;
     }
 
     DirectProcessingUploadResult upload(Resource resource, String originalFilename, String title) {
-        FastApiUploadResponse response = fastApiProcessingClient.uploadVideo(resource, originalFilename, title);
-        validateUploadResponse(response);
-        ProcessingJobStatus processingStatus = mapTaskStatus(response.status());
-        AssetStatus assetStatus = processingStatus == ProcessingJobStatus.FAILED
-                ? AssetStatus.FAILED
-                : AssetStatus.PROCESSING;
-        return new DirectProcessingUploadResult(
-                response.taskId(), response.videoId(), response.status(), processingStatus, assetStatus
-        );
+        return compatibilityGateway.upload(new DirectProcessingUploadCommand(resource, originalFilename, title));
     }
 
     DirectProcessingTaskState taskState(String taskId) {
-        FastApiTaskStatusResponse response = fastApiProcessingClient.getTaskStatus(taskId);
-        validateTaskStatusResponse(response);
-        ProcessingJobStatus processingStatus = mapTaskStatus(response.status());
-        return new DirectProcessingTaskState(
-                response.status(),
-                processingStatus,
-                mapAssetStatus(processingStatus)
-        );
+        return compatibilityGateway.taskState(taskId);
     }
 
     List<AssetTranscriptRowSnapshot> loadOrCaptureTranscript(Asset asset, ProcessingJobView processingJob) {
@@ -82,7 +65,7 @@ class DirectProcessingCompatibilityAdapter {
     }
 
     private List<AssetTranscriptRowSnapshot> captureTranscript(Asset asset, String videoId) {
-        List<AssetTranscriptRowInput> rows = fastApiProcessingClient.getTranscript(videoId).stream()
+        List<AssetTranscriptRowInput> rows = compatibilityGateway.transcriptRows(videoId).stream()
                 .map(row -> row == null ? null : toInput(row))
                 .toList();
         try {
@@ -93,48 +76,7 @@ class DirectProcessingCompatibilityAdapter {
         }
     }
 
-    private void validateUploadResponse(FastApiUploadResponse response) {
-        if (response == null) {
-            throw new InvalidFastApiResponseException("FastAPI upload response body was empty");
-        }
-        if (!StringUtils.hasText(response.taskId())) {
-            throw new InvalidFastApiResponseException("FastAPI upload response did not include task_id");
-        }
-        if (!StringUtils.hasText(response.videoId())) {
-            throw new InvalidFastApiResponseException("FastAPI upload response did not include video_id");
-        }
-    }
-
-    private void validateTaskStatusResponse(FastApiTaskStatusResponse response) {
-        if (response == null) {
-            throw new InvalidFastApiResponseException("FastAPI task status response body was empty");
-        }
-        if (!StringUtils.hasText(response.status())) {
-            throw new InvalidFastApiResponseException("FastAPI task status response did not include status");
-        }
-    }
-
-    private ProcessingJobStatus mapTaskStatus(String upstreamStatus) {
-        if (!StringUtils.hasText(upstreamStatus)) {
-            return ProcessingJobStatus.PENDING;
-        }
-        return switch (upstreamStatus.trim().toLowerCase(Locale.ROOT)) {
-            case "pending", "queued", "created" -> ProcessingJobStatus.PENDING;
-            case "running", "processing", "started", "in_progress" -> ProcessingJobStatus.RUNNING;
-            case "success", "succeeded", "completed", "complete", "ready" -> ProcessingJobStatus.SUCCEEDED;
-            case "failed", "error" -> ProcessingJobStatus.FAILED;
-            default -> ProcessingJobStatus.RUNNING;
-        };
-    }
-
-    private AssetStatus mapAssetStatus(ProcessingJobStatus processingStatus) {
-        return switch (processingStatus) {
-            case FAILED -> AssetStatus.FAILED;
-            case PENDING, RUNNING, SUCCEEDED -> AssetStatus.PROCESSING;
-        };
-    }
-
-    private AssetTranscriptRowInput toInput(FastApiTranscriptRowResponse row) {
+    private AssetTranscriptRowInput toInput(DirectProcessingTranscriptRow row) {
         return new AssetTranscriptRowInput(
                 row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
         );
