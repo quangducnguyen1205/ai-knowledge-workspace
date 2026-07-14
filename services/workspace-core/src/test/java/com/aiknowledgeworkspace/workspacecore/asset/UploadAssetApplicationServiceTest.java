@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,14 +15,14 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageProperties;
 import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

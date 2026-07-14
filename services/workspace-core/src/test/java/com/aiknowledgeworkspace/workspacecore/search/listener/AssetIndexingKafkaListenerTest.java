@@ -8,10 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventHandler;
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventRejectedException;
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingHandleResult;
-import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerConfig;

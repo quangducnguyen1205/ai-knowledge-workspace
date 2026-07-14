@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryService;
+
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;

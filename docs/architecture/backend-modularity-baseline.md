@@ -4,10 +4,10 @@ Status: historical ratchet record plus current v1 pointer. This document is evid
 the Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas,
 or event contracts.
 
-> **Current v1.1.A2 result:** 0 reviewed Modulith violation messages and 0 cycle messages.
-> The canonical submission and validation documents are
-> [`project3-final-baseline.md`](../submission/project3-final-baseline.md) and
-> [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
+> **Current v1.1.A3 result:** strict `ApplicationModules.verify()` passes with 0
+> violation messages and 0 cycle messages. The canonical submission and validation
+> documents are [`project3-final-baseline.md`](../submission/project3-final-baseline.md)
+> and [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
 > Counts below describe historical ratchet steps unless explicitly marked current.
 
 ## Scope And Non-Goals
@@ -42,8 +42,9 @@ The test has two checks:
 - the detected direct package roots remain:
   `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`,
   `search`, `storage`, and `workspace`;
-- the real `detectViolations()` output matches the committed baseline resource
-  `services/workspace-core/src/test/resources/architecture/spring-modulith-violations-baseline.txt`.
+- the real `detectViolations()` output matched the then-committed baseline resource
+  (the historical resource was retired after P3-V1.1.A3 strict verification became the
+  active gate).
 
 This is a ratchet. A future failure means module detection changed or the
 violation report changed. That can be good or bad, but it must be reviewed
@@ -269,14 +270,57 @@ enum values unchanged. The asset–workspace JPA association, synchronous transa
 participation, HTTP/Kafka contracts, profiles, authentication, storage semantics,
 assistant behavior, and Elasticsearch request behavior remain frozen.
 
-The reviewed architecture ratchet is now `0` Modulith violation messages and `0` cycle
+The reviewed architecture ratchet was `0` Modulith violation messages and `0` cycle
 messages, fingerprint
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, down from `23` and
-`0`. This is an honest reviewed result, not a broad allow-list or suppression. A3 may
-consider physical package internalization and strict permanent verification, but this
-phase does not imply a broad package move or a runtime change.
+`0`. This was an honest reviewed result, not a broad allow-list or suppression. A3
+completed the bounded physical internalization described below without changing runtime
+behavior.
 
-## Current Package Inventory
+## P3-V1.1.A3 Selective Spring Module Internalization
+
+P3-V1.1.A3 `[VERIFIED BY STRICT MODULITH TEST]` moves accidental implementation classes
+out of module roots into responsibility-oriented subpackages while retaining intentional
+root APIs, controllers, entities, public DTOs, configuration entrypoints, and framework
+types. The move is physical and visibility-oriented; it does not change module ownership,
+transaction boundaries, persistence mappings, event contracts, profiles, or runtime
+behavior.
+
+The current production tree uses these bounded ownership locations:
+
+- `asset.application` contains upload, query, transcript, lifecycle, and compatibility
+  use cases; `asset.infrastructure.persistence` contains repositories and snapshot
+  persistence; `asset.adapter` contains state-owning cross-module adapters.
+- `assistant.application` contains context/answer orchestration and `assistant.adapter`
+  contains provider-facing context adapters.
+- `outbox.domain`, `outbox.infrastructure.persistence`,
+  `outbox.infrastructure.publication`, `outbox.relay`, `outbox.recovery`, and
+  `outbox.operator` separate envelope state, persistence, publication, scheduling, and
+  operator recovery.
+- `processing.domain`, `processing.infrastructure.persistence`, and
+  `processing.application.internal` keep processing state and request implementation
+  details behind the existing named application APIs.
+- `search.application.query`, `search.configuration`, `search.indexing.*`, and
+  `search.infrastructure.elasticsearch` separate query, configuration, indexing, and
+  the unchanged Elasticsearch client.
+- `storage.infrastructure.s3` contains the S3/MinIO implementation and configuration;
+  `workspace.application.internal` and `workspace.infrastructure.persistence` contain
+  workspace policy and persistence internals.
+
+The narrow named interfaces remain the only intentional cross-module implementation
+surfaces. `WorkspaceKafkaProperties` and other root configuration/API types remain at
+the module root where multiple framework or product entrypoints require them. Direct
+ArchUnit rules continue to protect outbox/common boundaries, consumer-owned ports,
+FastAPI transport isolation, listener/repository separation, and the moved internal
+packages.
+
+`BackendModularityBaselineTest` now runs strict
+`ApplicationModules.of(WorkspaceCoreApplication.class).verify()`; the obsolete empty
+violation resource and fingerprint ratchet are removed. The strict result is 0 messages
+and 0 cycles. No A4 package expansion is implied; architecture cleanup is closed for
+this bounded phase and the next work is delivery engineering.
+
+## Historical Package Inventory (before A3)
 
 Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 
@@ -292,7 +336,9 @@ Direct packages under `com.aiknowledgeworkspace.workspacecore`:
 | `storage` | 8 | Object storage abstraction, S3/MinIO adapter, object key generation and properties. | none | `S3ObjectStorageClient` component | none | Uses AWS S3 SDK `S3Client`; exposes object-storage request/result records. | Technical adapter. |
 | `workspace` | 15 | Workspace model, ownership/access policy, default workspace, workspace CRUD. | `WorkspaceController` | `WorkspaceService`, `WorkspaceAccessPolicy` | `WorkspaceRepository`; entity `Workspace` | Public workspace DTOs and validation exceptions. | Domain-specific. |
 
-Current tests mirror these roots: `asset`, `assistant`, `common/identity`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
+The table above is the pre-A3 inventory retained as historical context. Current package
+locations and the strict result are recorded in the A3 section above; tests still mirror
+the same module roots.
 
 Large production files that are useful refactor signals:
 
@@ -308,7 +354,7 @@ Large production files that are useful refactor signals:
 | `search/ExecuteIndexJobApplicationService.java` | 209 | Coordinates the derived write between explicit begin/finalize transaction operations and preserves safe failure diagnostics. |
 | `processing/result/ProcessingResultEventParser.java` | 250 | Owns validation of the frozen processing-result envelope and payload contracts. |
 
-## Current Dependency Map
+## Historical Dependency Map (pre-A3)
 
 The table below records meaningful cross-package dependencies in production code. "Acceptable" means aligned with the current implementation and product flow. "Questionable" means it may be right today but should be narrowed or made explicit before architecture enforcement. "Violation candidate" means likely to fail a strict module boundary if introduced as-is.
 
@@ -348,7 +394,7 @@ The table below records meaningful cross-package dependencies in production code
 - Manual and automatic relays are scoped by event type, not broad arbitrary outbox scans.
 - Assistant answer orchestration uses bounded context and the named FastAPI assistant contract; it still has no embedding, chat persistence, generic provider framework, or direct browser-to-FastAPI path.
 
-## Boundary-Leak Risks
+## Historical Boundary-Leak Risks (reviewed before A3)
 
 ### Confirmed
 
@@ -376,7 +422,7 @@ The table below records meaningful cross-package dependencies in production code
 - Whether event payload records should live with product modules while `outbox` keeps only envelope/state/publisher mechanics.
 - Whether Elasticsearch mapping/query code should be split from search application service before or after Spring Modulith verification.
 
-## Candidate Module Boundaries
+## Historical Candidate Module Boundaries
 
 These candidate boundaries are review frames, not instructions to move packages in this phase.
 
@@ -479,7 +525,7 @@ Concrete direction changes after P3-BE2A:
 - split `common.identity` from neutral `common`;
 - split `TranscriptSearchIndexClient` adapter/query/mapping responsibilities only if architecture verification proves this coupling obstructs module boundaries.
 
-## Proposed Public API Vs Internal Ownership
+## Historical Proposed Public API Vs Internal Ownership
 
 Initial public APIs should be small Java service contracts or named interfaces, not new HTTP APIs:
 
@@ -497,12 +543,17 @@ Initial public APIs should be small Java service contracts or named interfaces, 
 
 1. The application root package `com.aiknowledgeworkspace.workspacecore` and its direct subpackages are syntactically compatible with Spring Modulith default module detection.
 2. P3-BE1 confirmed default detection creates modules for `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
-3. A default `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` is intentionally not used as a passing test today. P3-S5.B2A reduced cycle messages to zero, but reviewed non-cycle named-interface and exposure violations remain in the exact ratchet.
-4. P3-BE1 chooses a focused verification baseline that documents current violations and gates unreviewed drift. It does not define allowed dependencies/named interfaces, temporarily exclude product modules, mark modules open, or reclassify technical packages.
+3. `BackendModularityBaselineTest` now runs the default
+   `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` as a passing strict
+   gate. P3-V1.1.A3 reached this result through reviewed package internalization and
+   narrow existing APIs, not exclusions or broad allow-lists.
+4. The historical ratchet resources document the earlier review steps; they are no longer
+   the active gate. Direct ArchUnit rules remain in place for boundaries that need
+   source-level protection beyond Modulith's module graph.
 5. Candidate first product module roots: `assistant`, `workspace`, `asset`, `processing`, `search`.
 6. Candidate technical/platform roots: `outbox`, `storage`, `integration.fastapi`, `common.config`, `common.web`, `common.health`.
 7. Maven review for P3-BE1 happened in `services/workspace-core/pom.xml`: Spring Modulith `1.2.5` is imported through the Spring Modulith BOM and only `spring-modulith-starter-test` is added with test scope.
-8. Future strict verification target:
+8. The strict verification target is now active:
 
 ```java
 @Test
@@ -511,7 +562,8 @@ void verifiesApplicationModules() {
 }
 ```
 
-That strict test remains a target, not a current passing test. It should be added only after the remaining non-cycle boundary leaks are removed or narrowed through intentional module APIs.
+The test passes at the current A3 commit. Future changes must keep this strict gate green;
+they must not replace it with exclusions, open modules, or broad allow-lists.
 
 Spring Modulith alone can express and verify module dependencies once public APIs/named interfaces are clear. ArchUnit is not needed now. ArchUnit may complement Spring Modulith later for more specific rules, for example:
 
@@ -520,7 +572,7 @@ Spring Modulith alone can express and verify module dependencies once public API
 - provider-specific FastAPI DTOs should not leak outside processing/asset transition code;
 - `common` must not depend on product modules except through explicitly allowed error contracts.
 
-## Staged Next-Step Plan
+## Historical Staged Next-Step Plan
 
 ### P3-BE1: Minimum Architecture Verification Baseline
 

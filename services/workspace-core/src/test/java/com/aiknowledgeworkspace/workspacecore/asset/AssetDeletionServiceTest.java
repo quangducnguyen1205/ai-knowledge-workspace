@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetDeletionService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
@@ -16,8 +20,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;

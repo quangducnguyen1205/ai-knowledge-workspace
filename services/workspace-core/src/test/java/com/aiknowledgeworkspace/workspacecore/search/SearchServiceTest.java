@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.ExpectedCount.once;
@@ -13,8 +17,8 @@ import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserPropert
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;

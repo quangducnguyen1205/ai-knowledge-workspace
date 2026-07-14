@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.ExpectedCount.once;

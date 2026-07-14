@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search.relay;
 
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;

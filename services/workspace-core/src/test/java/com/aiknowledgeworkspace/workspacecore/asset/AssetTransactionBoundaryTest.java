@@ -1,5 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;

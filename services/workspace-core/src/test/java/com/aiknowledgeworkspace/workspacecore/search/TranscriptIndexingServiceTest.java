@@ -1,5 +1,20 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexRequestService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventEnvelope;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;

@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetWorkspaceUsageService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;

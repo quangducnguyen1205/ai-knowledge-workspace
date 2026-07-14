@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;

@@ -1,9 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search.listener;
 
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventRejectedException;
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingEventHandler;
-import com.aiknowledgeworkspace.workspacecore.search.AssetIndexingHandleResult;
-import com.aiknowledgeworkspace.workspacecore.search.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

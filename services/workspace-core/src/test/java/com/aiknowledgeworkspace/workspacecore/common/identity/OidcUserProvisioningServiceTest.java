@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

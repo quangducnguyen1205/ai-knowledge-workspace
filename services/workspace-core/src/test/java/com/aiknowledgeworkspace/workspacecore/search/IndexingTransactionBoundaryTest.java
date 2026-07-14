@@ -1,5 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexDocumentMapper;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriteOperation;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

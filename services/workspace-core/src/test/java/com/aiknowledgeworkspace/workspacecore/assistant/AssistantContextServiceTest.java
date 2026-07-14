@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,7 +15,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
@@ -21,20 +24,20 @@ import com.aiknowledgeworkspace.workspacecore.assistant.application.port.Assista
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchService;
-import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.List;
 import java.util.Optional;

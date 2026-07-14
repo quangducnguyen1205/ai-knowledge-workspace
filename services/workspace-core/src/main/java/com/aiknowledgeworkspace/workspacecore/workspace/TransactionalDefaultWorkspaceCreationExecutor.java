@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;

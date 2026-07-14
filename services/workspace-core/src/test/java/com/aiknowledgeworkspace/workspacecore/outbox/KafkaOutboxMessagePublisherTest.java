@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublishException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;

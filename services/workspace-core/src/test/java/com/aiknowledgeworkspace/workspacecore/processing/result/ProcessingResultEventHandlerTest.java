@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -9,18 +10,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshot;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshotRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactGateway;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;

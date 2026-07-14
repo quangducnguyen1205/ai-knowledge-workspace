@@ -1,5 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -10,7 +17,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

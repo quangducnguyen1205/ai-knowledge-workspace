@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.storage;
 
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.S3ObjectStorageClient;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;

@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import java.util.UUID;
 import org.springframework.stereotype.Service;

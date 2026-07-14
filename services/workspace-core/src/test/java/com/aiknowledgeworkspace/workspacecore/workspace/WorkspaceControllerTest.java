@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;

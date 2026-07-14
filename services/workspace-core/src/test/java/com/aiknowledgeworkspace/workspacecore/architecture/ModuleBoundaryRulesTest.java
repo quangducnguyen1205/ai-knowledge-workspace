@@ -1,5 +1,35 @@
 package com.aiknowledgeworkspace.workspacecore.architecture;
 
+import com.aiknowledgeworkspace.workspacecore.asset.AssetController;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal.FastApiTranscriptRowResponse;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchClientConfig;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageConfig;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageProperties;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.S3ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.outbox.relay.OutboxRelayService;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -10,7 +40,6 @@ import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
-import java.lang.reflect.Modifier;
 import java.util.List;
 
 class ModuleBoundaryRulesTest {
@@ -122,9 +151,9 @@ class ModuleBoundaryRulesTest {
     @Test
     void directProcessingCompatibilityAdapterRemainsInternal() throws ClassNotFoundException {
         Class<?> adapter = Class.forName(
-                "com.aiknowledgeworkspace.workspacecore.asset.DirectProcessingCompatibilityAdapter"
+                "com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter"
         );
-        assertThat(Modifier.isPublic(adapter.getModifiers())).isFalse();
+        assertThat(adapter.getPackageName()).endsWith("asset.application.compatibility.internal");
     }
 
     @Test
@@ -220,6 +249,26 @@ class ModuleBoundaryRulesTest {
         assertThat(com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus.class
                 .getPackageName())
                 .isEqualTo("com.aiknowledgeworkspace.workspacecore.processing.application");
+    }
+
+    @Test
+    void implementationTypesRemainInResponsibilityOwnedPackages() {
+        assertThat(AssetPersistenceService.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence");
+        assertThat(AssistantContextService.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.assistant.application");
+        assertThat(OutboxRelayService.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.outbox.relay");
+        assertThat(ProcessingJob.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.processing.domain");
+        assertThat(SearchService.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.search.application.query");
+        assertThat(TranscriptSearchIndexClient.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch");
+        assertThat(S3ObjectStorageClient.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3");
+        assertThat(WorkspaceService.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.workspace.application.internal");
     }
 
     private static boolean isProcessingOrSearch(String packageName) {

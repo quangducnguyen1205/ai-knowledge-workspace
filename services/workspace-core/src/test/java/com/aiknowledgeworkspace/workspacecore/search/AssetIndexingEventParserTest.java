@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventEnvelope;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

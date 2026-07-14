@@ -1,5 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.SearchAssetPortAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetSearchabilityService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;

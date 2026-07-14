@@ -1,5 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,7 +16,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJ
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

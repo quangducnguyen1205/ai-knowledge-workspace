@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

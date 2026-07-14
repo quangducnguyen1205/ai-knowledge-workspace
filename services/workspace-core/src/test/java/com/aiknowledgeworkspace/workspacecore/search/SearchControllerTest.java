@@ -1,5 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;

@@ -1,5 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,20 +25,20 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
+import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageProperties;
 import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;

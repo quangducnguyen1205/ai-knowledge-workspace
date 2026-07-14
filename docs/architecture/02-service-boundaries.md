@@ -79,6 +79,15 @@ transactions. The obsolete `AssetService` facade is removed, the architecture
 ratchet is `79` non-cycle messages, and strict Modulith verification remains red
 only for reviewed exposure debt.
 
+P3-V1.1.A3 `[VERIFIED BY STRICT MODULITH TEST]` selectively internalizes the
+implementation tree without changing these service boundaries. Asset, assistant, outbox,
+processing, search, storage, and workspace implementations now sit in responsibility-
+oriented subpackages while intentional controllers, entities, DTOs, configuration
+entrypoints, and named application APIs remain discoverable. The strict
+`ApplicationModules.verify()` gate reports zero violation and cycle messages; direct
+ArchUnit rules continue to protect the narrow cross-module contracts. This closes the
+bounded Spring architecture-cleanup work; delivery engineering is the next phase.
+
 ## Current Boundary Diagram
 
 ```mermaid

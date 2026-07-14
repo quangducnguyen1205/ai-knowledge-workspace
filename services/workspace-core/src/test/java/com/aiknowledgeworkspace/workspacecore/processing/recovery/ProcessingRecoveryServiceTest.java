@@ -1,19 +1,22 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventRepository;
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowSnapshotRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshotRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -76,8 +79,8 @@ class ProcessingRecoveryServiceTest {
     void requeuesOnlySelectedStalePublishingEventWithoutPublishingIt() {
         OutboxEvent selected = outboxEventRepository.saveAndFlush(newOutboxEvent());
         selected.recordPublishFailure(
-                new com.aiknowledgeworkspace.workspacecore.outbox.OutboxFailureClassification(
-                        com.aiknowledgeworkspace.workspacecore.outbox.OutboxFailureDisposition.UNKNOWN,
+                new com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification(
+                        com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition.UNKNOWN,
                         "PREVIOUS_FAILURE"
                 ),
                 Instant.now(),

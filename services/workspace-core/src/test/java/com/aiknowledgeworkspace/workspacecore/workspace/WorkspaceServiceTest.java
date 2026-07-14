@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;

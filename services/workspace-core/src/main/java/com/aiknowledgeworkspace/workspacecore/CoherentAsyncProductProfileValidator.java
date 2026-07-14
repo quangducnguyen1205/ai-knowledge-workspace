@@ -1,9 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.OutboxRecoveryProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingAsyncConfiguration;
-import com.aiknowledgeworkspace.workspacecore.search.SearchAsyncConfiguration;
+import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchAsyncConfiguration;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.InitializingBean;

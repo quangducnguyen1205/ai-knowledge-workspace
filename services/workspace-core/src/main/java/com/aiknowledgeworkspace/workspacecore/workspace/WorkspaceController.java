@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;

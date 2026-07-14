@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;

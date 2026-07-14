@@ -1,5 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetDeletionService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetTitleUpdateService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.PatchMapping;

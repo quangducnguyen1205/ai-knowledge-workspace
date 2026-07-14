@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+
 import com.aiknowledgeworkspace.workspacecore.common.identity.provisioning.DefaultWorkspaceProvisioner;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;

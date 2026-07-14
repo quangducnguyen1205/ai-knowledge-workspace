@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

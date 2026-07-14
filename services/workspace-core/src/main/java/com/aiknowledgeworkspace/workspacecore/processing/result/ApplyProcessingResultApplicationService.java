@@ -1,7 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingAssetUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingResultAssetPort;

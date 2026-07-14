@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
+
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingCompatibilityGateway;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingConnectivityException;

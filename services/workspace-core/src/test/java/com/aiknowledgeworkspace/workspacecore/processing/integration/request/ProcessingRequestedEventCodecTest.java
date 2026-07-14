@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.processing.integration.request;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;

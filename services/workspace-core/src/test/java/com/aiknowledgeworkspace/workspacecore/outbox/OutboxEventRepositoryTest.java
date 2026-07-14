@@ -1,16 +1,21 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
+
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;

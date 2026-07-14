@@ -1,5 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryService;
+
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;

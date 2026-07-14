@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;

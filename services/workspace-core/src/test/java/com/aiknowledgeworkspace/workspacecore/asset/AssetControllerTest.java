@@ -1,5 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetDeletionService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetTitleUpdateService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
@@ -15,8 +23,8 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiExcepti
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchAssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.search.SearchProcessingJobNotFoundException;

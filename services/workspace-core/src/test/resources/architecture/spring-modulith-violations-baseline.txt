@@ -1,8 +1,0 @@
-# Spring Modulith violation baseline
-# The aggregate SHA-256 fingerprints the exact sorted normalized violation set.
-# Human-readable cycle paths remain listed for dependency review.
-# This is a strict ratchet, not proof of a clean modular architecture.
-detected-modules=asset,assistant,common,integration,outbox,processing,search,storage,workspace
-violation-message-count=0
-cycle-message-count=0
-violation-set-sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

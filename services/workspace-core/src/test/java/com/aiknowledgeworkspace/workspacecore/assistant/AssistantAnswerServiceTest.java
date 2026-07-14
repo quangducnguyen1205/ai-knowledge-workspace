@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,7 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
@@ -20,9 +24,9 @@ import com.aiknowledgeworkspace.workspacecore.assistant.application.port.Assista
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

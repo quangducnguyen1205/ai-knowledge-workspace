@@ -1,5 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxFailureClassifier;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublishException;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.PermanentOutboxPublishException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.ConnectException;

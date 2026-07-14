@@ -1,0 +1,12 @@
+package com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication;
+
+public class OutboxPublishException extends RuntimeException {
+
+    public OutboxPublishException(String message) {
+        super(message);
+    }
+
+    public OutboxPublishException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

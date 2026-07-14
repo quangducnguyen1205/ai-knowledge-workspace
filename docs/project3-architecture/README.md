@@ -87,6 +87,15 @@ workspace deletion: Workspace now consumes the asset-owned
 intentional, but the persistence-internal leak is gone; the Modulith baseline
 changed intentionally and remains a ratchet, not a strict-green verification.
 
+P3-V1.1.A3 `[VERIFIED BY STRICT MODULITH TEST]` is the bounded final Spring
+package-internalization step. Implementation classes are organized under
+application, adapter, domain, infrastructure, relay, recovery, and integration
+subpackages where those responsibilities are real; intentional APIs, controllers,
+entities, DTOs, and configuration entrypoints remain stable. The strict
+`ApplicationModules.verify()` gate now reports zero violation and cycle messages,
+with direct architecture rules preserving the narrow module contracts. Spring
+architecture cleanup is closed for this scope; delivery engineering follows.
+
 The frontend repository is a React/Vite product UI that calls the Spring Boot API boundary
 and does not call FastAPI, LLM providers, or infrastructure directly.
 

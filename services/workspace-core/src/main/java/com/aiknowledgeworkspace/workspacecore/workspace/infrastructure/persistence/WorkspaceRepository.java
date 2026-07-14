@@ -1,0 +1,18 @@
+package com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+
+import java.util.UUID;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
+
+    List<Workspace> findByOwnerId(String ownerId, Sort sort);
+
+    Optional<Workspace> findByIdAndOwnerId(UUID id, String ownerId);
+
+    List<Workspace> findAllByOwnerIdAndDefaultWorkspaceTrue(String ownerId);
+}

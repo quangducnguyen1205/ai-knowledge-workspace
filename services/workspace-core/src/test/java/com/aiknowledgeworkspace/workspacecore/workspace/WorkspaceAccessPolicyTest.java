@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceAccessPolicy;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 

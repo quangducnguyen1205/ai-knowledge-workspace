@@ -1,5 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.processing;
 
+import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+
+import com.aiknowledgeworkspace.workspacecore.processing.application.internal.ProcessingRequestApplicationService;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
+import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;

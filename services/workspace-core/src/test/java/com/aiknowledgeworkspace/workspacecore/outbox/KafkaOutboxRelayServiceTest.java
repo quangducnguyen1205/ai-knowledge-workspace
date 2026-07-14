@@ -1,5 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.relay.OutboxRelayService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;

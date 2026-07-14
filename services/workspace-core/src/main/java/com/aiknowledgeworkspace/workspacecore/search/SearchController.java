@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
