@@ -1,0 +1,22 @@
+# Spring product-core checklist
+
+- [ ] Spring remains the owner of public API, authorization and product policy.
+- [ ] PostgreSQL remains product truth.
+- [ ] Elasticsearch remains a derived, rebuildable projection.
+- [ ] Controllers do not inject repositories or entities.
+- [ ] Cross-module access uses a narrow API or consumer-owned port.
+- [ ] No new Modulith cycle or unreviewed exposure leak is introduced.
+- [ ] Module APIs do not expose JPA repositories/entities unnecessarily.
+- [ ] Upload transaction participation is unchanged.
+- [ ] Processing-result transaction participation is unchanged.
+- [ ] Index begin/write/finalize boundaries are unchanged.
+- [ ] External I/O is not accidentally moved into a database transaction.
+- [ ] Flyway/schema/table/column mappings are unchanged unless explicitly approved.
+- [ ] Outbox event identity, payload, topic and retry behavior are unchanged.
+- [ ] Consumer inbox/idempotency remains intact.
+- [ ] Recovery cooldown and cycle limits remain intact.
+- [ ] Project3 and compatibility profiles remain coherent.
+- [ ] Direct upload, explicit indexing and manual recovery remain functional.
+- [ ] HTTP/Kafka golden contracts are green.
+- [ ] Context/profile and architecture tests are green.
+- [ ] Full workspace-core validation result is recorded.

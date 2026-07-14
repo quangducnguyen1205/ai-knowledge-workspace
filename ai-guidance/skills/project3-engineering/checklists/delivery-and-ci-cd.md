@@ -1,0 +1,23 @@
+# Project3 delivery and CI/CD checklist
+
+- [ ] Deployment objective and target environment are selected.
+- [ ] Single-VPS Compose is considered before orchestration.
+- [ ] Immutable image tags and source commit provenance are defined.
+- [ ] Registry ownership and retention are defined.
+- [ ] Production secrets are outside Git and separated by environment.
+- [ ] Environment configuration has an owner and validation path.
+- [ ] DNS, TLS and reverse-proxy responsibilities are explicit.
+- [ ] Health/readiness checks reflect real dependencies.
+- [ ] CI test/typecheck/build/config gates are required.
+- [ ] Security/static analysis gates are scoped and reproducible.
+- [ ] Migration ordering and backward compatibility are reviewed.
+- [ ] Backup and restore are proven before destructive operations.
+- [ ] Initial CD requires manual approval.
+- [ ] Deployment rollback is documented and tested at the selected scope.
+- [ ] No broad prune/reset/cleanup is used as deployment procedure.
+- [ ] Logs, metrics and operational alerts have owners.
+- [ ] Internal-service network and authentication boundaries are explicit.
+- [ ] Post-deployment smoke scope is bounded and sanitized.
+- [ ] Release/tag provenance is recorded.
+- [ ] Production readiness is not claimed without production evidence.
+- [ ] Kubernetes is not selected without evidence that Compose is insufficient.
