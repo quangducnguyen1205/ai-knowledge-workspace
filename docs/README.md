@@ -6,22 +6,25 @@ This directory is the docs-as-code home for current product behavior, architectu
 
 For the current Repo B baseline, this is the fastest useful reading order:
 
-1. `architecture/00-reviewer-overview.md`
-2. `architecture/05-end-to-end-diagram-pack.md`
-3. `architecture/01-system-context.md`
-4. `architecture/02-service-boundaries.md`
-5. `architecture/deprecations.md`
-6. `architecture/phase1-implemented-product-flow.md`
-7. `api/API.md`
-8. `data/Database.md`
-9. `runbooks/local-dev.md`
-10. `testing/integration-smoke-checklist.md`
+1. `submission/project3-final-baseline.md`
+2. `submission/project3-validation-matrix.md`
+3. `architecture/00-reviewer-overview.md`
+4. `architecture/05-end-to-end-diagram-pack.md`
+5. `architecture/01-system-context.md`
+6. `architecture/02-service-boundaries.md`
+7. `architecture/deprecations.md`
+8. `architecture/phase1-implemented-product-flow.md`
+9. `api/API.md`
+10. `data/Database.md`
+11. `runbooks/local-dev.md`
+12. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
 ## Sections
 
 - `product/`: problem framing, vision, and MVP definition
+- `submission/`: final cross-repository baseline and validation evidence
 - `architecture/`: system-level design and service boundaries
 - `adr/`: architectural decision records
 - `api/`: API contracts and interface notes
@@ -47,6 +50,11 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/05-end-to-end-diagram-pack.md`: reviewer-friendly current-state diagram pack for topology, flow, writes, search, and state transitions
 - `architecture/deprecations.md`: tracked compatibility deprecations, replacements, retained recovery paths, and removal gates
 - `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
+
+## Submission Documents
+
+- `submission/project3-final-baseline.md`: final repository manifest, ownership model, integrated flow, retained compatibility, known debt, and code-reading order
+- `submission/project3-validation-matrix.md`: exact static/runtime/browser classifications and cross-repository contract evidence
 
 ## API And Data Documents
 
