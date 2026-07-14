@@ -1,6 +1,7 @@
 # Project3 Architecture Decision
 
-Status: final planning draft for Project3. No implementation code has been changed.
+Status: final v1 architecture reference. The implementation and validation baseline are
+complete; the phase paragraphs below are historical evolution notes.
 
 ## Decision
 
@@ -28,7 +29,10 @@ Project3 now has two first-class AI Knowledge Workspace capabilities:
 
 ## Current-State Evidence
 
-Backend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace`.
+The current v1 source is the Spring product-core repository. Start with the final
+[baseline](../submission/project3-final-baseline.md) and
+[validation matrix](../submission/project3-validation-matrix.md), then use this document
+for architecture context and historical decisions.
 
 Current source-of-truth docs:
 
@@ -83,9 +87,14 @@ workspace deletion: Workspace now consumes the asset-owned
 intentional, but the persistence-internal leak is gone; the Modulith baseline
 changed intentionally and remains a ratchet, not a strict-green verification.
 
-Frontend repository inspected: `/Users/nqd2005/Projects/ai-knowledge-workspace-fe`. It confirms a React/Vite product UI that calls the Spring Boot API boundary and does not call FastAPI, LLM providers, or infrastructure directly.
+The frontend repository is a React/Vite product UI that calls the Spring Boot API boundary
+and does not call FastAPI, LLM providers, or infrastructure directly.
 
-FastAPI repository reference: `/Users/nqd2005/Projects/DemoFastAPI` is the current internal processing repository reference. P3-BE1 only corrected this stale repository note after confirming the path exists; it did not perform a new FastAPI code inspection or add a new runtime claim.
+The FastAPI repository is the current internal processing-service reference. P3-BE1 only
+corrected the repository reference; it did not add a new runtime claim.
+
+The P3-* paragraphs in this document preserve architectural evolution and rationale. They
+are not a replacement for the current v1 baseline or validation matrix.
 
 The Viettel project/image was used only as a visual and architectural learning reference, not as a source for Project3 business labels.
 
@@ -281,13 +290,26 @@ P3-C4 `[ĐÃ SMOKE THỰC TẾ]` verifies the local browser path for the opt-in 
 
 Spring Boot does not stream media bytes to FastAPI in the main processing path. MinIO object keys and internal service credentials keep the media path explicit and scalable.
 
-Current implementation note: Phase 3I keeps the Phase 3C Kafka publisher foundation, the Phase 3D-H disabled-by-default Spring Kafka listener for `asset.processing.result.v1`, and the explicit upload processing trigger. `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` is the default product behavior: Spring still calls FastAPI direct upload, stores the direct FastAPI task/video IDs, does not create a Kafka request outbox row, and leaves `ProcessingJob.processingRequestEventId` null. `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request` is an explicit transition mode: Spring does not call FastAPI direct upload, persists `Asset`, `ProcessingJob`, and one `asset.processing.requested` outbox event atomically, and stores that outbox event ID on `ProcessingJob.processingRequestEventId`. P3-D1 adds a disabled-by-default automatic request relay for this path only: with `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true` and Kafka enabled, Spring can periodically relay due `asset.processing.requested` rows in bounded batches through the existing outbox state machine. P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verifies the normal opt-in async path: upload in `kafka_request`, automatic Spring request relay, FastAPI consumer, Celery/Whisper processing from MinIO, FastAPI result relay, and Spring automatic result listener through to `Asset=TRANSCRIPT_READY` and `ProcessingJob=SUCCEEDED`. P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verifies the fully automatic result-publication variant: the FastAPI overlay `result-relay` service ran `processing_outbox_auto_relay`, published the durable processing result without a manual one-shot relay, and Spring applied it through the automatic listener. Search/indexing stayed disabled, no manual request/result controls were invoked, and selected smoke data was cleaned while Kafka history and Docker cache were retained. The two request paths remain mutually exclusive per upload to prevent duplicate processing before cutover.
+Historical implementation note: the early Phase 3I/D2/D4 experiments used an explicit
+`kafka_request` transition while `direct_upload` was still the generic default. The final v1
+`project3` profile now makes `kafka_request` plus automatic processing/result/indexing the
+normal path. `direct_upload` remains available only through the deprecated compatibility
+profile; the two request paths remain mutually exclusive per upload.
 
 Spring validates `transcript.ready` v1 and `asset.processing.failed` v1 envelopes, records consumed-event idempotency in PostgreSQL by `eventId`, and can apply product-state transitions through either the one-shot local handler or the disabled-by-default listener. Result events correlate to the original Spring `asset.processing.requested` event ID: `payload.processingRequestId` must equal `causationEventId`, and Spring matches the job by asset ID plus `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. For `transcript.ready`, Spring retrieves transcript artifact rows from FastAPI by `processingRequestId`, validates the complete row set, and only then replaces its product-owned transcript snapshot and marks the asset ready. Phase 3I adds exact-ID operator recovery for one selected durable consumed-result failure or one selected stale `PUBLISHING` request outbox row. P3-S4.B2 adds bounded automatic reconciliation only for terminal publication rows with typed transient failures; historical, unknown, permanent, and recovery-exhausted rows remain manual. No retry topic, Kafka DLQ, broad stale-row repair, Kafka transactions, Schema Registry, Avro, or Protobuf are implemented. Delivery remains at-least-once, so Spring dedupes result events by `eventId` and consumers must remain idempotent.
 
 Phase P3-B1 adds the derived search indexing foundation. PostgreSQL-owned transcript snapshots remain canonical. `asset_search_index_jobs` tracks one asset/snapshot indexing request with a deterministic snapshot fingerprint, and `asset.indexing.requested` v1 carries bounded metadata only: asset ID, indexing job ID, and snapshot fingerprint. PostgreSQL rejects duplicate active jobs for the same asset/fingerprint, same-fingerprint explicit indexing is an idempotent no-op after a successful index, and indexing finalization rechecks the current snapshot fingerprint before marking an asset `SEARCHABLE`. Automatic request creation is opt-in and disabled by default with `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`; explicit Project 2 indexing remains supported through the same indexing core. P3-E1 `[ĐÃ XÁC MINH TỪ CODE]` adds a separate disabled-by-default automatic relay for due `asset.indexing.requested` outbox rows only; it reuses durable outbox claim/publish/retry transitions and does not enable request creation or the indexing listener. A controlled P3-B2 local smoke verified the disabled-by-default indexing listener with Kafka and Elasticsearch: one selected indexing outbox event was relayed, the listener wrote derived documents, marked the asset `SEARCHABLE`, and search gating excluded stale Elasticsearch documents after PostgreSQL product state changed. P3-E1 itself does not claim a new Elasticsearch runtime smoke.
 
-P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the full opt-in automatic path after one standard upload: `kafka_request`, Spring automatic processing request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay, Spring automatic result listener, transcript snapshot persistence, automatic indexing request creation, Spring automatic indexing request relay, Spring indexing listener, Elasticsearch derived documents, and `Asset=SEARCHABLE`. Workspace search, asset-scoped search, and transcript context returned the selected asset, and PostgreSQL product state hid the selected asset from search after a temporary `SEARCHABLE -> TRANSCRIPT_READY` update while the Elasticsearch document remained. `direct_upload` remains the default and was not exercised; no manual relay, result-file handler, recovery command, reindex, rebuild, or reconcile workflow was used.
+P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the full automatic path after one standard upload:
+`kafka_request`, Spring automatic processing request relay, FastAPI consumer/Celery/MinIO
+processing, FastAPI automatic result relay, Spring automatic result listener, transcript
+snapshot persistence, automatic indexing request creation, Spring automatic indexing request
+relay, Spring indexing listener, Elasticsearch derived documents, and `Asset=SEARCHABLE`.
+Workspace search, asset-scoped search, and transcript context returned the selected asset,
+and PostgreSQL product state hid the selected asset from search after a temporary
+`SEARCHABLE -> TRANSCRIPT_READY` update while the Elasticsearch document remained. This
+evidence is the basis for the v1 normal path; no manual relay, result-file handler, recovery
+command, reindex, rebuild, or reconcile workflow was used.
 
 ### 3. Search
 

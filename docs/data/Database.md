@@ -1,8 +1,8 @@
-# Repo B Database
+# Spring Product-Core Database
 
 ## Purpose
 
-This document summarizes what Repo B currently persists in PostgreSQL.
+This document summarizes what the Spring product core currently persists in PostgreSQL.
 
 - It describes current relational persistence only.
 - It does not describe the Elasticsearch search index as primary application storage.
@@ -45,7 +45,7 @@ Repo B currently persists eight main records:
 
 P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the normal opt-in async processing state transitions in Product PostgreSQL: a `kafka_request` upload created one `Asset`, one `ProcessingJob`, and one `asset.processing.requested` `OutboxEvent`; the automatic request relay marked that request outbox row `PUBLISHED`; the Spring result listener recorded one `ConsumedProcessingResultEvent` as `APPLIED`, marked the job `SUCCEEDED`, marked the asset `TRANSCRIPT_READY`, and persisted the Spring-owned transcript snapshot. Search indexing was disabled, so no `AssetSearchIndexJob` or `asset.indexing.requested` row was created for that run.
 
-P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the same product-state endpoint through the fully automatic path: Spring automatic request relay published the selected durable request row, FastAPI automatic result-relay published the selected durable result row after consumer/Celery processing, and Spring automatic result listener applied it. Cleanup deleted only the selected Product PostgreSQL rows, FastAPI processing rows, Redis task metadata, and selected MinIO object while retaining Kafka history and Docker cache. `direct_upload` remained the default and was not exercised; indexing/search stayed disabled.
+P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the same product-state endpoint through the fully automatic path: Spring automatic request relay published the selected durable request row, FastAPI automatic result-relay published the selected durable result row after consumer/Celery processing, and Spring automatic result listener applied it. Cleanup deleted only the selected Product PostgreSQL rows, FastAPI processing rows, Redis task metadata, and selected MinIO object while retaining Kafka history and Docker cache. This was historical evidence from before the v1 default cutover; indexing/search stayed disabled.
 
 ## Simplified Persistence Relationship Diagram
 
@@ -436,7 +436,10 @@ Current role:
 - Workspace create persists a minimal `Workspace` row with `name`, and default-scope reads can lazily create the current user's default workspace row if it is still missing.
 - Upload resolves a workspace first, stores raw media bytes in MinIO/S3-compatible object storage, then follows exactly one configured processing trigger mode.
 - The normal integrated `project3` profile selects `workspace.processing.trigger-mode=kafka_request`. Spring does not call FastAPI direct upload; it persists `Asset`, `ProcessingJob`, and one version 1 `asset.processing.requested` `OutboxEvent` in one product transaction. Direct-upload identifiers remain null.
-- The generic standalone default and explicit `compatibility` rollback profile select `direct_upload`. Spring calls the transitional FastAPI direct endpoint, stores the task/video identifiers, and does not create a processing-request outbox row.
+- The generic standalone default and explicit `compatibility` rollback profile select the
+  retained `direct_upload` compatibility mode. Spring calls the transitional FastAPI direct
+  endpoint, stores the task/video identifiers, and does not create a processing-request outbox
+  row. The normal `project3` profile uses `kafka_request` instead.
 - If object storage succeeds but FastAPI direct upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave a product asset row behind.
 - Outbox events are created only for uploads that reach product persistence. Failed upload attempts before persistence do not intentionally create outbox rows.
 - Kafka publishing from `outbox_events` is implemented as an opt-in Spring Kafka publisher adapter. The table and relay state machine remain the durable foundation for the later async processing lifecycle.

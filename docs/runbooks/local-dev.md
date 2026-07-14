@@ -6,16 +6,16 @@ This repository runs as the new product core for AI Knowledge Workspace. The leg
 
 For the current minimal usable web product, the canonical supported run mode is a Docker-first demo topology with one supported local Spring Boot process:
 
-- Repo A / FastAPI through its own existing Docker Compose path
-- Repo B PostgreSQL + Elasticsearch + MinIO + Kafka through Repo B Docker Compose
-- Repo B Spring Boot (`workspace-core`) on the host
-- Repo FE frontend through its own Docker Compose path
+- FastAPI through its own existing Docker Compose path
+- Spring product-core PostgreSQL + Elasticsearch + MinIO + Kafka through Spring Compose
+- Spring Boot (`workspace-core`) on the host
+- Frontend through its own Docker Compose path
 
 See [deployable-demo-baseline.md](../planning/deployable-demo-baseline.md) for the concise supported-baseline decision.
 
 ## Local Port Plan
 
-Repo A already uses:
+The FastAPI repository already uses:
 
 - FastAPI: `8000`
 - PostgreSQL: `5432`

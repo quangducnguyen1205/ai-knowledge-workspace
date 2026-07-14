@@ -2,7 +2,8 @@
 
 ## Purpose
 
-This is the fastest backend-oriented entry point for understanding the current Repo B product baseline.
+This is the fastest backend-oriented entry point for understanding the current Spring
+product-core baseline.
 
 Use it when you want a concise answer to:
 
@@ -14,7 +15,12 @@ Use it when you want a concise answer to:
 
 ## Product In One Paragraph
 
-AI Knowledge Workspace is currently a pre-AI, search-first product for recovering the relevant segment from previously consumed lecture video. Spring Boot is the product core and the only product-facing backend boundary. FastAPI remains an internal media/AI processing dependency. Elasticsearch is the product search layer. The system is intentionally not a chatbot, RAG, vector-search, or collaboration platform in the current baseline.
+AI Knowledge Workspace is a search-first product for recovering the relevant segment from
+previously consumed lecture video, with an asset-scoped grounded assistant and citation
+navigation experience. Spring Boot is the product core and the only product-facing backend
+boundary. FastAPI remains an internal media/AI processing/provider dependency. Elasticsearch
+is the derived product search layer. The system is not a general-purpose chatbot,
+collaboration platform, or unrestricted RAG product.
 
 ## Current Product Baseline
 

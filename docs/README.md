@@ -4,7 +4,7 @@ This directory is the docs-as-code home for current product behavior, architectu
 
 ## Start Here
 
-For the current Repo B baseline, this is the fastest useful reading order:
+For the current Spring product-core baseline, this is the fastest useful reading order:
 
 1. `submission/project3-final-baseline.md`
 2. `submission/project3-validation-matrix.md`
@@ -28,7 +28,7 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/`: system-level design and service boundaries
 - `adr/`: architectural decision records
 - `api/`: API contracts and interface notes
-- `data/`: current persistence notes for Repo B
+- `data/`: current persistence notes for the Spring product core
 - `planning/`: execution plans and early delivery milestones
 - `testing/`: smoke and verification checklists
 - `runbooks/`: local setup and operational notes
@@ -58,8 +58,8 @@ These are the main current-source-of-truth docs for understanding how the backen
 
 ## API And Data Documents
 
-- `api/API.md`: current product-facing Spring API summary for Repo B
-- `data/Database.md`: current PostgreSQL persistence summary for Repo B
+- `api/API.md`: current product-facing Spring API summary
+- `data/Database.md`: current PostgreSQL persistence summary
 
 ## Testing And Runbooks
 

@@ -100,9 +100,15 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Confirm `asset.indexing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
-- [ ] Kafka is not required for the normal upload smoke path because `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` remains the default product trigger.
+- [ ] The normal v1 upload smoke path uses the `project3` profile and therefore requires Kafka
+      request/result delivery plus automatic indexing. The retained compatibility smoke may use
+      `direct_upload` without Kafka, but it is not the normal product path.
 - [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once`, and `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` for an explicit scoped one-shot relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads; the smoke command relays only the selected event ID and will not publish arbitrary due outbox rows.
-- [ ] The P3-D1 automatic request relay is still disabled by default. P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the controlled normal opt-in path with `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, and `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true`: one upload produced one request outbox event, the scheduler published exactly one `asset.processing.requested` record, FastAPI/Celery processed the MinIO object, the FastAPI result relay published one `transcript.ready` record, and the Spring result listener completed product state. Do not use this checklist for the default `direct_upload` smoke, and keep search indexing disabled unless the indexing smoke is the explicit goal.
+- [ ] P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the async processing path with
+      `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, Kafka, automatic request/result
+      relays and the Spring result listener. The integrated `project3` profile now enables this
+      path by default; use `compatibility` only for the rollback smoke and keep its explicit
+      indexing fallback visible.
 - [ ] P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the fully automatic result-publication path: run the FastAPI overlay `result-relay` service with `PROCESSING_OUTBOX_AUTO_RELAY_ENABLED=true` and `PROCESSING_RESULT_PUBLISHER_ENABLED=true`, do not invoke the base one-shot relay, keep `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`, and confirm request/result topic offsets each advance by exactly one while `asset.indexing.requested.v1` does not move.
 - [ ] Kafka publishing requires idempotent future consumers; there is no generic all-event scheduler, retry topic, or DLQ.
 - [ ] Spring result-event handling can run through either the one-shot local file handler or the disabled-by-default Kafka listener. For the manual file path, use `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with a temporary result-envelope file.

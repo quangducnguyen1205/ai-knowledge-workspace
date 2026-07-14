@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This is a reviewer-friendly current-state diagram pack for the backend baseline in Repo B.
+This is a reviewer-friendly architecture diagram pack for the Project3 v1 backend. It
+contains the normal asynchronous path and a clearly labeled compatibility/legacy sequence
+retained for rollback.
 
 Use it when you want one presentation-friendly document that shows:
 
@@ -44,10 +46,11 @@ flowchart LR
     classDef processing fill:#fff0f0,stroke:#c53030,stroke-width:1px
 ```
 
-## 2. End-To-End Current Golden Path Sequence
+## 2. Compatibility/Legacy Direct-Upload Sequence
 
 How to read this:
-- This is the current product-visible happy path.
+- This sequence documents the retained direct-upload compatibility path, not the normal v1
+  integrated path.
 - The sequence shows where state is read or written as the user moves from auth to search and transcript context.
 - Transcript snapshot persistence and explicit indexing are both part of the real current flow.
 - The search call may omit `workspaceId`, in which case Spring resolves the current user's default workspace. `assetId` stays an optional scope inside that resolved workspace.
@@ -152,7 +155,10 @@ flowchart TD
 ```
 
 Note:
-- Upload is product-facing through Repo B Spring Boot first. Spring then calls Repo A FastAPI and persists `Asset` plus `ProcessingJob` after the upload is accepted.
+- The sequence above is retained for rollback and local compatibility. The normal v1 path is
+  `project3`/`kafka_request`: Spring writes a request outbox, Kafka delivers to the FastAPI
+  consumer, the result returns through the durable result outbox, and Spring performs
+  automatic indexing to `SEARCHABLE`. See the final baseline for the canonical normal flow.
 
 ## 4. Search And Indexing Lifecycle
 

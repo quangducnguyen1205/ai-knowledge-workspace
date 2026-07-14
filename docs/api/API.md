@@ -1,16 +1,16 @@
-# Repo B API
+# Spring Product-Core API
 
 ## Purpose
 
-This document is the current product-facing API summary for Repo B (`workspace-core`).
+This document is the current product-facing API summary for the Spring `workspace-core` service.
 
 - Spring Boot is the product entry point.
-- Repo A (FastAPI) remains an internal processing dependency.
+- FastAPI remains an internal processing/provider dependency.
 - FastAPI `/videos/search` is not part of the product API.
 
 ## Current User Foundation
 
-Repo B now uses a minimal current-user identity foundation for ownership-aware workspace scope.
+Spring now uses a minimal current-user identity foundation for ownership-aware workspace scope.
 
 - The primary product-facing path is now session-based basic auth through register/login.
 - `POST /api/auth/register` and `POST /api/auth/login` establish the current user in the Spring HTTP session.
@@ -153,7 +153,7 @@ Common failure cases:
 
 ### `POST /api/workspaces`
 
-Creates one workspace in Repo B.
+Creates one workspace in Spring.
 
 Request:
 
@@ -183,7 +183,7 @@ Common failure cases:
 
 ### `GET /api/workspaces`
 
-Lists workspaces in Repo B.
+Lists workspaces in Spring.
 
 Response:
 
@@ -206,7 +206,7 @@ Common failure cases:
 
 ### `GET /api/workspaces/{workspaceId}`
 
-Reads one workspace in Repo B.
+Reads one workspace in Spring.
 
 Response:
 
@@ -355,10 +355,16 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Spring stores the uploaded raw media bytes in MinIO/S3-compatible object storage.
 - Spring persists asset metadata, including the object-storage bucket/key reference, in PostgreSQL.
-- Default `direct_upload` mode keeps the current product behavior: Spring forwards `file` and `title` to FastAPI upload, validates the upstream response before persisting local state, stores FastAPI task/video IDs internally, does not create a Kafka request outbox event, and leaves `ProcessingJob.processingRequestEventId` null.
-- Explicit local/manual `kafka_request` mode skips FastAPI direct upload and instead persists one `asset.processing.requested` outbox event with `event_version = 1`; the created `ProcessingJob.processingRequestEventId` equals that outbox event ID and FastAPI direct-upload IDs remain null.
+- Normal `project3`/`kafka_request` mode skips FastAPI direct upload and persists one
+  `asset.processing.requested` outbox event with `event_version = 1`; the created
+  `ProcessingJob.processingRequestEventId` equals that outbox event ID and FastAPI direct-upload
+  IDs remain null.
+- The explicit `compatibility`/`direct_upload` mode remains a deprecated rollback path: Spring
+  forwards `file` and `title` to the FastAPI direct endpoint, validates the upstream response
+  before persisting local state, stores FastAPI task/video IDs internally, does not create a
+  Kafka request outbox event, and leaves `ProcessingJob.processingRequestEventId` null.
 - The two request paths are mutually exclusive for a single upload to prevent duplicate processing before cutover.
-- Spring associates the created asset with one workspace in Repo B.
+- Spring associates the created asset with one workspace in PostgreSQL product state.
 - If object storage succeeds but FastAPI upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave an asset row behind.
 - Raw FastAPI IDs are stored internally but not returned to the client.
 
@@ -373,7 +379,7 @@ Common failure cases:
 - HTTP `502` or `504` if upstream FastAPI fails
 
 All asset-by-id endpoints below are ownership-aware through the asset's workspace.
-Repo B uses the same ownership-safe HTTP `404` when an asset does not exist or is not owned by the current user.
+Spring uses the same ownership-safe HTTP `404` when an asset does not exist or is not owned by the current user.
 
 ### `GET /api/assets/{assetId}`
 

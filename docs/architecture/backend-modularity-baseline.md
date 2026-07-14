@@ -1,6 +1,14 @@
 # Backend Modularity Baseline
 
-Status: P3-BE0 audit baseline plus P3-BE1 Spring Modulith verification ratchet. This document is evidence from the current Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas, or event contracts.
+Status: historical ratchet record plus current v1 pointer. This document is evidence from
+the Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas,
+or event contracts.
+
+> **Current v1 result:** 79 reviewed non-cycle exposure messages and 0 cycle messages.
+> The canonical submission and validation documents are
+> [`project3-final-baseline.md`](../submission/project3-final-baseline.md) and
+> [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
+> Counts below describe historical ratchet steps unless explicitly marked current.
 
 ## Scope And Non-Goals
 

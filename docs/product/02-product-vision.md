@@ -22,6 +22,7 @@ The product provides search-first access to previously processed learning media.
 ## What This Product Is Not
 
 - It is not a generic chatbot project.
-- It is not a RAG answer-generation product in phase 1.
+- It is not a general-purpose RAG or chat-history product; v1 includes only the bounded,
+  asset-scoped grounded answer and citation experience.
 - It is not a collaboration workspace or team knowledge hub in phase 1.
 - It is not a broad multimodal learning platform in the initial release.

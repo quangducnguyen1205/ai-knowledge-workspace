@@ -6,7 +6,9 @@ The legacy FastAPI project currently lives in a separate GitHub repository and a
 
 ## Current Baseline Assumption
 
-For the current pre-AI baseline, the architecture assumes that the FastAPI project remains an external internal service. It is a dependency of the new system, but it is not the product core.
+For the current Project3 v1 baseline, the architecture assumes that the FastAPI project
+remains an external internal service. It is a processing/provider dependency, but it is not
+the product core or the public browser API.
 
 This assumption implies:
 

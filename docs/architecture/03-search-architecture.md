@@ -48,7 +48,9 @@ Elasticsearch is the target product search layer because the product needs:
 - User and workspace scoping
 - Deterministic lexical retrieval over product-owned search documents
 
-In the current pre-AI baseline, Elasticsearch is the product retrieval layer even though search quality is still intentionally basic.
+In the current Project3 v1 baseline, Elasticsearch is the derived product retrieval layer;
+search quality remains intentionally basic and the assistant is bounded by Spring-owned
+context and citation validation.
 
 ## Current Implemented Search Baseline
 

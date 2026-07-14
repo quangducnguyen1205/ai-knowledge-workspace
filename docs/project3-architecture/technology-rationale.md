@@ -2,6 +2,9 @@
 
 This document explains why each primary technology belongs in Project3, what role it plays, and what should not be overused.
 
+> Current v1 note: phase paragraphs below preserve historical design evolution. For the
+> current normal path and validation evidence, use the final baseline and validation matrix.
+
 ## Selected Primary Stack
 
 | Layer | Primary choice | Role in Project3 |
@@ -85,7 +88,12 @@ Do not split Spring Boot into many services just to look modern. The stronger de
 
 P3-D2 `[ĐÃ SMOKE THỰC TẾ]` validates that split of responsibility for processing: Spring stayed the product owner, persisted the upload/job/request outbox, automatically relayed the request only in opt-in `kafka_request` mode, consumed the FastAPI result through the Spring listener, and stored the final transcript snapshot and product state. FastAPI/Celery performed the internal media work from MinIO. Elasticsearch/search indexing was intentionally not part of that smoke.
 
-P3-D4 `[ĐÃ SMOKE THỰC TẾ]` validates the fully automatic result-publication variant of the same split: Spring automatic request relay, FastAPI consumer/Celery, FastAPI automatic result-relay, and Spring automatic result listener completed one MinIO-backed upload without manual request relay, manual result relay, result-file handling, recovery command, or fabricated Kafka injection. `direct_upload` remained the default product mode and was not exercised; search/indexing stayed disabled.
+P3-D4 `[ĐÃ SMOKE THỰC TẾ]` validates the historical fully automatic result-publication
+variant of the same split: Spring automatic request relay, FastAPI consumer/Celery, FastAPI
+automatic result-relay, and Spring automatic result listener completed one MinIO-backed upload
+without manual request relay, manual result relay, result-file handling, recovery command, or
+fabricated Kafka injection. At that time `direct_upload` remained the default product mode and
+search/indexing stayed disabled; the final v1 profile now uses the integrated async path.
 
 ## AI Assistant API / Context Orchestrator
 
@@ -177,7 +185,13 @@ The Spring adapter uses the AWS SDK v2 S3 client against MinIO's S3-compatible A
 
 For processing, Spring publishes the object key in the Kafka request event. FastAPI/Celery reads the media object from MinIO using internal service credentials. This avoids streaming large media bytes through Spring Boot into FastAPI for the normal processing path.
 
-Current implementation note: Phase 2 stores uploaded raw media in MinIO and persists the object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox foundation for `asset.processing.requested` with `event_version = 1`. Phase 3B adds an internal outbox relay state-machine foundation. Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher adapter. Phase 3D-F makes the request trigger explicit: `direct_upload` is the default product mode and does not create request outbox rows, while `kafka_request` is an explicit local/manual transition mode that creates the request outbox row and skips direct FastAPI upload.
+Historical implementation note: Phase 2 stores uploaded raw media in MinIO and persists the
+object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox foundation for
+`asset.processing.requested` with `event_version = 1`. Phase 3B adds an internal outbox relay
+state-machine foundation. Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher
+adapter. Phase 3D-F made the request trigger explicit: `direct_upload` was the then-current
+generic default, while `kafka_request` created the request outbox row and skipped direct FastAPI
+upload. The v1 `project3` profile now selects `kafka_request` as the normal path.
 
 Do not expose MinIO directly to the browser until a presigned URL model and authorization story are designed.
 
@@ -205,7 +219,11 @@ Spring transaction
 
 Current implementation note: Phase 3I keeps the Phase 3C Kafka publisher foundation and the Phase 3D-H disabled-by-default Spring Kafka listener for FastAPI result events. Kafka publishing is selected only when `WORKSPACE_CORE_KAFKA_ENABLED=true`; the request relay remains disabled by default. P3-D1 adds a narrow opt-in scheduler for processing request events only: `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true` relays bounded batches of due `asset.processing.requested` rows only when the product trigger is `kafka_request`. P3-E1 adds the same narrow pattern for derived search indexing: `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true` relays bounded batches of due `asset.indexing.requested` rows only, without creating indexing jobs or starting the indexing listener. The publisher sends JSON event envelopes with event metadata plus the existing payload JSON. Spring can parse and validate `asset.processing.result.v1` envelopes for `transcript.ready` v1 and `asset.processing.failed` v1, persist consumed-event idempotency by `eventId`, and apply product state only after validation. The result listener is selected only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, defaults to consumer group `workspace-processing-result-v1`, and defaults to `latest` offset reset. Phase 3I adds exact-ID manual operator recovery for one durable `FAILED` consumed result event or one stale `PUBLISHING` request outbox event, but it does not add FastAPI repository changes, a generic all-event scheduler, broad recovery scans, dead-letter routing, retry topics, Kafka transactions, Schema Registry, Avro, or Protobuf.
 
-`WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` remains the default product mode and keeps the old FastAPI direct-upload task correlation. `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request` is a deliberate local/manual transition mode for validating the object-key request path without also sending the same upload through FastAPI direct upload. Manual request relays should be used only with `kafka_request` uploads until direct upload is fully removed.
+The final v1 `project3` profile selects `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`
+and keeps automatic request/result/indexing relays enabled. The
+`WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` setting remains a deprecated,
+functional compatibility option for rollback and recovery; manual request relays remain scoped
+to `kafka_request` uploads.
 
 Producer configuration uses string key/value serialization, `acks=all`, idempotent producer mode, and an explicit send timeout as a practical local foundation. This is not end-to-end exactly-once delivery. The system remains at-least-once because a relay can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future FastAPI/Spring consumers must therefore be idempotent.
 
@@ -317,7 +335,16 @@ Phase P3-B1 implements this as a PostgreSQL-owned indexing job and outbox founda
 
 A controlled P3-B2 local smoke has verified the indexing transport path without running FastAPI media processing: Spring created one indexing job and one metadata-only indexing outbox event from a stable Spring-owned snapshot, relayed exactly that selected event, consumed it with the disabled-by-default indexing listener, wrote two derived Elasticsearch documents, and then proved stale-document protection by changing the asset back to non-searchable in PostgreSQL while the Elasticsearch documents still existed.
 
-P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete opt-in automatic processing-to-search composition. One normal Spring upload in `kafka_request` mode flowed through the automatic processing request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay, Spring result listener, transcript snapshot replacement, automatic indexing request creation, automatic indexing request relay, and indexing listener. Elasticsearch received the derived document, the asset reached `SEARCHABLE`, workspace and asset-scoped search plus context returned the selected asset, and PostgreSQL product-state gating hid the same Elasticsearch document after the selected asset was temporarily set back to `TRANSCRIPT_READY`. This does not change the default `direct_upload` mode and does not add retry topics, DLQ, generic outbox automation, reindex, rebuild, or reconcile workflows.
+P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete automatic processing-to-search composition.
+One normal Spring upload in `kafka_request` mode flowed through the automatic processing
+request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay,
+Spring result listener, transcript snapshot replacement, automatic indexing request creation,
+automatic indexing request relay, and indexing listener. Elasticsearch received the derived
+document, the asset reached `SEARCHABLE`, workspace and asset-scoped search plus context
+returned the selected asset, and PostgreSQL product-state gating hid the same Elasticsearch
+document after the selected asset was temporarily set back to `TRANSCRIPT_READY`. This is the
+evidence for the v1 normal path; it does not add retry topics, DLQ, generic outbox automation,
+reindex, rebuild, or reconcile workflows.
 
 Optional note: OpenSearch is a reasonable future alternative if license or deployment constraints require it, but Elasticsearch remains the primary Project3 choice because of popularity and learning relevance.
 
