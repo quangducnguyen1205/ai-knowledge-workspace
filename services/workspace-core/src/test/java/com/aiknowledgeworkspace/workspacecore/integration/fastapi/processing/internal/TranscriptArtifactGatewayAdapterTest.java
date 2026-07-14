@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactValidator;
+import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventApplyException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -49,5 +50,19 @@ class TranscriptArtifactGatewayAdapterTest {
                 .isInstanceOf(TranscriptArtifactAccessException.class)
                 .hasMessage("FastAPI returned HTTP 503")
                 .hasCause(transportFailure);
+    }
+
+    @Test
+    void keepsRequiredArtifactFieldValidationInTheProcessingBoundary() {
+        UUID processingRequestId = UUID.randomUUID();
+        when(client.getTranscriptArtifactRows(processingRequestId.toString())).thenReturn(List.of(
+                new FastApiTranscriptRowResponse(
+                        "row-1", "video-1", null, "Validated text", "2026-07-13T00:00:00Z"
+                )
+        ));
+
+        assertThatThrownBy(() -> gateway.loadValidatedRows(processingRequestId))
+                .isInstanceOf(ProcessingResultEventApplyException.class)
+                .hasMessage("Transcript artifact row segmentIndex is required");
     }
 }
