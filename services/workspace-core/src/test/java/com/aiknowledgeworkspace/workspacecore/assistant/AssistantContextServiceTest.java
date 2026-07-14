@@ -15,6 +15,12 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
@@ -54,7 +60,7 @@ class AssistantContextServiceTest {
 
     @BeforeEach
     void setUp() {
-        assistantContextService = new AssistantContextService(searchService, assetReadService);
+        assistantContextService = new AssistantContextService(searchPort(), transcriptPort());
     }
 
     @AfterEach
@@ -368,8 +374,8 @@ class AssistantContextServiceTest {
                 mock(TranscriptSearchIndexClient.class)
         );
         AssistantContextService realAssistantContextService = new AssistantContextService(
-                realSearchService,
-                mock(AssetTranscriptQueryService.class)
+                searchPort(realSearchService),
+                transcriptPort(mock(AssetTranscriptQueryService.class))
         );
 
         assertThatThrownBy(() -> realAssistantContextService.buildContext(new AssistantContextRequest(
@@ -379,6 +385,38 @@ class AssistantContextServiceTest {
                 null,
                 null
         ))).isInstanceOf(AuthenticationRequiredException.class);
+    }
+
+    private AssistantSearchPort searchPort() {
+        return searchPort(searchService);
+    }
+
+    private AssistantSearchPort searchPort(SearchService service) {
+        return (query, workspaceId, assetId) -> {
+            SearchResponse response = service.search(query, workspaceId, assetId);
+            return new AssistantSearchPage(
+                    response.workspaceIdFilter(),
+                    response.results().stream().map(result -> new AssistantSearchHit(
+                            result.assetId(), result.assetTitle(), result.transcriptRowId(), result.segmentIndex(),
+                            result.text(), result.createdAt(), result.score()
+                    )).toList()
+            );
+        };
+    }
+
+    private AssistantTranscriptContextPort transcriptPort() {
+        return transcriptPort(assetReadService);
+    }
+
+    private AssistantTranscriptContextPort transcriptPort(AssetTranscriptQueryService service) {
+        return (assetId, workspaceId, rowId, window) -> service.findSearchableTranscriptContext(
+                assetId, workspaceId, rowId, window
+        ).map(context -> new AssistantTranscriptContext(
+                context.assetId(), context.assetTitle(), context.transcriptRowId(), context.hitSegmentIndex(),
+                context.window(), context.rows().stream().map(row -> new AssistantTranscriptSegment(
+                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                )).toList()
+        ));
     }
 
     private SearchResponse searchResponse(UUID workspaceId, SearchResultResponse result) {

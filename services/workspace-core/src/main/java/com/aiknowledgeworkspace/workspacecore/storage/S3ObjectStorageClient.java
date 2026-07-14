@@ -1,6 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.storage;
 
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -9,12 +13,45 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 @Component
-public class S3ObjectStorageClient implements ObjectStorageClient {
+public class S3ObjectStorageClient implements ObjectStorageClient, ObjectStorageApplication {
 
     private final S3Client s3Client;
+    private final ObjectKeyFactory objectKeyFactory;
+    private final ObjectStorageProperties objectStorageProperties;
+
+    @Autowired
+    public S3ObjectStorageClient(
+            S3Client s3Client,
+            ObjectKeyFactory objectKeyFactory,
+            ObjectStorageProperties objectStorageProperties
+    ) {
+        this.s3Client = s3Client;
+        this.objectKeyFactory = objectKeyFactory;
+        this.objectStorageProperties = objectStorageProperties;
+    }
 
     public S3ObjectStorageClient(S3Client s3Client) {
-        this.s3Client = s3Client;
+        this(s3Client, new ObjectKeyFactory(), new ObjectStorageProperties());
+    }
+
+    @Override
+    public StoredObjectReference store(StoreObjectCommand command) {
+        String objectKey = objectKeyFactory.rawMediaKey(
+                command.userId(), command.workspaceId(), command.assetId(), command.originalFilename()
+        );
+        StoredObject storedObject = store(new StoreObjectRequest(
+                objectStorageProperties.getBucket(), objectKey, command.inputStream(),
+                command.sizeBytes(), command.contentType()
+        ));
+        return new StoredObjectReference(
+                storedObject.bucket(), storedObject.objectKey(), storedObject.sizeBytes(),
+                storedObject.contentType(), storedObject.eTag()
+        );
+    }
+
+    @Override
+    public void delete(StoredObjectReference reference) {
+        delete(reference.bucket(), reference.objectKey());
     }
 
     @Override

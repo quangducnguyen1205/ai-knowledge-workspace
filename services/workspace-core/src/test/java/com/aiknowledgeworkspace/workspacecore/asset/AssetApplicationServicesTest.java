@@ -17,7 +17,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
@@ -25,6 +25,7 @@ import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
 import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
@@ -96,9 +97,7 @@ class AssetApplicationServicesTest {
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
 
         UUID workspaceId = UUID.randomUUID();
@@ -120,7 +119,7 @@ class AssetApplicationServicesTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
         ));
@@ -148,12 +147,11 @@ class AssetApplicationServicesTest {
                 any()
         );
 
-        ArgumentCaptor<StoreObjectRequest> storageRequestCaptor = ArgumentCaptor.forClass(StoreObjectRequest.class);
+        ArgumentCaptor<StoreObjectCommand> storageRequestCaptor = ArgumentCaptor.forClass(StoreObjectCommand.class);
         verify(objectStorageClient).store(storageRequestCaptor.capture());
-        assertThat(storageRequestCaptor.getValue().bucket()).isEqualTo("workspace-media");
-        assertThat(storageRequestCaptor.getValue().objectKey())
-                .startsWith("users/user-1/workspaces/" + workspaceId + "/assets/")
-                .endsWith("/raw/lecture.mp4");
+        assertThat(storageRequestCaptor.getValue().userId()).isEqualTo("user-1");
+        assertThat(storageRequestCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
+        assertThat(storageRequestCaptor.getValue().originalFilename()).isEqualTo("lecture.mp4");
         assertThat(storageRequestCaptor.getValue().sizeBytes()).isEqualTo(11L);
         assertThat(storageRequestCaptor.getValue().contentType()).isEqualTo("video/mp4");
     }
@@ -166,9 +164,7 @@ class AssetApplicationServicesTest {
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
 
         UUID workspaceId = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -188,7 +184,7 @@ class AssetApplicationServicesTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(workspace);
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-2", "video-2", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
         ));
@@ -218,9 +214,7 @@ class AssetApplicationServicesTest {
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
 
         UUID workspaceId = UUID.randomUUID();
@@ -242,7 +236,7 @@ class AssetApplicationServicesTest {
         );
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(assetPersistenceService.persistKafkaRequestUpload(
                 any(UUID.class),
                 eq("lecture.mp4"),
@@ -282,9 +276,7 @@ class AssetApplicationServicesTest {
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
 
         UUID workspaceId = UUID.randomUUID();
@@ -298,7 +290,7 @@ class AssetApplicationServicesTest {
         StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any()))
                 .thenThrow(new DirectProcessingIntegrationException("FastAPI failed", null));
 
@@ -306,7 +298,7 @@ class AssetApplicationServicesTest {
                 .isInstanceOf(DirectProcessingIntegrationException.class)
                 .hasMessage("FastAPI failed");
 
-        verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
+        verify(objectStorageClient).delete(storedObject);
         verify(assetPersistenceService, never()).persistDirectUploadResult(
                 any(),
                 any(),
@@ -325,9 +317,7 @@ class AssetApplicationServicesTest {
                 fastApiProcessingClient,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
 
         UUID workspaceId = UUID.randomUUID();
@@ -342,7 +332,7 @@ class AssetApplicationServicesTest {
         RuntimeException persistenceFailure = new RuntimeException("db down");
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
         ));
@@ -360,7 +350,7 @@ class AssetApplicationServicesTest {
         assertThatThrownBy(() -> assetService.uploadAsset(workspaceId, file, "Lecture 1"))
                 .isSameAs(persistenceFailure);
 
-        verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
+        verify(objectStorageClient).delete(storedObject);
     }
 
     @Test
@@ -1194,9 +1184,7 @@ class AssetApplicationServicesTest {
                 DirectProcessingCompatibilityGateway fastApiProcessingClient,
                 AssetPersistenceService assetPersistenceService,
                 WorkspaceService workspaceService,
-                ObjectStorageClient objectStorageClient,
-                ObjectKeyFactory objectKeyFactory,
-                ObjectStorageProperties objectStorageProperties
+                ObjectStorageClient objectStorageClient
         ) {
             AssetTranscriptQueryService transcriptQueryService = new AssetTranscriptQueryService(
                     assetRepository,
@@ -1219,9 +1207,7 @@ class AssetApplicationServicesTest {
                     compatibilityAdapter,
                     assetPersistenceService,
                     workspaceService,
-                    objectStorageClient,
-                    objectKeyFactory,
-                    objectStorageProperties
+                    objectStorageClient
             );
             this.queryApplicationService = new AssetQueryApplicationService(
                     assetRepository,
@@ -1254,9 +1240,7 @@ class AssetApplicationServicesTest {
                         @Override
                         public void delete(String bucket, String objectKey) {
                         }
-                    },
-                    new ObjectKeyFactory(),
-                    new ObjectStorageProperties()
+                    }
             );
         }
 

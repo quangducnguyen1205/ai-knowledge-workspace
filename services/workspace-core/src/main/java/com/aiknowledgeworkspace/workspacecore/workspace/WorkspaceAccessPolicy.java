@@ -1,15 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.common.identity.api.CurrentUserContext;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class WorkspaceAccessPolicy {
 
-    private final CurrentUserService currentUserService;
+    private final CurrentUserContext currentUserService;
 
-    public WorkspaceAccessPolicy(CurrentUserService currentUserService) {
+    public WorkspaceAccessPolicy(CurrentUserContext currentUserService) {
         this.currentUserService = currentUserService;
     }
 

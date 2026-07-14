@@ -18,7 +18,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.Tr
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactGateway;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceRepository;
 import java.time.Instant;

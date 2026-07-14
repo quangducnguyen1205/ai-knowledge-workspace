@@ -1,11 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchResultResponse;
-import com.aiknowledgeworkspace.workspacecore.search.SearchService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,20 +25,20 @@ public class AssistantContextService {
     static final int MAX_QUERY_LENGTH = 500;
     static final int MAX_SOURCE_TEXT_LENGTH = 2_000;
 
-    private final SearchService searchService;
-    private final AssetTranscriptQueryService assetTranscriptQueryService;
+    private final AssistantSearchPort searchPort;
+    private final AssistantTranscriptContextPort transcriptContextPort;
 
     public AssistantContextService(
-            SearchService searchService,
-            AssetTranscriptQueryService assetTranscriptQueryService
+            AssistantSearchPort searchPort,
+            AssistantTranscriptContextPort transcriptContextPort
     ) {
-        this.searchService = searchService;
-        this.assetTranscriptQueryService = assetTranscriptQueryService;
+        this.searchPort = searchPort;
+        this.transcriptContextPort = transcriptContextPort;
     }
 
     public AssistantContextResponse buildContext(AssistantContextRequest request) {
         NormalizedRequest normalizedRequest = normalize(request);
-        SearchResponse searchResponse = searchService.search(
+        AssistantSearchPage searchResponse = searchPort.search(
                 normalizedRequest.query(),
                 normalizedRequest.workspaceId(),
                 normalizedRequest.assetId()
@@ -46,7 +46,7 @@ public class AssistantContextService {
 
         List<AssistantContextSourceResponse> sources = new ArrayList<>();
         Set<CitationKey> seenCitations = new LinkedHashSet<>();
-        for (SearchResultResponse result : searchResponse.results()) {
+        for (AssistantSearchHit result : searchResponse.results()) {
             if (sources.size() >= normalizedRequest.maxSources()) {
                 break;
             }
@@ -76,7 +76,7 @@ public class AssistantContextService {
     }
 
     private Optional<AssistantContextSourceResponse> toContextSource(
-            SearchResultResponse result,
+            AssistantSearchHit result,
             UUID workspaceId,
             int contextWindow
     ) {
@@ -85,7 +85,7 @@ public class AssistantContextService {
             return Optional.empty();
         }
 
-        Optional<AssetTranscriptContext> context = assetTranscriptQueryService.findSearchableTranscriptContext(
+        Optional<AssistantTranscriptContext> context = transcriptContextPort.findSearchableTranscriptContext(
                 result.assetId(),
                 workspaceId,
                 transcriptRowId,
@@ -95,9 +95,9 @@ public class AssistantContextService {
             return Optional.empty();
         }
 
-        AssetTranscriptContext contextValue = context.get();
-        List<AssetTranscriptRowView> contextRows = contextValue.rows();
-        AssetTranscriptRowView hitRow = findHitRow(contextRows, transcriptRowId, contextValue.hitSegmentIndex())
+        AssistantTranscriptContext contextValue = context.get();
+        List<AssistantTranscriptSegment> contextRows = contextValue.rows();
+        AssistantTranscriptSegment hitRow = findHitRow(contextRows, transcriptRowId, contextValue.hitSegmentIndex())
                 .orElseGet(() -> contextRows.get(0));
         String stableTranscriptRowId = resolveTranscriptRowId(hitRow.id(), hitRow.segmentIndex());
         if (!StringUtils.hasText(stableTranscriptRowId)) {
@@ -115,8 +115,8 @@ public class AssistantContextService {
         ));
     }
 
-    private Optional<AssetTranscriptRowView> findHitRow(
-            List<AssetTranscriptRowView> rows,
+    private Optional<AssistantTranscriptSegment> findHitRow(
+            List<AssistantTranscriptSegment> rows,
             String transcriptRowId,
             Integer hitSegmentIndex
     ) {
@@ -126,7 +126,7 @@ public class AssistantContextService {
                 .findFirst();
     }
 
-    private boolean matchesTranscriptRow(AssetTranscriptRowView row, String transcriptRowId) {
+    private boolean matchesTranscriptRow(AssistantTranscriptSegment row, String transcriptRowId) {
         if (StringUtils.hasText(row.id())) {
             return row.id().equals(transcriptRowId);
         }
@@ -134,9 +134,9 @@ public class AssistantContextService {
                 && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
     }
 
-    private String joinContextText(List<AssetTranscriptRowView> rows) {
+    private String joinContextText(List<AssistantTranscriptSegment> rows) {
         return rows.stream()
-                .map(AssetTranscriptRowView::text)
+                .map(AssistantTranscriptSegment::text)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .reduce((left, right) -> left + "\n" + right)

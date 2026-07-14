@@ -9,7 +9,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Component;

@@ -1,7 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,18 +17,18 @@ public class AssetDeletionService {
     private final AssetQueryApplicationService assetQueryApplicationService;
     private final AssetPersistenceService assetPersistenceService;
     private final AssetSearchMaintenance assetSearchMaintenance;
-    private final ObjectStorageClient objectStorageClient;
+    private final ObjectStorageApplication objectStorageApplication;
 
     public AssetDeletionService(
             AssetQueryApplicationService assetQueryApplicationService,
             AssetPersistenceService assetPersistenceService,
             AssetSearchMaintenance assetSearchMaintenance,
-            ObjectStorageClient objectStorageClient
+            ObjectStorageApplication objectStorageApplication
     ) {
         this.assetQueryApplicationService = assetQueryApplicationService;
         this.assetPersistenceService = assetPersistenceService;
         this.assetSearchMaintenance = assetSearchMaintenance;
-        this.objectStorageClient = objectStorageClient;
+        this.objectStorageApplication = objectStorageApplication;
     }
 
     public void deleteAsset(UUID assetId) {
@@ -47,7 +48,9 @@ public class AssetDeletionService {
         }
 
         try {
-            objectStorageClient.delete(asset.getStorageBucket(), asset.getObjectKey());
+            objectStorageApplication.delete(new StoredObjectReference(
+                    asset.getStorageBucket(), asset.getObjectKey(), 0L, null, null
+            ));
         } catch (RuntimeException exception) {
             LOGGER.warn(
                     "Failed to delete stored object {}/{} for asset {}",

@@ -2,13 +2,11 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
-import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
@@ -26,27 +24,21 @@ public class UploadAssetApplicationService {
     private final ProcessingRequestApplication processingRequestApplication;
     private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
     private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceService workspaceService;
-    private final ObjectStorageClient objectStorageClient;
-    private final ObjectKeyFactory objectKeyFactory;
-    private final ObjectStorageProperties objectStorageProperties;
+    private final WorkspaceQueryApplication workspaceQueryApplication;
+    private final ObjectStorageApplication objectStorageApplication;
 
     public UploadAssetApplicationService(
             ProcessingRequestApplication processingRequestApplication,
             DirectProcessingCompatibilityAdapter compatibilityAdapter,
             AssetPersistenceService assetPersistenceService,
-            WorkspaceService workspaceService,
-            ObjectStorageClient objectStorageClient,
-            ObjectKeyFactory objectKeyFactory,
-            ObjectStorageProperties objectStorageProperties
+            WorkspaceQueryApplication workspaceQueryApplication,
+            ObjectStorageApplication objectStorageApplication
     ) {
         this.processingRequestApplication = processingRequestApplication;
         this.compatibilityAdapter = compatibilityAdapter;
         this.assetPersistenceService = assetPersistenceService;
-        this.workspaceService = workspaceService;
-        this.objectStorageClient = objectStorageClient;
-        this.objectKeyFactory = objectKeyFactory;
-        this.objectStorageProperties = objectStorageProperties;
+        this.workspaceQueryApplication = workspaceQueryApplication;
+        this.objectStorageApplication = objectStorageApplication;
     }
 
     public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
@@ -56,12 +48,11 @@ public class UploadAssetApplicationService {
 
         String originalFilename = resolveOriginalFilename(file);
         String title = resolveTitle(requestedTitle, originalFilename);
-        Workspace workspace = workspaceService.resolveWorkspaceOrDefault(workspaceId);
+        Workspace workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
         UUID assetId = UUID.randomUUID();
-        String objectKey = objectKeyFactory.rawMediaKey(
-                workspace.getOwnerId(), workspace.getId(), assetId, originalFilename
+        StoredObjectReference storedObject = storeUploadedObject(
+                file, workspace.getOwnerId(), workspace.getId(), assetId, originalFilename
         );
-        StoredObject storedObject = storeUploadedObject(file, objectKey);
 
         try {
             if (!processingRequestApplication.usesKafkaRequestMode()) {
@@ -81,11 +72,15 @@ public class UploadAssetApplicationService {
         }
     }
 
-    private StoredObject storeUploadedObject(MultipartFile file, String objectKey) {
+    private StoredObjectReference storeUploadedObject(
+            MultipartFile file, String userId, UUID workspaceId, UUID assetId, String originalFilename
+    ) {
         try (InputStream inputStream = file.getInputStream()) {
-            return objectStorageClient.store(new StoreObjectRequest(
-                    objectStorageProperties.getBucket(),
-                    objectKey,
+            return objectStorageApplication.store(new StoreObjectCommand(
+                    userId,
+                    workspaceId,
+                    assetId,
+                    originalFilename,
                     inputStream,
                     file.getSize(),
                     resolveContentType(file)
@@ -101,9 +96,9 @@ public class UploadAssetApplicationService {
                 : "application/octet-stream";
     }
 
-    private void cleanupStoredObjectBestEffort(StoredObject storedObject) {
+    private void cleanupStoredObjectBestEffort(StoredObjectReference storedObject) {
         try {
-            objectStorageClient.delete(storedObject.bucket(), storedObject.objectKey());
+            objectStorageApplication.delete(storedObject);
         } catch (RuntimeException cleanupException) {
             LOGGER.warn(
                     "Failed to clean up uploaded object {}/{} after upload flow failure",

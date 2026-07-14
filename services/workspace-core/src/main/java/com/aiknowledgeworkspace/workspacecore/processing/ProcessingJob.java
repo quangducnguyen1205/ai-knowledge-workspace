@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing;
 
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

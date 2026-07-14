@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.processing.result;
 
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobRepository;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingAssetUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingResultAssetPort;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;

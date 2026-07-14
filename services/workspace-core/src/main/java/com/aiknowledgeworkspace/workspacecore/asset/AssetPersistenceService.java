@@ -1,13 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobUpdateCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
 import java.util.List;
@@ -39,7 +39,7 @@ public class AssetPersistenceService {
             String originalFilename,
             String title,
             Workspace workspace,
-            StoredObject storedObject,
+            StoredObjectReference storedObject,
             DirectProcessingUploadResult directResult
     ) {
         Asset asset = assetRepository.save(new Asset(
@@ -72,7 +72,7 @@ public class AssetPersistenceService {
             String originalFilename,
             String title,
             Workspace workspace,
-            StoredObject storedObject
+            StoredObjectReference storedObject
     ) {
         Asset asset = assetRepository.save(new Asset(
                 assetId,

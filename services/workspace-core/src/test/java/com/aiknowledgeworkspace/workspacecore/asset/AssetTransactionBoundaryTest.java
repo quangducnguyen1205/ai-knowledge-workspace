@@ -23,7 +23,7 @@ class AssetTransactionBoundaryTest {
                 String.class,
                 String.class,
                 com.aiknowledgeworkspace.workspacecore.workspace.Workspace.class,
-                com.aiknowledgeworkspace.workspacecore.storage.StoredObject.class
+                com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference.class
         );
 
         assertThat(transactional(upload)).isNull();

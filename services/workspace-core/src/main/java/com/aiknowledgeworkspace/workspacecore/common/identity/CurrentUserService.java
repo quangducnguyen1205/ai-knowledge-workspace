@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.common.identity;
 
+import com.aiknowledgeworkspace.workspacecore.common.identity.api.CurrentUserContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +15,7 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
-public class CurrentUserService {
+public class CurrentUserService implements CurrentUserContext {
 
     private static final int MAX_CURRENT_USER_ID_LENGTH = 255;
 

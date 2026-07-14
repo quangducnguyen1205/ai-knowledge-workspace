@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,7 +15,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
@@ -92,7 +93,8 @@ class AssetDeletionServiceTest {
         assetDeletionService.deleteAsset(assetId);
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
-        verify(objectStorageClient).delete("workspace-media", "objects/raw.mp4");
+        verify(objectStorageClient).delete(argThat(reference ->
+                reference.bucket().equals("workspace-media") && reference.objectKey().equals("objects/raw.mp4")));
         mockServer.verify();
     }
 
@@ -202,7 +204,8 @@ class AssetDeletionServiceTest {
         assetDeletionService.deleteAsset(assetId);
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
-        verify(objectStorageClient).delete("workspace-media", "objects/raw.mp4");
+        verify(objectStorageClient).delete(argThat(reference ->
+                reference.bucket().equals("workspace-media") && reference.objectKey().equals("objects/raw.mp4")));
     }
 
     @Test

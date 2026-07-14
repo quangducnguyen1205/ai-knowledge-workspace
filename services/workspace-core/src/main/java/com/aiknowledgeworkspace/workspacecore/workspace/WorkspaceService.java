@@ -1,7 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.common.identity.api.CurrentUserContext;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
@@ -14,14 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
-public class WorkspaceService {
+public class WorkspaceService implements WorkspaceQueryApplication {
 
     private static final int MAX_WORKSPACE_NAME_LENGTH = 255;
 
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceAssetUsagePort workspaceAssetUsagePort;
     private final WorkspaceProperties workspaceProperties;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserContext currentUserService;
     private final DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor;
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
 
@@ -30,7 +31,7 @@ public class WorkspaceService {
             WorkspaceRepository workspaceRepository,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
-            CurrentUserService currentUserService,
+            CurrentUserContext currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor,
             WorkspaceAccessPolicy workspaceAccessPolicy
     ) {
@@ -46,7 +47,7 @@ public class WorkspaceService {
             WorkspaceRepository workspaceRepository,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
-            CurrentUserService currentUserService
+            CurrentUserContext currentUserService
     ) {
         this(
                 workspaceRepository,
@@ -62,7 +63,7 @@ public class WorkspaceService {
             WorkspaceRepository workspaceRepository,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
-            CurrentUserService currentUserService,
+            CurrentUserContext currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
     ) {
         this(
@@ -130,11 +131,13 @@ public class WorkspaceService {
         return workspace != null && workspace.isDefaultWorkspace();
     }
 
+    @Override
     public boolean isOwnedByCurrentUser(Workspace workspace) {
         return workspaceAccessPolicy.isOwnedByCurrentUser(workspace);
     }
 
     @Transactional
+    @Override
     public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
         String currentUserId = currentUserService.getCurrentUserId();
         if (workspaceId == null) {
@@ -143,6 +146,11 @@ public class WorkspaceService {
 
         return workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)
                 .orElseThrow(() -> new WorkspaceNotFoundException(workspaceId));
+    }
+
+    @Override
+    public UUID resolveWorkspaceId(UUID requestedWorkspaceId) {
+        return resolveWorkspaceOrDefault(requestedWorkspaceId).getId();
     }
 
     @Transactional

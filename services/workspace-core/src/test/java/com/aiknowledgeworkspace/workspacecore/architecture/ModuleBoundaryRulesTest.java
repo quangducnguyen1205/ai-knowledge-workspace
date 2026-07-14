@@ -75,7 +75,7 @@ class ModuleBoundaryRulesTest {
                 .filter(dependency -> isProcessingOrSearch(dependency.getTargetClass().getPackageName()))
                 .filter(dependency -> !isExposedApplicationType(dependency.getTargetClass().getPackageName()))
                 .filter(dependency -> !dependency.getTargetClass().getFullName().equals(
-                        "com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus"))
+                        "com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus"))
                 .toList();
 
         assertThat(forbiddenDependencies)
@@ -170,6 +170,56 @@ class ModuleBoundaryRulesTest {
                         "com.aiknowledgeworkspace.workspacecore.asset.AssetService"
                 )))
                 .isTrue();
+    }
+
+    @Test
+    void assistantApplicationDoesNotDependOnConcreteAssetOrSearchServices() {
+        noClasses()
+                .that().haveSimpleName("AssistantContextService")
+                .should().dependOnClassesThat().haveSimpleName("AssetTranscriptQueryService")
+                .orShould().dependOnClassesThat().haveSimpleName("SearchService")
+                .orShould().dependOnClassesThat().haveSimpleName("SearchResponse")
+                .orShould().dependOnClassesThat().haveSimpleName("SearchResultResponse")
+                .orShould().dependOnClassesThat().haveSimpleName("AssetTranscriptContext")
+                .orShould().dependOnClassesThat().haveSimpleName("AssetTranscriptRowView")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void assetDoesNotDependOnConcreteWorkspaceOrStorageInfrastructure() {
+        noClasses()
+                .that().resideInAPackage("..asset..")
+                .should().dependOnClassesThat().haveSimpleName("WorkspaceService")
+                .orShould().dependOnClassesThat().haveSimpleName("ObjectStorageProperties")
+                .orShould().dependOnClassesThat().haveSimpleName("ObjectKeyFactory")
+                .orShould().dependOnClassesThat().haveSimpleName("S3ObjectStorageClient")
+                .orShould().dependOnClassesThat().haveSimpleName("ObjectStorageConfig")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void workspaceDoesNotDependOnConcreteCurrentUserImplementation() {
+        noClasses()
+                .that().resideInAPackage("..workspace..")
+                .should().dependOnClassesThat().haveSimpleName("CurrentUserService")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void nonSearchModulesDoNotDependOnElasticsearchInfrastructure() {
+        noClasses()
+                .that().resideOutsideOfPackage("..search..")
+                .should().dependOnClassesThat().haveSimpleName("ElasticsearchProperties")
+                .orShould().dependOnClassesThat().haveSimpleName("ElasticsearchClientConfig")
+                .orShould().dependOnClassesThat().haveSimpleName("TranscriptSearchIndexClient")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void processingStatusIsExposedThroughProcessingApplication() {
+        assertThat(com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus.class
+                .getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.processing.application");
     }
 
     private static boolean isProcessingOrSearch(String packageName) {

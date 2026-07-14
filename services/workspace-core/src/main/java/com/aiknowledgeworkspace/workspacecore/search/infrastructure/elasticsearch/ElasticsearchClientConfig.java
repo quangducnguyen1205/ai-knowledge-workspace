@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.common.config;
+package com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,7 +13,6 @@ public class ElasticsearchClientConfig {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeout().toMillis()));
         requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeout().toMillis()));
-
         return RestClient.builder()
                 .baseUrl(properties.getBaseUrl())
                 .requestFactory(requestFactory)

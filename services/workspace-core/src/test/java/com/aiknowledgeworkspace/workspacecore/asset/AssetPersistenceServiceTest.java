@@ -9,7 +9,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;

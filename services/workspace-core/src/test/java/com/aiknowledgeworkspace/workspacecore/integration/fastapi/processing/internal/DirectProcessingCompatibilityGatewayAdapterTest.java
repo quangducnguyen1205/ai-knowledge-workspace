@@ -8,7 +8,7 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadCommand;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 

@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing;
 
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;

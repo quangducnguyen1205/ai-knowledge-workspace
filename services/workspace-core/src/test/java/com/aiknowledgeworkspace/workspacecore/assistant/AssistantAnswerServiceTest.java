@@ -11,6 +11,12 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
@@ -44,9 +50,30 @@ class AssistantAnswerServiceTest {
     @BeforeEach
     void setUp() {
         assistantAnswerService = new AssistantAnswerService(
-                new AssistantContextService(searchService, assetReadService),
+                new AssistantContextService(searchPort(), transcriptPort()),
                 fastApiAssistantClient
         );
+    }
+
+    private AssistantSearchPort searchPort() {
+        return (query, workspaceId, assetId) -> {
+            SearchResponse response = searchService.search(query, workspaceId, assetId);
+            return new AssistantSearchPage(response.workspaceIdFilter(), response.results().stream().map(result ->
+                    new AssistantSearchHit(result.assetId(), result.assetTitle(), result.transcriptRowId(),
+                            result.segmentIndex(), result.text(), result.createdAt(), result.score())
+            ).toList());
+        };
+    }
+
+    private AssistantTranscriptContextPort transcriptPort() {
+        return (assetId, workspaceId, rowId, window) -> assetReadService.findSearchableTranscriptContext(
+                assetId, workspaceId, rowId, window
+        ).map(context -> new AssistantTranscriptContext(
+                context.assetId(), context.assetTitle(), context.transcriptRowId(), context.hitSegmentIndex(),
+                context.window(), context.rows().stream().map(row -> new AssistantTranscriptSegment(
+                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                )).toList()
+        ));
     }
 
     @Test

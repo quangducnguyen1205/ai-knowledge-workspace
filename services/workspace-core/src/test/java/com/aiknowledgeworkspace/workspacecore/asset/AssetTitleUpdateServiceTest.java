@@ -14,7 +14,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.search.ElasticsearchIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.search.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;

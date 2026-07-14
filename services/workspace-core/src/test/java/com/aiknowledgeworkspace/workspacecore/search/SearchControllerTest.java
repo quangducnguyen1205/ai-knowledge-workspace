@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.asset.AssetApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;

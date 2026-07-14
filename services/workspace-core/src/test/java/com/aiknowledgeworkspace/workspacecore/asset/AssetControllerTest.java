@@ -290,7 +290,7 @@ class AssetControllerTest {
                 assetId,
                 processingJobId,
                 AssetStatus.TRANSCRIPT_READY,
-                com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus.SUCCEEDED
+                com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus.SUCCEEDED
         ));
 
         mockMvc.perform(get("/api/assets/{assetId}/status", assetId))

@@ -17,7 +17,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
-import com.aiknowledgeworkspace.workspacecore.common.config.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;

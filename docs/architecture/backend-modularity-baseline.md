@@ -4,7 +4,7 @@ Status: historical ratchet record plus current v1 pointer. This document is evid
 the Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas,
 or event contracts.
 
-> **Current v1.1.A1 result:** 23 reviewed non-cycle exposure messages and 0 cycle messages.
+> **Current v1.1.A2 result:** 0 reviewed Modulith violation messages and 0 cycle messages.
 > The canonical submission and validation documents are
 > [`project3-final-baseline.md`](../submission/project3-final-baseline.md) and
 > [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
@@ -248,6 +248,33 @@ functionally unchanged; the normal Kafka path and all public contracts are uncha
 The reviewed ratchet is now `23` non-cycle messages and `0` cycle messages. The remaining
 messages are the previously reviewed configuration/current-user exposure debt deferred to
 the next bounded cleanup phase.
+
+## P3-V1.1.A2 Intentional Spring Module APIs
+
+P3-V1.1.A2 `[VERIFIED BY TESTS]` removes the remaining reviewed configuration and
+current-user exposure messages and protects root-package implementation leaks with
+direct architecture rules. Elasticsearch properties and client configuration now live
+under the search infrastructure boundary; no non-search module consumes those types.
+
+The workspace module consumes the neutral `common.identity::api` current-user contract,
+while `CurrentUserService` remains the identity-owned implementation. Assistant context
+assembly consumes assistant-owned search and transcript-context ports with neutral
+assistant records; package-private adapters preserve the existing authorization,
+ordering, bounds, and citation-source semantics. Asset upload/deletion uses the
+storage-owned application capability rather than S3/MinIO implementation or property
+types, and workspace access remains behind its existing application boundary.
+
+Processing status is exposed from `processing::application` with the existing persisted
+enum values unchanged. The asset–workspace JPA association, synchronous transaction
+participation, HTTP/Kafka contracts, profiles, authentication, storage semantics,
+assistant behavior, and Elasticsearch request behavior remain frozen.
+
+The reviewed architecture ratchet is now `0` Modulith violation messages and `0` cycle
+messages, fingerprint
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, down from `23` and
+`0`. This is an honest reviewed result, not a broad allow-list or suppression. A3 may
+consider physical package internalization and strict permanent verification, but this
+phase does not imply a broad package move or a runtime change.
 
 ## Current Package Inventory
 

@@ -12,7 +12,7 @@ import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPo
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import java.time.Instant;

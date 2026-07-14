@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -16,16 +16,16 @@ public class AssetTranscriptQueryService {
 
     private final AssetRepository assetRepository;
     private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceService workspaceService;
+    private final WorkspaceQueryApplication workspaceQueryApplication;
 
     public AssetTranscriptQueryService(
             AssetRepository assetRepository,
             AssetPersistenceService assetPersistenceService,
-            WorkspaceService workspaceService
+            WorkspaceQueryApplication workspaceQueryApplication
     ) {
         this.assetRepository = assetRepository;
         this.assetPersistenceService = assetPersistenceService;
-        this.workspaceService = workspaceService;
+        this.workspaceQueryApplication = workspaceQueryApplication;
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +75,7 @@ public class AssetTranscriptQueryService {
     public Asset loadAuthorizedAsset(UUID assetId) {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
-        if (asset.getWorkspace() == null || !workspaceService.isOwnedByCurrentUser(asset.getWorkspace())) {
+        if (asset.getWorkspace() == null || !workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspace())) {
             throw new AssetNotFoundException();
         }
         return asset;

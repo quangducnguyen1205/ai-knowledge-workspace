@@ -9,13 +9,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectKeyFactory;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageProperties;
 import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
 import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceService;
 import java.util.UUID;
@@ -61,8 +62,7 @@ class UploadAssetApplicationServiceTest {
         );
         when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(true);
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectKeyFactory.rawMediaKey(any(), any(), any(), any())).thenReturn("objects/raw.mp4");
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(assetPersistenceService.persistKafkaRequestUpload(
                 any(),
                 org.mockito.Mockito.eq("lecture.mp4"),
@@ -84,8 +84,7 @@ class UploadAssetApplicationServiceTest {
         StoredObject storedObject = storedObject();
         when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(false);
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(objectKeyFactory.rawMediaKey(any(), any(), any(), any())).thenReturn("objects/raw.mp4");
-        when(objectStorageClient.store(any(StoreObjectRequest.class))).thenReturn(storedObject);
+        when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(compatibilityAdapter.upload(any(), any(), any()))
                 .thenReturn(new DirectProcessingUploadResult(
                         "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -97,7 +96,7 @@ class UploadAssetApplicationServiceTest {
 
         assertThatThrownBy(() -> service().uploadAsset(workspaceId, file(), "Lecture"))
                 .isSameAs(failure);
-        verify(objectStorageClient).delete(storedObject.bucket(), storedObject.objectKey());
+        verify(objectStorageClient).delete(storedObject);
     }
 
     private UploadAssetApplicationService service() {
@@ -106,9 +105,7 @@ class UploadAssetApplicationServiceTest {
                 compatibilityAdapter,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient,
-                objectKeyFactory,
-                objectStorageProperties
+                objectStorageClient
         );
     }
 
