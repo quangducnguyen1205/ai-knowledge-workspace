@@ -32,19 +32,22 @@ public class UploadAssetApplicationService {
     private final AssetPersistenceService assetPersistenceService;
     private final WorkspaceQueryApplication workspaceQueryApplication;
     private final ObjectStorageApplication objectStorageApplication;
+    private final SupportedUploadMediaPolicy supportedUploadMediaPolicy;
 
     public UploadAssetApplicationService(
             ProcessingRequestApplication processingRequestApplication,
             DirectProcessingCompatibilityAdapter compatibilityAdapter,
             AssetPersistenceService assetPersistenceService,
             WorkspaceQueryApplication workspaceQueryApplication,
-            ObjectStorageApplication objectStorageApplication
+            ObjectStorageApplication objectStorageApplication,
+            SupportedUploadMediaPolicy supportedUploadMediaPolicy
     ) {
         this.processingRequestApplication = processingRequestApplication;
         this.compatibilityAdapter = compatibilityAdapter;
         this.assetPersistenceService = assetPersistenceService;
         this.workspaceQueryApplication = workspaceQueryApplication;
         this.objectStorageApplication = objectStorageApplication;
+        this.supportedUploadMediaPolicy = supportedUploadMediaPolicy;
     }
 
     public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
@@ -52,12 +55,13 @@ public class UploadAssetApplicationService {
             throw new InvalidUploadRequestException("A non-empty file is required");
         }
 
-        String originalFilename = resolveOriginalFilename(file);
-        String title = resolveTitle(requestedTitle, originalFilename);
         Workspace workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
+        ValidatedUploadMedia uploadMedia = supportedUploadMediaPolicy.validate(file);
+        String originalFilename = uploadMedia.originalFilename();
+        String title = resolveTitle(requestedTitle, originalFilename);
         UUID assetId = UUID.randomUUID();
         StoredObjectReference storedObject = storeUploadedObject(
-                file, workspace.getOwnerId(), workspace.getId(), assetId, originalFilename
+                file, workspace.getOwnerId(), workspace.getId(), assetId, uploadMedia
         );
 
         try {
@@ -79,27 +83,21 @@ public class UploadAssetApplicationService {
     }
 
     private StoredObjectReference storeUploadedObject(
-            MultipartFile file, String userId, UUID workspaceId, UUID assetId, String originalFilename
+            MultipartFile file, String userId, UUID workspaceId, UUID assetId, ValidatedUploadMedia uploadMedia
     ) {
         try (InputStream inputStream = file.getInputStream()) {
             return objectStorageApplication.store(new StoreObjectCommand(
                     userId,
                     workspaceId,
                     assetId,
-                    originalFilename,
+                    uploadMedia.originalFilename(),
                     inputStream,
                     file.getSize(),
-                    resolveContentType(file)
+                    uploadMedia.contentType()
             ));
         } catch (IOException exception) {
             throw new InvalidUploadRequestException("Uploaded file could not be read");
         }
-    }
-
-    private String resolveContentType(MultipartFile file) {
-        return StringUtils.hasText(file.getContentType())
-                ? file.getContentType()
-                : "application/octet-stream";
     }
 
     private void cleanupStoredObjectBestEffort(StoredObjectReference storedObject) {
@@ -113,26 +111,6 @@ public class UploadAssetApplicationService {
                     cleanupException
             );
         }
-    }
-
-    private String resolveOriginalFilename(MultipartFile file) {
-        String cleanedFilename = StringUtils.getFilename(file.getOriginalFilename());
-        if (!StringUtils.hasText(cleanedFilename)) {
-            return "upload.bin";
-        }
-        int maxLength = 255;
-        if (cleanedFilename.length() <= maxLength) {
-            return cleanedFilename;
-        }
-        int lastDotIndex = cleanedFilename.lastIndexOf('.');
-        if (lastDotIndex > 0 && lastDotIndex < cleanedFilename.length() - 1) {
-            String extension = cleanedFilename.substring(lastDotIndex);
-            int truncatedLength = maxLength - extension.length();
-            if (truncatedLength > 0) {
-                return cleanedFilename.substring(0, truncatedLength) + extension;
-            }
-        }
-        return cleanedFilename.substring(0, maxLength);
     }
 
     private String resolveTitle(String requestedTitle, String originalFilename) {

@@ -5,6 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQuery
 import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.SupportedUploadMediaPolicy;
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
@@ -117,9 +118,9 @@ class AssetApplicationServicesTest {
                 "file",
                 "lecture.mp4",
                 "video/mp4",
-                "video-bytes".getBytes(StandardCharsets.UTF_8)
+                mp4Signature()
         );
-        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 11L);
+        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
                 processingJobId,
@@ -161,7 +162,7 @@ class AssetApplicationServicesTest {
         assertThat(storageRequestCaptor.getValue().userId()).isEqualTo("user-1");
         assertThat(storageRequestCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
         assertThat(storageRequestCaptor.getValue().originalFilename()).isEqualTo("lecture.mp4");
-        assertThat(storageRequestCaptor.getValue().sizeBytes()).isEqualTo(11L);
+        assertThat(storageRequestCaptor.getValue().sizeBytes()).isEqualTo(12L);
         assertThat(storageRequestCaptor.getValue().contentType()).isEqualTo("video/mp4");
     }
 
@@ -182,9 +183,9 @@ class AssetApplicationServicesTest {
                 "file",
                 "lecture.mp4",
                 "video/mp4",
-                "video-bytes".getBytes(StandardCharsets.UTF_8)
+                mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -234,9 +235,9 @@ class AssetApplicationServicesTest {
                 "file",
                 "lecture.mp4",
                 "video/mp4",
-                "video-bytes".getBytes(StandardCharsets.UTF_8)
+                mp4Signature()
         );
-        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 11L);
+        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
                 processingJobId,
@@ -294,9 +295,9 @@ class AssetApplicationServicesTest {
                 "file",
                 "lecture.mp4",
                 "video/mp4",
-                "video-bytes".getBytes(StandardCharsets.UTF_8)
+                mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
@@ -335,9 +336,9 @@ class AssetApplicationServicesTest {
                 "file",
                 "lecture.mp4",
                 "video/mp4",
-                "video-bytes".getBytes(StandardCharsets.UTF_8)
+                mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 11L);
+        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
         RuntimeException persistenceFailure = new RuntimeException("db down");
 
         when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
@@ -1216,7 +1217,8 @@ class AssetApplicationServicesTest {
                     compatibilityAdapter,
                     assetPersistenceService,
                     workspaceService,
-                    objectStorageClient
+                    objectStorageClient,
+                    new SupportedUploadMediaPolicy()
             );
             this.queryApplicationService = new AssetQueryApplicationService(
                     assetRepository,
@@ -1363,6 +1365,10 @@ class AssetApplicationServicesTest {
                 contentType,
                 "\"etag-1\""
         );
+    }
+
+    private static byte[] mp4Signature() {
+        return new byte[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
     }
 
     private AssetTranscriptRowSnapshot snapshotRow(

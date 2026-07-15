@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.SupportedUploadMediaPolicy;
 import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
 
@@ -11,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
@@ -103,21 +105,45 @@ class UploadAssetApplicationServiceTest {
         verify(objectStorageClient).delete(storedObject);
     }
 
+    @Test
+    void unsupportedMediaIsRejectedBeforeStoragePersistenceOrProcessingIntent() {
+        UUID workspaceId = UUID.randomUUID();
+        Workspace workspace = new Workspace(workspaceId, "Workspace", "user-1", false);
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "notes".getBytes());
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+
+        assertThatThrownBy(() -> service().uploadAsset(workspaceId, file, "Notes"))
+                .isInstanceOf(InvalidUploadRequestException.class)
+                .hasMessage("Only MP4, MOV, M4V, WebM, and AVI video files are supported");
+
+        verifyNoInteractions(
+                processingRequestApplication,
+                compatibilityAdapter,
+                assetPersistenceService,
+                objectStorageClient
+        );
+    }
+
     private UploadAssetApplicationService service() {
         return new UploadAssetApplicationService(
                 processingRequestApplication,
                 compatibilityAdapter,
                 assetPersistenceService,
                 workspaceService,
-                objectStorageClient
+                objectStorageClient,
+                new SupportedUploadMediaPolicy()
         );
     }
 
     private MockMultipartFile file() {
-        return new MockMultipartFile("file", "lecture.mp4", "video/mp4", "video".getBytes());
+        return new MockMultipartFile("file", "lecture.mp4", "video/mp4", mp4Signature());
     }
 
     private StoredObject storedObject() {
-        return new StoredObject("workspace-media", "objects/raw.mp4", 5L, "video/mp4", "etag");
+        return new StoredObject("workspace-media", "objects/raw.mp4", 12L, "video/mp4", "etag");
+    }
+
+    private byte[] mp4Signature() {
+        return new byte[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
     }
 }

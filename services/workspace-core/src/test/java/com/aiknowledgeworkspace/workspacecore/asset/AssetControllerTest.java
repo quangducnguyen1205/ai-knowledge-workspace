@@ -134,6 +134,29 @@ class AssetControllerTest {
     }
 
     @Test
+    void uploadReturnsStructuredBadRequestWhenMediaIsUnsupported() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "notes.txt",
+                "text/plain",
+                "notes".getBytes()
+        );
+        when(uploadAssetApplicationService.uploadAsset(null, file, "Notes"))
+                .thenThrow(new InvalidUploadRequestException(
+                        "Only MP4, MOV, M4V, WebM, and AVI video files are supported"
+                ));
+
+        mockMvc.perform(multipart("/api/assets/upload")
+                        .file(file)
+                        .param("title", "Notes"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_UPLOAD_FILE"))
+                .andExpect(jsonPath("$.message").value(
+                        "Only MP4, MOV, M4V, WebM, and AVI video files are supported"
+                ));
+    }
+
+    @Test
     void listAssetsReturnsPaginatedWorkspaceScopedAssetSummaries() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
