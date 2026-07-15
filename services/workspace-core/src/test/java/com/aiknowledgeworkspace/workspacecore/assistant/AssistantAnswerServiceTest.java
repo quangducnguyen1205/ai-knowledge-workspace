@@ -18,12 +18,12 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantAnswerProviderPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderResponse;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
@@ -47,7 +47,7 @@ class AssistantAnswerServiceTest {
     private AssetTranscriptQueryService assetReadService;
 
     @Mock
-    private FastApiAssistantClient fastApiAssistantClient;
+    private AssistantAnswerProviderPort assistantAnswerProviderPort;
 
     private AssistantAnswerService assistantAnswerService;
 
@@ -55,7 +55,7 @@ class AssistantAnswerServiceTest {
     void setUp() {
         assistantAnswerService = new AssistantAnswerService(
                 new AssistantContextService(searchPort(), transcriptPort()),
-                fastApiAssistantClient
+                assistantAnswerProviderPort
         );
     }
 
@@ -107,9 +107,9 @@ class AssistantAnswerServiceTest {
                 )));
         when(assetReadService.findSearchableTranscriptContext(staleAssetId, workspaceId, "row-2", 1))
                 .thenReturn(Optional.empty());
-        when(fastApiAssistantClient.answer(any())).thenAnswer(invocation -> {
-            FastApiAssistantAnswerRequest internalRequest = invocation.getArgument(0);
-            return new FastApiAssistantAnswerResponse(
+        when(assistantAnswerProviderPort.answer(any())).thenAnswer(invocation -> {
+            AssistantProviderRequest internalRequest = invocation.getArgument(0);
+            return new AssistantProviderResponse(
                     "Use the approved context.",
                     List.of(internalRequest.sources().get(0).sourceId()),
                     false
@@ -124,10 +124,10 @@ class AssistantAnswerServiceTest {
                 1
         ));
 
-        ArgumentCaptor<FastApiAssistantAnswerRequest> requestCaptor =
-                ArgumentCaptor.forClass(FastApiAssistantAnswerRequest.class);
-        verify(fastApiAssistantClient).answer(requestCaptor.capture());
-        FastApiAssistantAnswerRequest internalRequest = requestCaptor.getValue();
+        ArgumentCaptor<AssistantProviderRequest> requestCaptor =
+                ArgumentCaptor.forClass(AssistantProviderRequest.class);
+        verify(assistantAnswerProviderPort).answer(requestCaptor.capture());
+        AssistantProviderRequest internalRequest = requestCaptor.getValue();
         assertThat(internalRequest.question()).isEqualTo("dynamic programming");
         assertThat(internalRequest.sources()).hasSize(1);
         assertThat(internalRequest.sources().get(0).assetId()).isEqualTo(approvedAssetId);
@@ -153,7 +153,7 @@ class AssistantAnswerServiceTest {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
         oneApprovedSource(workspaceId, assetId);
-        when(fastApiAssistantClient.answer(any())).thenReturn(new FastApiAssistantAnswerResponse(
+        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
                 "I do not have enough context to answer.",
                 List.of(),
                 true
@@ -177,7 +177,7 @@ class AssistantAnswerServiceTest {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
         oneApprovedSource(workspaceId, assetId);
-        when(fastApiAssistantClient.answer(any())).thenReturn(new FastApiAssistantAnswerResponse(
+        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
                 "A grounded answer.",
                 List.of("src-unknown"),
                 false
@@ -198,7 +198,7 @@ class AssistantAnswerServiceTest {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
         oneApprovedSource(workspaceId, assetId);
-        when(fastApiAssistantClient.answer(any())).thenReturn(new FastApiAssistantAnswerResponse(
+        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
                 "A citation-free answer is not accepted.",
                 List.of(),
                 false
@@ -218,7 +218,7 @@ class AssistantAnswerServiceTest {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
         oneApprovedSource(workspaceId, assetId);
-        when(fastApiAssistantClient.answer(any()))
+        when(assistantAnswerProviderPort.answer(any()))
                 .thenThrow(new RuntimeException("FastAPI returned HTTP 503 while trying to generate"));
 
         assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
@@ -252,7 +252,7 @@ class AssistantAnswerServiceTest {
         ))).isInstanceOf(InvalidAssistantContextRequestException.class)
                 .hasMessage("question must be at most 500 characters");
 
-        verifyNoInteractions(searchService, assetReadService, fastApiAssistantClient);
+        verifyNoInteractions(searchService, assetReadService, assistantAnswerProviderPort);
     }
 
     @Test
@@ -267,7 +267,7 @@ class AssistantAnswerServiceTest {
                 null
         ))).isInstanceOf(InvalidAssistantContextRequestException.class);
         verifyNoInteractions(searchService, assetReadService);
-        verify(fastApiAssistantClient, never()).answer(any());
+        verify(assistantAnswerProviderPort, never()).answer(any());
     }
 
     private void oneApprovedSource(UUID workspaceId, UUID assetId) {

@@ -22,8 +22,8 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJ
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -52,14 +52,14 @@ public class AssetQueryApplicationService {
     private final ProcessingRequestApplication processingRequestApplication;
     private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
     private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceQueryApplication workspaceQueryApplication;
+    private final WorkspaceAccessApplication workspaceQueryApplication;
 
     public AssetQueryApplicationService(
             AssetRepository assetRepository,
             ProcessingRequestApplication processingRequestApplication,
             DirectProcessingCompatibilityAdapter compatibilityAdapter,
             AssetPersistenceService assetPersistenceService,
-            WorkspaceQueryApplication workspaceQueryApplication
+            WorkspaceAccessApplication workspaceQueryApplication
     ) {
         this.assetRepository = assetRepository;
         this.processingRequestApplication = processingRequestApplication;
@@ -71,7 +71,7 @@ public class AssetQueryApplicationService {
     public Asset getAsset(UUID assetId) {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
-        if (asset.getWorkspace() == null || !workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspace())) {
+        if (!workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId())) {
             throw new AssetNotFoundException();
         }
         return asset;
@@ -80,7 +80,7 @@ public class AssetQueryApplicationService {
     public AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
         int resolvedPage = resolvePage(page);
         int resolvedSize = resolveSize(size);
-        Workspace workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
+        WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
         List<Asset> filteredAssets = loadAssetsForWorkspace(workspace).stream()
                 .filter(asset -> assetStatus == null || asset.getStatus() == assetStatus)
                 .toList();
@@ -219,9 +219,9 @@ public class AssetQueryApplicationService {
         return size;
     }
 
-    private List<Asset> loadAssetsForWorkspace(Workspace workspace) {
+    private List<Asset> loadAssetsForWorkspace(WorkspaceAccess workspace) {
         List<Asset> assets = new ArrayList<>(
-                assetRepository.findByWorkspace_Id(workspace.getId(), ASSET_LIST_SORT)
+                assetRepository.findByWorkspaceId(workspace.workspaceId(), ASSET_LIST_SORT)
         );
         assets.sort(ASSET_LIST_COMPARATOR);
         return assets;

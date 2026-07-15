@@ -13,7 +13,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetI
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -133,7 +133,7 @@ class TranscriptIndexingServiceTest {
         ));
         List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
-        ElasticsearchIntegrationException failure = new ElasticsearchIntegrationException("bulk failed");
+        SearchIndexOperationException failure = new SearchIndexOperationException("bulk failed");
 
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
         when(indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1"))

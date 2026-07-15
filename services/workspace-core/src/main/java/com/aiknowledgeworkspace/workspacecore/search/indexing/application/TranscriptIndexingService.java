@@ -6,7 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.search.SearchTranscriptUnavailable
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
@@ -67,11 +67,11 @@ public class TranscriptIndexingService implements ExplicitIndexingApplication {
         try {
             AssetSearchIndexExecutionResult result = executeIndexJobApplicationService.execute(indexingJob.getId());
             if (result.status() != AssetSearchIndexJobStatus.INDEXED) {
-                throw new ElasticsearchIntegrationException(
+                throw new SearchIndexOperationException(
                         "Asset transcript indexing did not complete: " + result.status()
                 );
             }
-        } catch (ElasticsearchIntegrationException exception) {
+        } catch (SearchIndexOperationException exception) {
             try {
                 indexingAssetPort.markTranscriptReady(assetId);
             } catch (SearchAssetUnavailableException assetUnavailable) {

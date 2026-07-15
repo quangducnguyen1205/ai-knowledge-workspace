@@ -31,16 +31,17 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJ
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageProperties;
-import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -81,10 +82,10 @@ class AssetApplicationServicesTest {
     private AssetPersistenceService assetPersistenceService;
 
     @Mock
-    private WorkspaceService workspaceService;
+    private WorkspaceAccessApplication workspaceService;
 
     @Mock
-    private ObjectStorageClient objectStorageClient;
+    private ObjectStorageApplication objectStorageClient;
 
     private final ObjectKeyFactory objectKeyFactory = new ObjectKeyFactory();
     private final ObjectStorageProperties objectStorageProperties = new ObjectStorageProperties();
@@ -96,7 +97,7 @@ class AssetApplicationServicesTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(workspaceService.isOwnedByCurrentUser(any(Workspace.class))).thenReturn(true);
+        lenient().when(workspaceService.isOwnedByCurrentUser(any(UUID.class))).thenReturn(true);
     }
 
     @Test
@@ -120,7 +121,7 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 mp4Signature()
         );
-        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
+        StoredObjectReference storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
                 processingJobId,
@@ -128,7 +129,8 @@ class AssetApplicationServicesTest {
                 workspaceId
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -137,7 +139,7 @@ class AssetApplicationServicesTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(workspace),
+                eq(workspaceId),
                 eq(storedObject),
                 eq(new DirectProcessingUploadResult(
                         "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -150,6 +152,7 @@ class AssetApplicationServicesTest {
         verify(workspaceService).resolveWorkspaceOrDefault(workspaceId);
         verify(fastApiProcessingClient).upload(any());
         verify(assetPersistenceService, never()).persistKafkaRequestUpload(
+                any(),
                 any(),
                 any(),
                 any(),
@@ -185,7 +188,7 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
+        StoredObjectReference storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -193,7 +196,8 @@ class AssetApplicationServicesTest {
                 workspaceId
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(null))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-2", "video-2", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -202,7 +206,7 @@ class AssetApplicationServicesTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 2"),
-                eq(workspace),
+                eq(workspaceId),
                 eq(storedObject),
                 eq(new DirectProcessingUploadResult(
                         "task-2", "video-2", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -237,7 +241,7 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 mp4Signature()
         );
-        StoredObject storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
+        StoredObjectReference storedObject = storedObject(assetId, workspaceId, "lecture.mp4", "video/mp4", 12L);
         AssetUploadResponse persistedResponse = new AssetUploadResponse(
                 assetId,
                 processingJobId,
@@ -245,13 +249,15 @@ class AssetApplicationServicesTest {
                 workspaceId
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(assetPersistenceService.persistKafkaRequestUpload(
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(workspace),
+                eq(workspaceId),
+                eq(workspace.getOwnerId()),
                 eq(storedObject)
         )).thenReturn(persistedResponse);
 
@@ -273,7 +279,8 @@ class AssetApplicationServicesTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(workspace),
+                eq(workspaceId),
+                eq(workspace.getOwnerId()),
                 eq(storedObject)
         );
     }
@@ -297,9 +304,10 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
+        StoredObjectReference storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any()))
                 .thenThrow(new DirectProcessingIntegrationException("FastAPI failed", null));
@@ -338,10 +346,11 @@ class AssetApplicationServicesTest {
                 "video/mp4",
                 mp4Signature()
         );
-        StoredObject storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
+        StoredObjectReference storedObject = storedObject(UUID.randomUUID(), workspaceId, "lecture.mp4", "video/mp4", 12L);
         RuntimeException persistenceFailure = new RuntimeException("db down");
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(fastApiProcessingClient.upload(any())).thenReturn(new DirectProcessingUploadResult(
                 "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -350,7 +359,7 @@ class AssetApplicationServicesTest {
                 any(UUID.class),
                 eq("lecture.mp4"),
                 eq("Lecture 1"),
-                eq(workspace),
+                eq(workspaceId),
                 eq(storedObject),
                 eq(new DirectProcessingUploadResult(
                         "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
@@ -454,7 +463,7 @@ class AssetApplicationServicesTest {
         Asset nonOwnedAsset = asset(assetId, "owned.mp4", "Owned Lecture", AssetStatus.SEARCHABLE, workspace, null);
 
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(nonOwnedAsset));
-        when(workspaceService.isOwnedByCurrentUser(workspace)).thenReturn(false);
+        when(workspaceService.isOwnedByCurrentUser(workspace.getId())).thenReturn(false);
 
         assertThatThrownBy(() -> assetService.getAsset(assetId))
                 .isInstanceOf(AssetNotFoundException.class)
@@ -481,7 +490,7 @@ class AssetApplicationServicesTest {
                 processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
-                realWorkspaceService
+                workspaceQuery(realWorkspaceService)
         );
 
         String currentUserId = "session-user";
@@ -498,7 +507,7 @@ class AssetApplicationServicesTest {
         bindSessionCurrentUser(currentUserService, currentUserId);
         when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
                 .thenReturn(List.of(defaultWorkspace));
-        when(assetRepository.findByWorkspace_Id(defaultWorkspace.getId(), assetListSort()))
+        when(assetRepository.findByWorkspaceId(defaultWorkspace.getId(), assetListSort()))
                 .thenReturn(List.of(asset));
 
         AssetListResponse response = assetService.listAssets(null, null, null, null);
@@ -524,7 +533,7 @@ class AssetApplicationServicesTest {
                 processingRequestApplication,
                 fastApiProcessingClient,
                 assetPersistenceService,
-                realWorkspaceService
+                workspaceQuery(realWorkspaceService)
         );
 
         Workspace nonOwnedWorkspace = new Workspace(UUID.randomUUID(), "Algorithms", "other-user", false);
@@ -568,8 +577,9 @@ class AssetApplicationServicesTest {
                 Instant.parse("2026-04-10T01:00:00Z")
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
+        when(workspaceService.resolveWorkspaceOrDefault(null))
+                .thenReturn(new WorkspaceAccess(defaultWorkspaceId, defaultWorkspace.getOwnerId()));
+        when(assetRepository.findByWorkspaceId(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(olderAsset, newestAsset));
 
         AssetListResponse response = assetService.listAssets(null, null, null, null);
@@ -608,8 +618,9 @@ class AssetApplicationServicesTest {
                 Instant.parse("2026-04-10T05:00:00Z")
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
+        when(assetRepository.findByWorkspaceId(workspaceId, assetListSort()))
                 .thenReturn(List.of(asset));
 
         AssetListResponse response = assetService.listAssets(workspaceId, null, null, null);
@@ -617,7 +628,7 @@ class AssetApplicationServicesTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).assetId()).isEqualTo(asset.getId());
         assertThat(response.items().get(0).workspaceId()).isEqualTo(workspaceId);
-        verify(assetRepository).findByWorkspace_Id(workspaceId, assetListSort());
+        verify(assetRepository).findByWorkspaceId(workspaceId, assetListSort());
     }
 
     @Test
@@ -657,8 +668,9 @@ class AssetApplicationServicesTest {
                 Instant.parse("2026-04-10T03:00:00Z")
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
+        when(assetRepository.findByWorkspaceId(workspaceId, assetListSort()))
                 .thenReturn(List.of(oldestAsset, middleAsset, newestAsset));
 
         AssetListResponse response = assetService.listAssets(workspaceId, 1, 1, null);
@@ -701,8 +713,9 @@ class AssetApplicationServicesTest {
                 Instant.parse("2026-04-10T04:00:00Z")
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
-        when(assetRepository.findByWorkspace_Id(workspaceId, assetListSort()))
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
+        when(assetRepository.findByWorkspaceId(workspaceId, assetListSort()))
                 .thenReturn(List.of(processingAsset, searchableAsset));
 
         AssetListResponse response = assetService.listAssets(workspaceId, null, null, AssetStatus.SEARCHABLE);
@@ -790,8 +803,9 @@ class AssetApplicationServicesTest {
                 sharedCreatedAt
         );
 
-        when(workspaceService.resolveWorkspaceOrDefault(null)).thenReturn(defaultWorkspace);
-        when(assetRepository.findByWorkspace_Id(defaultWorkspaceId, assetListSort()))
+        when(workspaceService.resolveWorkspaceOrDefault(null))
+                .thenReturn(new WorkspaceAccess(defaultWorkspaceId, defaultWorkspace.getOwnerId()));
+        when(assetRepository.findByWorkspaceId(defaultWorkspaceId, assetListSort()))
                 .thenReturn(List.of(workspaceAsset, largerWorkspaceAsset));
 
         AssetListResponse response = assetService.listAssets(null, 0, 20, null);
@@ -1193,8 +1207,8 @@ class AssetApplicationServicesTest {
                 ProcessingRequestApplication processingRequestApplication,
                 DirectProcessingCompatibilityGateway fastApiProcessingClient,
                 AssetPersistenceService assetPersistenceService,
-                WorkspaceService workspaceService,
-                ObjectStorageClient objectStorageClient
+                WorkspaceAccessApplication workspaceService,
+                ObjectStorageApplication objectStorageClient
         ) {
             AssetTranscriptQueryService transcriptQueryService = new AssetTranscriptQueryService(
                     assetRepository,
@@ -1234,7 +1248,7 @@ class AssetApplicationServicesTest {
                 ProcessingRequestApplication processingRequestApplication,
                 DirectProcessingCompatibilityGateway fastApiProcessingClient,
                 AssetPersistenceService assetPersistenceService,
-                WorkspaceService workspaceService
+                WorkspaceAccessApplication workspaceService
         ) {
             this(
                     assetRepository,
@@ -1242,14 +1256,14 @@ class AssetApplicationServicesTest {
                     fastApiProcessingClient,
                     assetPersistenceService,
                     workspaceService,
-                    new ObjectStorageClient() {
+                    new ObjectStorageApplication() {
                         @Override
-                        public StoredObject store(StoreObjectRequest request) {
+                        public StoredObjectReference store(StoreObjectCommand request) {
                             throw new IllegalStateException("Object storage client is not configured");
                         }
 
                         @Override
-                        public void delete(String bucket, String objectKey) {
+                        public void delete(StoredObjectReference reference) {
                         }
                     }
             );
@@ -1284,6 +1298,21 @@ class AssetApplicationServicesTest {
         }
     }
 
+    private WorkspaceAccessApplication workspaceQuery(WorkspaceService workspaceService) {
+        return new WorkspaceAccessApplication() {
+            @Override
+            public WorkspaceAccess resolveWorkspaceOrDefault(UUID requestedWorkspaceId) {
+                Workspace workspace = workspaceService.resolveWorkspaceOrDefault(requestedWorkspaceId);
+                return new WorkspaceAccess(workspace.getId(), workspace.getOwnerId());
+            }
+
+            @Override
+            public boolean isOwnedByCurrentUser(UUID workspaceId) {
+                return workspaceService.isOwnedByCurrentUser(workspaceId);
+            }
+        };
+    }
+
     private Asset asset(UUID assetId, String originalFilename, String title, AssetStatus status) {
         Asset asset = asset(
                 assetId,
@@ -1293,7 +1322,7 @@ class AssetApplicationServicesTest {
                 new Workspace(UUID.randomUUID(), "Corrupted Workspace Placeholder"),
                 null
         );
-        ReflectionTestUtils.setField(asset, "workspace", null);
+        ReflectionTestUtils.setField(asset, "workspaceId", null);
         return asset;
     }
 
@@ -1305,7 +1334,7 @@ class AssetApplicationServicesTest {
             Workspace workspace,
             Instant createdAt
     ) {
-        Asset asset = new Asset(originalFilename, title, status, workspace);
+        Asset asset = new Asset(originalFilename, title, status, workspace.getId());
         ReflectionTestUtils.setField(asset, "id", assetId);
         if (createdAt != null) {
             ReflectionTestUtils.setField(asset, "createdAt", createdAt);
@@ -1351,14 +1380,14 @@ class AssetApplicationServicesTest {
         );
     }
 
-    private StoredObject storedObject(
+    private StoredObjectReference storedObject(
             UUID assetId,
             UUID workspaceId,
             String filename,
             String contentType,
             long sizeBytes
     ) {
-        return new StoredObject(
+        return new StoredObjectReference(
                 "workspace-media",
                 "users/user-1/workspaces/%s/assets/%s/raw/%s".formatted(workspaceId, assetId, filename),
                 sizeBytes,

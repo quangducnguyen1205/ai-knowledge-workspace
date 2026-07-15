@@ -12,7 +12,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.A
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
 import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -28,12 +28,12 @@ public class AssetTranscriptQueryService {
 
     private final AssetRepository assetRepository;
     private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceQueryApplication workspaceQueryApplication;
+    private final WorkspaceAccessApplication workspaceQueryApplication;
 
     public AssetTranscriptQueryService(
             AssetRepository assetRepository,
             AssetPersistenceService assetPersistenceService,
-            WorkspaceQueryApplication workspaceQueryApplication
+            WorkspaceAccessApplication workspaceQueryApplication
     ) {
         this.assetRepository = assetRepository;
         this.assetPersistenceService = assetPersistenceService;
@@ -47,7 +47,7 @@ public class AssetTranscriptQueryService {
 
     @Transactional(readOnly = true)
     public List<UUID> findSearchableAssetIdsInWorkspace(UUID workspaceId) {
-        return assetRepository.findByWorkspace_IdAndStatus(workspaceId, AssetStatus.SEARCHABLE, Sort.unsorted())
+        return assetRepository.findByWorkspaceIdAndStatus(workspaceId, AssetStatus.SEARCHABLE, Sort.unsorted())
                 .stream()
                 .map(Asset::getId)
                 .toList();
@@ -87,7 +87,7 @@ public class AssetTranscriptQueryService {
     public Asset loadAuthorizedAsset(UUID assetId) {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
-        if (asset.getWorkspace() == null || !workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspace())) {
+        if (!workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId())) {
             throw new AssetNotFoundException();
         }
         return asset;

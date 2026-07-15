@@ -1,7 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
 import org.springframework.http.HttpStatus;
@@ -12,14 +12,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class SearchApiExceptionHandler {
 
-    @ExceptionHandler(ElasticsearchConnectivityException.class)
-    ResponseEntity<ApiErrorResponse> handleElasticsearchConnectivity(ElasticsearchConnectivityException exception) {
+    @ExceptionHandler(SearchIndexConnectivityException.class)
+    ResponseEntity<ApiErrorResponse> handleElasticsearchConnectivity(SearchIndexConnectivityException exception) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ApiErrorResponse("ELASTICSEARCH_UNAVAILABLE", exception.getMessage()));
     }
 
-    @ExceptionHandler(ElasticsearchIntegrationException.class)
-    ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(ElasticsearchIntegrationException exception) {
+    @ExceptionHandler(SearchIndexOperationException.class)
+    ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(SearchIndexOperationException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
     }

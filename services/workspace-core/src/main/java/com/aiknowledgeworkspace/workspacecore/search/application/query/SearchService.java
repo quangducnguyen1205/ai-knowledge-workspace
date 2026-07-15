@@ -2,15 +2,13 @@ package com.aiknowledgeworkspace.workspacecore.search.application.query;
 
 import com.aiknowledgeworkspace.workspacecore.search.InvalidSearchRequestException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchAssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
-
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
-import com.fasterxml.jackson.databind.JsonNode;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -23,16 +21,16 @@ public class SearchService {
 
     private final WorkspaceQueryApplication workspaceQueryApplication;
     private final SearchAssetQueryPort searchAssetQueryPort;
-    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
+    private final TranscriptSearchQueryPort transcriptSearchQueryPort;
 
     public SearchService(
             WorkspaceQueryApplication workspaceQueryApplication,
             SearchAssetQueryPort searchAssetQueryPort,
-            TranscriptSearchIndexClient transcriptSearchIndexClient
+            TranscriptSearchQueryPort transcriptSearchQueryPort
     ) {
         this.workspaceQueryApplication = workspaceQueryApplication;
         this.searchAssetQueryPort = searchAssetQueryPort;
-        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
+        this.transcriptSearchQueryPort = transcriptSearchQueryPort;
     }
 
     public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
@@ -43,14 +41,11 @@ public class SearchService {
         if (eligibleAssetIds.isEmpty()) {
             return new SearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, 0, List.of());
         }
-        JsonNode responseBody = transcriptSearchIndexClient.searchTranscriptRows(
-                normalizedQuery,
-                resolvedWorkspaceId,
-                validatedAssetId,
-                eligibleAssetIds
-        );
+        List<TranscriptSearchHit> hits = transcriptSearchQueryPort.search(new TranscriptSearchQuery(
+                normalizedQuery, resolvedWorkspaceId, validatedAssetId, eligibleAssetIds
+        ));
 
-        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, responseBody);
+        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, hits);
     }
 
     private String normalizeQuery(String query) {
@@ -97,75 +92,15 @@ public class SearchService {
         }
     }
 
-    private SearchResponse toSearchResponse(String query, UUID workspaceId, UUID assetId, JsonNode responseBody) {
-        if (responseBody == null) {
-            throw new ElasticsearchIntegrationException("Elasticsearch search response body was empty");
-        }
-
-        JsonNode hitsNode = responseBody.path("hits").path("hits");
-        if (!hitsNode.isArray()) {
-            throw new ElasticsearchIntegrationException("Elasticsearch search response did not include hits");
-        }
-
-        List<SearchResultResponse> results = new ArrayList<>();
-        for (JsonNode hitNode : hitsNode) {
-            JsonNode sourceNode = hitNode.path("_source");
-            if (!sourceNode.isObject()) {
-                throw new ElasticsearchIntegrationException("Elasticsearch search hit did not include _source");
-            }
-
-            results.add(new SearchResultResponse(
-                    parseAssetId(sourceNode),
-                    readText(sourceNode, "assetTitle"),
-                    readText(sourceNode, "transcriptRowId"),
-                    readInteger(sourceNode, "segmentIndex"),
-                    readText(sourceNode, "text"),
-                    readText(sourceNode, "createdAt"),
-                    readScore(hitNode)
-            ));
-        }
-
+    private SearchResponse toSearchResponse(
+            String query, UUID workspaceId, UUID assetId, List<TranscriptSearchHit> hits
+    ) {
+        List<SearchResultResponse> results = hits.stream()
+                .map(hit -> new SearchResultResponse(
+                        hit.assetId(), hit.assetTitle(), hit.transcriptRowId(), hit.segmentIndex(),
+                        hit.text(), hit.createdAt(), hit.score()
+                ))
+                .toList();
         return new SearchResponse(query, workspaceId, assetId, results.size(), results);
     }
-
-    private UUID parseAssetId(JsonNode sourceNode) {
-        String assetId = readText(sourceNode, "assetId");
-        if (!StringUtils.hasText(assetId)) {
-            throw new ElasticsearchIntegrationException("Elasticsearch search hit did not include assetId");
-        }
-
-        try {
-            return UUID.fromString(assetId);
-        } catch (IllegalArgumentException exception) {
-            throw new ElasticsearchIntegrationException("Elasticsearch search hit included an invalid assetId", exception);
-        }
-    }
-
-    private String readText(JsonNode sourceNode, String fieldName) {
-        JsonNode fieldNode = sourceNode.path(fieldName);
-        if (fieldNode.isMissingNode() || fieldNode.isNull()) {
-            return null;
-        }
-        return fieldNode.asText();
-    }
-
-    private Integer readInteger(JsonNode sourceNode, String fieldName) {
-        JsonNode fieldNode = sourceNode.path(fieldName);
-        if (fieldNode.isMissingNode() || fieldNode.isNull()) {
-            return null;
-        }
-        if (!fieldNode.isInt() || !fieldNode.canConvertToInt()) {
-            throw new ElasticsearchIntegrationException("Elasticsearch search hit included a non-numeric value for " + fieldName);
-        }
-        return fieldNode.asInt();
-    }
-
-    private Double readScore(JsonNode hitNode) {
-        JsonNode scoreNode = hitNode.path("_score");
-        if (scoreNode.isMissingNode() || scoreNode.isNull()) {
-            return null;
-        }
-        return scoreNode.asDouble();
-    }
-
 }

@@ -1,8 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant;
+package com.aiknowledgeworkspace.workspacecore.assistant.application.port;
 
 import java.util.UUID;
 
-public record FastApiAssistantSourceRequest(
+public record AssistantProviderSource(
         String sourceId,
         UUID assetId,
         String assetTitle,

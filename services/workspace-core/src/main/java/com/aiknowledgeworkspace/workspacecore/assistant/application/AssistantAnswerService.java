@@ -9,10 +9,10 @@ import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextSourceRe
 import com.aiknowledgeworkspace.workspacecore.assistant.AssistantProviderUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantSourceRequest;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantAnswerProviderPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderResponse;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderSource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -32,14 +32,14 @@ public class AssistantAnswerService {
     private static final String PROVIDER_UNAVAILABLE_MESSAGE = "Assistant provider is unavailable";
 
     private final AssistantContextService assistantContextService;
-    private final FastApiAssistantClient fastApiAssistantClient;
+    private final AssistantAnswerProviderPort assistantAnswerProviderPort;
 
     public AssistantAnswerService(
             AssistantContextService assistantContextService,
-            FastApiAssistantClient fastApiAssistantClient
+            AssistantAnswerProviderPort assistantAnswerProviderPort
     ) {
         this.assistantContextService = assistantContextService;
-        this.fastApiAssistantClient = fastApiAssistantClient;
+        this.assistantAnswerProviderPort = assistantAnswerProviderPort;
     }
 
     public AssistantAnswerResponse answer(AssistantAnswerRequest request) {
@@ -53,11 +53,11 @@ public class AssistantAnswerService {
         ));
 
         Map<String, AssistantContextSourceResponse> sourcesById = new LinkedHashMap<>();
-        List<FastApiAssistantSourceRequest> internalSources = new ArrayList<>();
+        List<AssistantProviderSource> internalSources = new ArrayList<>();
         for (AssistantContextSourceResponse source : context.sources()) {
             String sourceId = sourceIdFor(source);
             sourcesById.put(sourceId, source);
-            internalSources.add(new FastApiAssistantSourceRequest(
+            internalSources.add(new AssistantProviderSource(
                     sourceId,
                     source.assetId(),
                     source.assetTitle(),
@@ -68,9 +68,9 @@ public class AssistantAnswerService {
             ));
         }
 
-        FastApiAssistantAnswerResponse providerResponse;
+        AssistantProviderResponse providerResponse;
         try {
-            providerResponse = fastApiAssistantClient.answer(new FastApiAssistantAnswerRequest(
+            providerResponse = assistantAnswerProviderPort.answer(new AssistantProviderRequest(
                     context.query(),
                     internalSources
             ));
@@ -82,7 +82,7 @@ public class AssistantAnswerService {
     }
 
     private AssistantAnswerResponse toPublicResponse(
-            FastApiAssistantAnswerResponse providerResponse,
+            AssistantProviderResponse providerResponse,
             Map<String, AssistantContextSourceResponse> sourcesById
     ) {
         if (providerResponse == null

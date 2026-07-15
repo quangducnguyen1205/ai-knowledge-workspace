@@ -1,9 +1,10 @@
-package com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch;
+package com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface TranscriptIndexWriter {
+
     void ensureTranscriptIndexExists();
 
     void deleteTranscriptRowsForAsset(UUID assetId);

@@ -7,86 +7,11 @@ Boot is the product core. FastAPI is an internal processing/provider service. El
 the derived search layer. PostgreSQL is the product data store, MinIO stores raw media bytes
 behind Spring, and Kafka carries the integrated asynchronous processing and indexing events.
 
-P3-BE0 adds an evidence-based backend modularity baseline in
-[`backend-modularity-baseline.md`](backend-modularity-baseline.md). It maps the
-current Spring package roots, dependency directions, confirmed boundary risks,
-and a staged Spring Modulith/ArchUnit adoption path before any Java package
-refactor or dependency addition.
-
-P3-BE1 adds the first test-enforced Spring Modulith baseline without changing
-production behavior. It uses default direct-package detection and compares the
-real `detectViolations()` report to a committed baseline resource. That baseline
-is intentionally a ratchet, not a green strict verification: the known
-asset/processing/search/workspace cycle and common/outbox ownership issues still
-block strict `ApplicationModules.verify()`. P3-BE2 should target the smallest
-boundary extraction justified by that evidence, starting with asset public APIs
-for transcript/searchability reads and processing-result application.
-
-P3-BE2A `[ĐÃ XÁC MINH TỪ CODE]` establishes the first of those public asset
-application boundaries. Processing result handling now delegates asset terminal
-state and canonical transcript snapshot replacement to an asset-owned command;
-search reads indexable transcript/searchability state and marks successful
-indexing through asset-owned contracts; assistant context reads transcript
-context through an asset public read API. This narrows direct persistence/entity
-coupling without changing public API, event, schema, search, processing, or
-assistant behavior. Strict Modulith verification is still not green because
-deferred edges remain.
-
-P3-BE2B `[ĐÃ XÁC MINH TỪ CODE]` isolates the workspace delete guard behind the
-asset public application boundary. `WorkspaceService` now asks
-`AssetWorkspaceUsageService.workspaceHasAssets(workspaceId)` instead of calling
-`AssetRepository.countByWorkspace_Id` directly. This preserves workspace delete
-behavior while keeping repository ownership internal to Asset. Strict Modulith
-verification is still blocked by deferred edges including `asset ->
-processing/search`, outbox product-event construction, `common.web` exception
-coupling, `common.identity -> workspace` provisioning, and `search -> processing
-repository`.
-
-P3-S5.B2A `[VERIFIED BY TESTS]` completes the dependency inversion for these
-product flows. Processing, search, and workspace own narrow asset ports that are
-implemented inside asset; asset consumes named processing/search application
-APIs instead of their repositories, entities, or concrete services. Calls remain
-synchronous and retain their prior transaction participation. The Spring
-Modulith ratchet now reports zero cycle messages; remaining strict-verification
-failures are non-cycle exposure debt reserved for later structural work.
-
-P3-S5.B2B `[VERIFIED BY TESTS]` decomposes the asset application layer without
-changing those boundaries. `UploadAssetApplicationService` owns upload
-orchestration, `AssetQueryApplicationService` owns client-facing asset reads and
-status projection, and the canonical transcript lifecycle is split between
-`AssetTranscriptSnapshotService` for validated writes/lifecycle/indexing intent
-and `AssetTranscriptQueryService` for ordered canonical reads. The deprecated
-direct-processing path is isolated behind the package-private
-`DirectProcessingCompatibilityAdapter`; both compatibility capture and async
-processing results use the same snapshot owner. Controllers inject use-case
-services rather than repositories, transaction participation remains
-synchronous, and the ratchet is reduced to `83` non-cycle messages. A thin
-internal `AssetService` facade remained only for legacy unit fixtures at that
-checkpoint; it contained no product logic and was not a Spring bean.
-
-P3-S5.B2C `[VERIFIED BY TESTS]` makes the remaining processing-result and
-indexing flows explicit without changing their contracts or transaction
-boundaries. The Kafka processing-result listener delegates parsing to
-`ProcessingResultEventHandler`, durable consumed-event ownership to
-`ProcessingResultInbox`, artifact HTTP access to `TranscriptArtifactGateway`,
-and product application to `ApplyProcessingResultApplicationService`. Manual
-result recovery reaches that same application use case. Indexing now has
-separate Kafka and explicit entry adapters that both call
-`ExecuteIndexJobApplicationService`; `IndexingAttemptTransactionService` keeps
-the database begin/finalize operations on either side of the
-`TranscriptIndexWriter` call, so Elasticsearch remains outside those database
-transactions. The obsolete `AssetService` facade is removed, the architecture
-ratchet is `79` non-cycle messages, and strict Modulith verification remains red
-only for reviewed exposure debt.
-
-P3-V1.1.A3 `[VERIFIED BY STRICT MODULITH TEST]` selectively internalizes the
-implementation tree without changing these service boundaries. Asset, assistant, outbox,
-processing, search, storage, and workspace implementations now sit in responsibility-
-oriented subpackages while intentional controllers, entities, DTOs, configuration
-entrypoints, and named application APIs remain discoverable. The strict
-`ApplicationModules.verify()` gate reports zero violation and cycle messages; direct
-ArchUnit rules continue to protect the narrow cross-module contracts. This closes the
-bounded Spring architecture-cleanup work; delivery engineering is the next phase.
+The authoritative current module/API/port rules are documented in
+[`Project3 Final Architecture`](backend-modularity-baseline.md). Spring Modulith strict
+verification and the direct boundary rules are green at zero violations and zero cycles.
+Earlier ratchet counts and phased extraction history are intentionally left to Git history and
+the frozen submission evidence rather than duplicated here.
 
 ## Current Boundary Diagram
 

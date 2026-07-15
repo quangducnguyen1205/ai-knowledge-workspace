@@ -1,7 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
 import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
@@ -31,8 +30,9 @@ class AssetTransactionBoundaryTest {
                 UUID.class,
                 String.class,
                 String.class,
-                com.aiknowledgeworkspace.workspacecore.workspace.Workspace.class,
-                com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference.class
+                UUID.class,
+                String.class,
+                StoredObjectReference.class
         );
 
         assertThat(transactional(upload)).isNull();

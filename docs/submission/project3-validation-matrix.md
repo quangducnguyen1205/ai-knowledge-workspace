@@ -15,6 +15,12 @@ Static tests prove contracts and wiring only to the degree encoded by those
 tests. Runtime/browser evidence is local and bounded. Neither classification is
 a production-scale or security-certification claim.
 
+This matrix preserves the frozen C1 evidence. The subsequent v1.1 Spring cleanup
+replaced the 79-message ratchet with strict zero-violation, zero-cycle Modulith
+verification. See the authoritative
+[`Project3 Final Architecture`](../architecture/backend-modularity-baseline.md)
+for the current enforcement rules.
+
 ## Spring product-core validation
 
 | Area | Evidence | C1 result | Classification |
@@ -25,7 +31,7 @@ a production-scale or security-certification claim.
 | HTTP contracts | Asset, workspace, auth, search, assistant controller/advice tests | Green; no C1 source/API change | `VERIFIED_STATIC_C1`, `PASSED` |
 | Kafka contracts | Processing/indexing golden codecs, result parser/listener, outbox/relay tests | Green; topics, identity, keys, versions, payload/timestamp semantics unchanged | `VERIFIED_STATIC_C1`, `PASSED` |
 | Transaction boundaries | Asset upload, processing-result, indexing begin/write/finalize characterization tests | Green | `VERIFIED_STATIC_C1`, `PASSED` |
-| Modulith ratchet | `BackendModularityBaselineTest` and committed fingerprint | 79 violation messages; 0 cycle messages | `VERIFIED_STATIC_C1`, `PASSED` ratchet; strict verification remains red |
+| Historical C1 Modulith ratchet | `BackendModularityBaselineTest` and committed fingerprint at C1 | 79 violation messages; 0 cycle messages | `VERIFIED_STATIC_C1`, `PASSED` historical ratchet; superseded by the current strict green gate |
 | Integrity | `git diff --check` | Passed before documentation changes | `VERIFIED_STATIC_C1`, `PASSED` |
 
 ## FastAPI processing validation
@@ -144,8 +150,9 @@ No retained path is classified as safe to delete in C1.
 - Production load, availability, sizing, memory growth, provider quality,
   multilingual quality, internal-service authentication, and security
   certification are not established by local validation.
-- Strict Spring Modulith verification is not green; 79 reviewed non-cycle
-  exposure messages remain.
+- The historical C1 Spring baseline used the reviewed 79-message ratchet; the
+  current v1.1 architecture gate is strict and green at zero violations and zero
+  cycles.
 - No full Kafka DLQ exists, and abandoned-`publishing` crash-age recovery remains
   deferred.
 

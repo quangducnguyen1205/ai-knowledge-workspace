@@ -12,7 +12,6 @@ import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persisten
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.api.CurrentUserContext;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
@@ -25,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
-public class WorkspaceService implements WorkspaceQueryApplication {
+public class WorkspaceService {
 
     private static final int MAX_WORKSPACE_NAME_LENGTH = 255;
 
@@ -141,13 +140,19 @@ public class WorkspaceService implements WorkspaceQueryApplication {
         return workspace != null && workspace.isDefaultWorkspace();
     }
 
-    @Override
     public boolean isOwnedByCurrentUser(Workspace workspace) {
         return workspaceAccessPolicy.isOwnedByCurrentUser(workspace);
     }
 
+    public boolean isOwnedByCurrentUser(UUID workspaceId) {
+        if (workspaceId == null) {
+            return false;
+        }
+        String currentUserId = currentUserService.getCurrentUserId();
+        return workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId).isPresent();
+    }
+
     @Transactional
-    @Override
     public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
         String currentUserId = currentUserService.getCurrentUserId();
         if (workspaceId == null) {
@@ -158,7 +163,6 @@ public class WorkspaceService implements WorkspaceQueryApplication {
                 .orElseThrow(() -> new WorkspaceNotFoundException(workspaceId));
     }
 
-    @Override
     public UUID resolveWorkspaceId(UUID requestedWorkspaceId) {
         return resolveWorkspaceOrDefault(requestedWorkspaceId).getId();
     }

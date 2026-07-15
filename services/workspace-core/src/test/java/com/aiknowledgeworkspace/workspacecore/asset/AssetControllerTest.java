@@ -23,8 +23,8 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiExcepti
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchAssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.search.SearchProcessingJobNotFoundException;
@@ -287,7 +287,7 @@ class AssetControllerTest {
                 "lecture.mp4",
                 "Lecture 1",
                 AssetStatus.SEARCHABLE,
-                new com.aiknowledgeworkspace.workspacecore.workspace.Workspace(workspaceId, "Algorithms")
+                workspaceId
         );
         org.springframework.test.util.ReflectionTestUtils.setField(asset, "id", assetId);
         org.springframework.test.util.ReflectionTestUtils.setField(asset, "createdAt", Instant.parse("2026-04-10T03:00:00Z"));
@@ -424,7 +424,7 @@ class AssetControllerTest {
     @Test
     void deleteAssetReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
         UUID assetId = UUID.randomUUID();
-        doThrow(new ElasticsearchConnectivityException(
+        doThrow(new SearchIndexConnectivityException(
                 "Elasticsearch is unavailable while trying to delete transcript documents for asset " + assetId,
                 new RuntimeException("connection refused")
         )).when(assetDeletionService).deleteAsset(assetId);
@@ -440,7 +440,7 @@ class AssetControllerTest {
     @Test
     void deleteAssetReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
         UUID assetId = UUID.randomUUID();
-        doThrow(new ElasticsearchIntegrationException(
+        doThrow(new SearchIndexOperationException(
                 "Elasticsearch returned HTTP 500 while trying to delete transcript documents for asset " + assetId
         )).when(assetDeletionService).deleteAsset(assetId);
 
@@ -456,7 +456,7 @@ class AssetControllerTest {
     void updateAssetTitleReturnsUpdatedAsset() throws Exception {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        Asset updatedAsset = new Asset("lecture.mp4", "New Title", AssetStatus.SEARCHABLE, new com.aiknowledgeworkspace.workspacecore.workspace.Workspace(workspaceId, "Algorithms"));
+        Asset updatedAsset = new Asset("lecture.mp4", "New Title", AssetStatus.SEARCHABLE, workspaceId);
         org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "id", assetId);
         org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "createdAt", Instant.parse("2026-04-10T03:00:00Z"));
         org.springframework.test.util.ReflectionTestUtils.setField(updatedAsset, "updatedAt", Instant.parse("2026-04-10T03:05:00Z"));
@@ -557,7 +557,7 @@ class AssetControllerTest {
     void updateAssetTitleReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .thenThrow(new ElasticsearchConnectivityException(
+                .thenThrow(new SearchIndexConnectivityException(
                         "Elasticsearch is unavailable while trying to sync search metadata for asset " + assetId,
                         new RuntimeException("connection refused")
                 ));
@@ -578,7 +578,7 @@ class AssetControllerTest {
     void updateAssetTitleReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
         UUID assetId = UUID.randomUUID();
         when(assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .thenThrow(new ElasticsearchIntegrationException(
+                .thenThrow(new SearchIndexOperationException(
                         "Elasticsearch title sync failed for asset " + assetId + ": queue full"
                 ));
 
@@ -597,7 +597,7 @@ class AssetControllerTest {
     @Test
     void indexAssetReturnsStructuredServiceUnavailableWhenElasticsearchIsUnavailable() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchConnectivityException(
+        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new SearchIndexConnectivityException(
                 "Elasticsearch is unavailable while trying to bulk index transcript rows for asset " + assetId,
                 new RuntimeException("connection refused")
         ));
@@ -614,7 +614,7 @@ class AssetControllerTest {
     @Test
     void indexAssetReturnsStructuredBadGatewayWhenElasticsearchReturnsIntegrationError() throws Exception {
         UUID assetId = UUID.randomUUID();
-        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new ElasticsearchIntegrationException(
+        when(explicitIndexingApplication.indexAssetTranscript(assetId)).thenThrow(new SearchIndexOperationException(
                 "Elasticsearch bulk indexing failed for document " + assetId + "-row-1 with status 429: queue full"
         ));
 

@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.common.config;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration;
 
 import java.net.URI;
 import java.net.URISyntaxException;

@@ -22,21 +22,21 @@ class AssetWorkspaceUsageServiceTest {
     @Test
     void workspaceHasAssetsReturnsFalseForEmptyWorkspace() {
         UUID workspaceId = UUID.randomUUID();
-        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(0L);
+        when(assetRepository.countByWorkspaceId(workspaceId)).thenReturn(0L);
 
         assertThat(service().workspaceHasAssets(workspaceId)).isFalse();
 
-        verify(assetRepository).countByWorkspace_Id(workspaceId);
+        verify(assetRepository).countByWorkspaceId(workspaceId);
     }
 
     @Test
     void workspaceHasAssetsReturnsTrueWhenAnyAssetBelongsToWorkspace() {
         UUID workspaceId = UUID.randomUUID();
-        when(assetRepository.countByWorkspace_Id(workspaceId)).thenReturn(1L);
+        when(assetRepository.countByWorkspaceId(workspaceId)).thenReturn(1L);
 
         assertThat(service().workspaceHasAssets(workspaceId)).isTrue();
 
-        verify(assetRepository).countByWorkspace_Id(workspaceId);
+        verify(assetRepository).countByWorkspaceId(workspaceId);
     }
 
     private AssetWorkspaceUsageService service() {

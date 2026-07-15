@@ -18,13 +18,13 @@ import static org.mockito.Mockito.when;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectStorageProperties;
-import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,9 +43,9 @@ class UploadAssetApplicationServiceTest {
     @Mock
     private AssetPersistenceService assetPersistenceService;
     @Mock
-    private WorkspaceService workspaceService;
+    private WorkspaceAccessApplication workspaceService;
     @Mock
-    private ObjectStorageClient objectStorageClient;
+    private ObjectStorageApplication objectStorageClient;
     @Mock
     private ObjectKeyFactory objectKeyFactory;
 
@@ -62,18 +62,20 @@ class UploadAssetApplicationServiceTest {
         UUID workspaceId = UUID.randomUUID();
         Workspace workspace = new Workspace(workspaceId, "Workspace", "user-1", false);
         MockMultipartFile file = file();
-        StoredObject storedObject = storedObject();
+        StoredObjectReference storedObject = storedObject();
         AssetUploadResponse expected = new AssetUploadResponse(
                 UUID.randomUUID(), UUID.randomUUID(), AssetStatus.PROCESSING, workspaceId
         );
         when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(true);
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(assetPersistenceService.persistKafkaRequestUpload(
                 any(),
                 org.mockito.Mockito.eq("lecture.mp4"),
                 org.mockito.Mockito.eq("Lecture"),
-                org.mockito.Mockito.eq(workspace),
+                org.mockito.Mockito.eq(workspaceId),
+                org.mockito.Mockito.eq(workspace.getOwnerId()),
                 org.mockito.Mockito.eq(storedObject)
         )).thenReturn(expected);
 
@@ -87,9 +89,10 @@ class UploadAssetApplicationServiceTest {
     void directCompatibilityFailureRetainsBestEffortObjectCleanup() {
         UUID workspaceId = UUID.randomUUID();
         Workspace workspace = new Workspace(workspaceId, "Workspace", "user-1", false);
-        StoredObject storedObject = storedObject();
+        StoredObjectReference storedObject = storedObject();
         when(processingRequestApplication.usesKafkaRequestMode()).thenReturn(false);
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
         when(objectStorageClient.store(any(StoreObjectCommand.class))).thenReturn(storedObject);
         when(compatibilityAdapter.upload(any(), any(), any()))
                 .thenReturn(new DirectProcessingUploadResult(
@@ -110,7 +113,8 @@ class UploadAssetApplicationServiceTest {
         UUID workspaceId = UUID.randomUUID();
         Workspace workspace = new Workspace(workspaceId, "Workspace", "user-1", false);
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "notes".getBytes());
-        when(workspaceService.resolveWorkspaceOrDefault(workspaceId)).thenReturn(workspace);
+        when(workspaceService.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, workspace.getOwnerId()));
 
         assertThatThrownBy(() -> service().uploadAsset(workspaceId, file, "Notes"))
                 .isInstanceOf(InvalidUploadRequestException.class)
@@ -139,8 +143,8 @@ class UploadAssetApplicationServiceTest {
         return new MockMultipartFile("file", "lecture.mp4", "video/mp4", mp4Signature());
     }
 
-    private StoredObject storedObject() {
-        return new StoredObject("workspace-media", "objects/raw.mp4", 12L, "video/mp4", "etag");
+    private StoredObjectReference storedObject() {
+        return new StoredObjectReference("workspace-media", "objects/raw.mp4", 12L, "video/mp4", "etag");
     }
 
     private byte[] mp4Signature() {

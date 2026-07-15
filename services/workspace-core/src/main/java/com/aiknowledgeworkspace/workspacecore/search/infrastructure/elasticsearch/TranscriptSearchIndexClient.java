@@ -1,7 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch;
 
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriteOperation;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchMaintenancePort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriteOperation;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriter;
 
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -22,7 +28,10 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
+public class TranscriptSearchIndexClient implements
+        TranscriptIndexWriter,
+        TranscriptSearchQueryPort,
+        TranscriptSearchMaintenancePort {
 
     private static final int DEFAULT_RESULT_SIZE = 20;
     private static final float TEXT_PHRASE_BOOST = 6.0f;
@@ -43,16 +52,20 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         this.objectMapper = objectMapper;
     }
 
-    public JsonNode searchTranscriptRows(String query, UUID workspaceId, UUID assetId, List<UUID> eligibleAssetIds) {
-        return execute(
+    @Override
+    public List<TranscriptSearchHit> search(TranscriptSearchQuery query) {
+        JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(buildSearchBody(query, workspaceId, assetId, eligibleAssetIds))
+                        .body(buildSearchBody(
+                                query.query(), query.workspaceId(), query.assetId(), query.eligibleAssetIds()
+                        ))
                         .retrieve()
                         .body(JsonNode.class),
                 "search transcript rows"
         );
+        return parseSearchHits(responseBody);
     }
 
     @Override
@@ -92,6 +105,11 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
 
     @Override
     public void deleteTranscriptRowsForAsset(UUID assetId) {
+        deleteTranscriptRows(assetId);
+    }
+
+    @Override
+    public void deleteTranscriptRows(UUID assetId) {
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
                         .uri("/{indexName}/_delete_by_query?refresh=true",
@@ -110,6 +128,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         validateDeleteResponse(assetId, responseBody);
     }
 
+    @Override
     public void updateAssetTitle(UUID assetId, String assetTitle) {
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
@@ -134,6 +153,72 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         validateTitleSyncResponse(assetId, responseBody);
     }
 
+    private List<TranscriptSearchHit> parseSearchHits(JsonNode responseBody) {
+        if (responseBody == null) {
+            throw new SearchIndexOperationException("Elasticsearch search response body was empty");
+        }
+
+        JsonNode hitsNode = responseBody.path("hits").path("hits");
+        if (!hitsNode.isArray()) {
+            throw new SearchIndexOperationException("Elasticsearch search response did not include hits");
+        }
+
+        List<TranscriptSearchHit> hits = new ArrayList<>();
+        for (JsonNode hitNode : hitsNode) {
+            JsonNode sourceNode = hitNode.path("_source");
+            if (!sourceNode.isObject()) {
+                throw new SearchIndexOperationException("Elasticsearch search hit did not include _source");
+            }
+            hits.add(new TranscriptSearchHit(
+                    parseAssetId(sourceNode),
+                    readOptionalText(sourceNode, "assetTitle"),
+                    readOptionalText(sourceNode, "transcriptRowId"),
+                    readOptionalInteger(sourceNode, "segmentIndex"),
+                    readOptionalText(sourceNode, "text"),
+                    readOptionalText(sourceNode, "createdAt"),
+                    readOptionalScore(hitNode)
+            ));
+        }
+        return List.copyOf(hits);
+    }
+
+    private UUID parseAssetId(JsonNode sourceNode) {
+        String assetId = readOptionalText(sourceNode, "assetId");
+        if (!StringUtils.hasText(assetId)) {
+            throw new SearchIndexOperationException("Elasticsearch search hit did not include assetId");
+        }
+        try {
+            return UUID.fromString(assetId);
+        } catch (IllegalArgumentException exception) {
+            throw new SearchIndexOperationException(
+                    "Elasticsearch search hit included an invalid assetId", exception
+            );
+        }
+    }
+
+    private String readOptionalText(JsonNode sourceNode, String fieldName) {
+        JsonNode fieldNode = sourceNode.path(fieldName);
+        return fieldNode.isMissingNode() || fieldNode.isNull() ? null : fieldNode.asText();
+    }
+
+    private Integer readOptionalInteger(JsonNode sourceNode, String fieldName) {
+        JsonNode fieldNode = sourceNode.path(fieldName);
+        if (fieldNode.isMissingNode() || fieldNode.isNull()) {
+            return null;
+        }
+        if (!fieldNode.isInt() || !fieldNode.canConvertToInt()) {
+            throw new SearchIndexOperationException(
+                    "Elasticsearch search hit included a non-numeric value for " + fieldName
+            );
+        }
+        return fieldNode.asInt();
+    }
+
+    private Double readOptionalScore(JsonNode hitNode) {
+        JsonNode scoreNode = hitNode.path("_score");
+        return scoreNode.isMissingNode() || scoreNode.isNull() ? null : scoreNode.asDouble();
+    }
+
     private boolean transcriptIndexExists(String indexName) {
         try {
             elasticsearchRestClient.head()
@@ -142,7 +227,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
                     .toBodilessEntity();
             return true;
         } catch (ResourceAccessException exception) {
-            throw new ElasticsearchConnectivityException(
+            throw new SearchIndexConnectivityException(
                     "Elasticsearch is unavailable while checking transcript index existence",
                     exception
             );
@@ -150,13 +235,13 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
             if (exception.getStatusCode().value() == 404) {
                 return false;
             }
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch returned HTTP " + exception.getStatusCode().value()
                             + " while checking transcript index existence",
                     exception
             );
         } catch (RestClientException exception) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch request failed while checking transcript index existence",
                     exception
             );
@@ -172,7 +257,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
                     .retrieve()
                     .toBodilessEntity();
         } catch (ResourceAccessException exception) {
-            throw new ElasticsearchConnectivityException(
+            throw new SearchIndexConnectivityException(
                     "Elasticsearch is unavailable while creating transcript index",
                     exception
             );
@@ -180,13 +265,13 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
             if (isIndexAlreadyExistsRace(exception) && transcriptIndexExists(indexName)) {
                 return;
             }
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch returned HTTP " + exception.getStatusCode().value()
                             + " while creating transcript index",
                     exception
             );
         } catch (RestClientException exception) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch request failed while creating transcript index",
                     exception
             );
@@ -320,7 +405,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
                         .append('\n');
             }
         } catch (JsonProcessingException exception) {
-            throw new ElasticsearchIntegrationException("Failed to serialize Elasticsearch bulk request", exception);
+            throw new SearchIndexOperationException("Failed to serialize Elasticsearch bulk request", exception);
         }
 
         return body.toString();
@@ -328,18 +413,18 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
 
     private void validateBulkResponse(JsonNode bulkResponse) {
         if (bulkResponse == null) {
-            throw new ElasticsearchIntegrationException("Elasticsearch bulk indexing response body was empty");
+            throw new SearchIndexOperationException("Elasticsearch bulk indexing response body was empty");
         }
 
         JsonNode itemsNode = bulkResponse.path("items");
         if (!itemsNode.isArray()) {
-            throw new ElasticsearchIntegrationException("Elasticsearch bulk indexing response did not include items");
+            throw new SearchIndexOperationException("Elasticsearch bulk indexing response did not include items");
         }
 
         for (JsonNode itemNode : itemsNode) {
             JsonNode indexNode = itemNode.path("index");
             if (!indexNode.isObject()) {
-                throw new ElasticsearchIntegrationException(
+                throw new SearchIndexOperationException(
                         "Elasticsearch bulk indexing response item did not include index metadata"
                 );
             }
@@ -354,19 +439,19 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
                 if (StringUtils.hasText(errorReason)) {
                     message = message + ": " + errorReason;
                 }
-                throw new ElasticsearchIntegrationException(message);
+                throw new SearchIndexOperationException(message);
             }
         }
     }
 
     private void validateDeleteResponse(UUID assetId, JsonNode responseBody) {
         if (responseBody == null) {
-            throw new ElasticsearchIntegrationException("Elasticsearch delete response body was empty");
+            throw new SearchIndexOperationException("Elasticsearch delete response body was empty");
         }
 
         JsonNode failuresNode = responseBody.path("failures");
         if (!failuresNode.isArray()) {
-            throw new ElasticsearchIntegrationException("Elasticsearch delete response did not include failures");
+            throw new SearchIndexOperationException("Elasticsearch delete response did not include failures");
         }
         if (!failuresNode.isEmpty()) {
             JsonNode firstFailure = failuresNode.get(0);
@@ -375,7 +460,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
             if (StringUtils.hasText(reason)) {
                 message = message + ": " + reason;
             }
-            throw new ElasticsearchIntegrationException(message);
+            throw new SearchIndexOperationException(message);
         }
 
         long total = readLong(responseBody, "total", "delete response");
@@ -383,12 +468,12 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         long versionConflicts = readLong(responseBody, "version_conflicts", "delete response");
 
         if (versionConflicts > 0) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch delete hit " + versionConflicts + " version conflicts for asset " + assetId
             );
         }
         if (deleted != total) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch delete removed only " + deleted + " of " + total
                             + " transcript documents for asset " + assetId
             );
@@ -397,12 +482,12 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
 
     private void validateTitleSyncResponse(UUID assetId, JsonNode responseBody) {
         if (responseBody == null) {
-            throw new ElasticsearchIntegrationException("Elasticsearch title sync response body was empty");
+            throw new SearchIndexOperationException("Elasticsearch title sync response body was empty");
         }
 
         JsonNode failuresNode = responseBody.path("failures");
         if (!failuresNode.isArray()) {
-            throw new ElasticsearchIntegrationException("Elasticsearch title sync response did not include failures");
+            throw new SearchIndexOperationException("Elasticsearch title sync response did not include failures");
         }
         if (!failuresNode.isEmpty()) {
             JsonNode firstFailure = failuresNode.get(0);
@@ -411,7 +496,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
             if (StringUtils.hasText(reason)) {
                 message = message + ": " + reason;
             }
-            throw new ElasticsearchIntegrationException(message);
+            throw new SearchIndexOperationException(message);
         }
 
         long total = readLong(responseBody, "total", "title sync response");
@@ -420,17 +505,17 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         long versionConflicts = readLong(responseBody, "version_conflicts", "title sync response");
 
         if (total <= 0) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch title sync did not match any transcript documents for asset " + assetId
             );
         }
         if (versionConflicts > 0) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch title sync hit " + versionConflicts + " version conflicts for asset " + assetId
             );
         }
         if (updated + noops != total) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch title sync accounted for only " + (updated + noops) + " of " + total
                             + " transcript documents for asset " + assetId
             );
@@ -440,7 +525,7 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
     private long readLong(JsonNode responseBody, String fieldName, String description) {
         JsonNode fieldNode = responseBody.path(fieldName);
         if (!fieldNode.canConvertToLong()) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch " + description + " did not include a numeric " + fieldName
             );
         }
@@ -451,18 +536,18 @@ public class TranscriptSearchIndexClient implements TranscriptIndexWriter {
         try {
             return operation.run();
         } catch (ResourceAccessException exception) {
-            throw new ElasticsearchConnectivityException(
+            throw new SearchIndexConnectivityException(
                     "Elasticsearch is unavailable while trying to " + description,
                     exception
             );
         } catch (RestClientResponseException exception) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch returned HTTP " + exception.getStatusCode().value()
                             + " while trying to " + description,
                     exception
             );
         } catch (RestClientException exception) {
-            throw new ElasticsearchIntegrationException(
+            throw new SearchIndexOperationException(
                     "Elasticsearch request failed while trying to " + description,
                     exception
             );

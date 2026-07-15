@@ -1,27 +1,26 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
-
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchMaintenancePort;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
 class AssetSearchMaintenanceService implements AssetSearchMaintenance {
 
-    private final TranscriptSearchIndexClient transcriptSearchIndexClient;
+    private final TranscriptSearchMaintenancePort transcriptSearchMaintenancePort;
 
-    AssetSearchMaintenanceService(TranscriptSearchIndexClient transcriptSearchIndexClient) {
-        this.transcriptSearchIndexClient = transcriptSearchIndexClient;
+    AssetSearchMaintenanceService(TranscriptSearchMaintenancePort transcriptSearchMaintenancePort) {
+        this.transcriptSearchMaintenancePort = transcriptSearchMaintenancePort;
     }
 
     @Override
     public void deleteTranscriptRows(UUID assetId) {
-        transcriptSearchIndexClient.deleteTranscriptRowsForAsset(assetId);
+        transcriptSearchMaintenancePort.deleteTranscriptRows(assetId);
     }
 
     @Override
     public void updateAssetTitle(UUID assetId, String title) {
-        transcriptSearchIndexClient.updateAssetTitle(assetId, title);
+        transcriptSearchMaintenancePort.updateAssetTitle(assetId, title);
     }
 }

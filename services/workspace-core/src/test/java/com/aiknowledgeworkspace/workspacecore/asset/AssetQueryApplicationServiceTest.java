@@ -16,7 +16,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJ
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -37,7 +37,7 @@ class AssetQueryApplicationServiceTest {
     @Mock
     private AssetPersistenceService assetPersistenceService;
     @Mock
-    private WorkspaceService workspaceService;
+    private WorkspaceAccessApplication workspaceService;
 
     @Test
     void localStatusProjectionDoesNotCallCompatibilityRuntimeWithoutATaskId() {
@@ -47,7 +47,7 @@ class AssetQueryApplicationServiceTest {
                 UUID.randomUUID(), assetId, null, null, ProcessingJobStatus.PENDING, null
         );
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspace())).thenReturn(true);
+        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspaceId())).thenReturn(true);
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(job));
 
         AssetStatusResponse result = service().getAssetStatus(assetId);
@@ -70,7 +70,7 @@ class AssetQueryApplicationServiceTest {
                 assetId, job.id(), AssetStatus.PROCESSING, ProcessingJobStatus.SUCCEEDED
         );
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspace())).thenReturn(true);
+        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspaceId())).thenReturn(true);
         when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(job));
         when(compatibilityAdapter.taskState("task-1")).thenReturn(taskState);
         when(assetPersistenceService.refreshAssetStatus(
@@ -96,7 +96,7 @@ class AssetQueryApplicationServiceTest {
 
     private Asset asset(UUID assetId, AssetStatus status) {
         Asset asset = new Asset(
-                "lecture.mp4", "Lecture", status, new Workspace(UUID.randomUUID(), "Workspace")
+                "lecture.mp4", "Lecture", status, UUID.randomUUID()
         );
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;

@@ -1,9 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3;
 
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
-import com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
 
 import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
@@ -18,7 +15,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 @Component
-public class S3ObjectStorageClient implements ObjectStorageClient, ObjectStorageApplication {
+public class S3ObjectStorageClient implements ObjectStorageApplication {
 
     private final S3Client s3Client;
     private final ObjectKeyFactory objectKeyFactory;
@@ -44,41 +41,24 @@ public class S3ObjectStorageClient implements ObjectStorageClient, ObjectStorage
         String objectKey = objectKeyFactory.rawMediaKey(
                 command.userId(), command.workspaceId(), command.assetId(), command.originalFilename()
         );
-        StoredObject storedObject = store(new StoreObjectRequest(
-                objectStorageProperties.getBucket(), objectKey, command.inputStream(),
-                command.sizeBytes(), command.contentType()
-        ));
-        return new StoredObjectReference(
-                storedObject.bucket(), storedObject.objectKey(), storedObject.sizeBytes(),
-                storedObject.contentType(), storedObject.eTag()
-        );
-    }
-
-    @Override
-    public void delete(StoredObjectReference reference) {
-        delete(reference.bucket(), reference.objectKey());
-    }
-
-    @Override
-    public StoredObject store(StoreObjectRequest request) {
         try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                    .bucket(request.bucket())
-                    .key(request.objectKey())
-                    .contentLength(request.sizeBytes())
-                    .contentType(request.contentType())
+                    .bucket(objectStorageProperties.getBucket())
+                    .key(objectKey)
+                    .contentLength(command.sizeBytes())
+                    .contentType(command.contentType())
                     .build();
 
             PutObjectResponse response = s3Client.putObject(
                     putObjectRequest,
-                    RequestBody.fromInputStream(request.inputStream(), request.sizeBytes())
+                    RequestBody.fromInputStream(command.inputStream(), command.sizeBytes())
             );
 
-            return new StoredObject(
-                    request.bucket(),
-                    request.objectKey(),
-                    request.sizeBytes(),
-                    request.contentType(),
+            return new StoredObjectReference(
+                    objectStorageProperties.getBucket(),
+                    objectKey,
+                    command.sizeBytes(),
+                    command.contentType(),
                     response.eTag()
             );
         } catch (SdkException | IllegalArgumentException exception) {
@@ -87,11 +67,11 @@ public class S3ObjectStorageClient implements ObjectStorageClient, ObjectStorage
     }
 
     @Override
-    public void delete(String bucket, String objectKey) {
+    public void delete(StoredObjectReference reference) {
         try {
             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                    .bucket(bucket)
-                    .key(objectKey)
+                    .bucket(reference.bucket())
+                    .key(reference.objectKey())
                     .build();
             s3Client.deleteObject(deleteObjectRequest);
         } catch (SdkException | IllegalArgumentException exception) {

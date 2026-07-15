@@ -17,14 +17,14 @@ public final class IndexingFailureDiagnostic {
             List<RowMetadata> transcriptRows,
             Category category,
             FailureStage failureStage,
-            RuntimeException exception
+            String exceptionType
     ) {
         RowSummary rowSummary = summarize(transcriptRows);
         String diagnostic = String.join(";",
                 "diagnosticVersion=1",
                 "category=" + category.name(),
                 "failureStage=" + failureStage.value,
-                "exception=" + safeExceptionClass(exception),
+                "exception=" + safeExceptionClass(exceptionType),
                 "usableRows=" + transcriptRows.size(),
                 "blankRowsAfterFilter=" + rowSummary.blankRowsAfterFilter(),
                 "segmentIndexes=" + segmentIndexSummary(rowSummary.segmentIndexCounts()),
@@ -39,8 +39,8 @@ public final class IndexingFailureDiagnostic {
         return diagnostic.substring(0, MAX_DIAGNOSTIC_LENGTH);
     }
 
-    private static String safeExceptionClass(RuntimeException exception) {
-        return exception == null ? "none" : exception.getClass().getSimpleName();
+    private static String safeExceptionClass(String exceptionType) {
+        return exceptionType == null || exceptionType.isBlank() ? "none" : exceptionType;
     }
 
     private static RowSummary summarize(List<RowMetadata> transcriptRows) {

@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.common.config;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration;
 
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -11,19 +11,13 @@ public class FastApiClientConfig {
 
     @Bean("fastApiRestClient")
     RestClient fastApiRestClient(FastApiProperties properties) {
-        return buildRestClient(
-                properties.getBaseUrl(),
-                properties.getConnectTimeout(),
-                properties.getReadTimeout()
-        );
+        return buildRestClient(properties.getBaseUrl(), properties.getConnectTimeout(), properties.getReadTimeout());
     }
 
     @Bean("fastApiAssistantRestClient")
     RestClient fastApiAssistantRestClient(FastApiProperties properties) {
         return buildRestClient(
-                properties.getBaseUrl(),
-                properties.getConnectTimeout(),
-                properties.getAssistantReadTimeout()
+                properties.getBaseUrl(), properties.getConnectTimeout(), properties.getAssistantReadTimeout()
         );
     }
 

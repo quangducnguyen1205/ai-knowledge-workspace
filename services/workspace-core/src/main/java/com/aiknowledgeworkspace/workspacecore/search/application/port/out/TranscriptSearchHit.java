@@ -1,15 +1,14 @@
-package com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch;
+package com.aiknowledgeworkspace.workspacecore.search.application.port.out;
 
 import java.util.UUID;
 
-public record TranscriptIndexDocument(
+public record TranscriptSearchHit(
         UUID assetId,
-        UUID workspaceId,
         String assetTitle,
         String transcriptRowId,
         Integer segmentIndex,
         String text,
         String createdAt,
-        String assetStatus
+        Double score
 ) {
 }

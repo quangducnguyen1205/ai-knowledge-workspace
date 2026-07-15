@@ -14,7 +14,6 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJ
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -44,7 +43,7 @@ public class AssetPersistenceService {
             UUID assetId,
             String originalFilename,
             String title,
-            Workspace workspace,
+            UUID workspaceId,
             StoredObjectReference storedObject,
             DirectProcessingUploadResult directResult
     ) {
@@ -53,7 +52,7 @@ public class AssetPersistenceService {
                 originalFilename,
                 title,
                 directResult.assetStatus(),
-                workspace,
+                workspaceId,
                 storedObject.bucket(),
                 storedObject.objectKey(),
                 storedObject.contentType(),
@@ -77,7 +76,8 @@ public class AssetPersistenceService {
             UUID assetId,
             String originalFilename,
             String title,
-            Workspace workspace,
+            UUID workspaceId,
+            String workspaceOwnerId,
             StoredObjectReference storedObject
     ) {
         Asset asset = assetRepository.save(new Asset(
@@ -85,7 +85,7 @@ public class AssetPersistenceService {
                 originalFilename,
                 title,
                 AssetStatus.PROCESSING,
-                workspace,
+                workspaceId,
                 storedObject.bucket(),
                 storedObject.objectKey(),
                 storedObject.contentType(),
@@ -96,8 +96,8 @@ public class AssetPersistenceService {
         ProcessingJobView processingJob = processingRequestApplication.createKafkaJobAndRequest(
                 new KafkaProcessingRequestCommand(
                         asset.getId(),
-                        workspace.getId(),
-                        workspace.getOwnerId(),
+                        workspaceId,
+                        workspaceOwnerId,
                         storedObject.bucket(),
                         storedObject.objectKey(),
                         asset.getOriginalFilename(),
@@ -159,9 +159,9 @@ public class AssetPersistenceService {
     }
 
     @Transactional
-    public Asset updateAssetWorkspace(Asset asset, Workspace workspace) {
-        if (!Objects.equals(asset.getWorkspaceId(), workspace.getId())) {
-            asset.setWorkspace(workspace);
+    public Asset updateAssetWorkspace(Asset asset, UUID workspaceId) {
+        if (!Objects.equals(asset.getWorkspaceId(), workspaceId)) {
+            asset.setWorkspaceId(workspaceId);
             asset = assetRepository.save(asset);
         }
         return asset;

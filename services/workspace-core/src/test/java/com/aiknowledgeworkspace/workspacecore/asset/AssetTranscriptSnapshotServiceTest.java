@@ -128,7 +128,7 @@ class AssetTranscriptSnapshotServiceTest {
     }
 
     private Asset asset(UUID assetId, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", "Lecture", status, new Workspace(UUID.randomUUID(), "Workspace"));
+        Asset asset = new Asset("lecture.mp4", "Lecture", status, UUID.randomUUID());
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;
     }

@@ -57,7 +57,7 @@ class ProcessingResultAssetPortAdapterTest {
 
     private Asset asset(UUID assetId) {
         Asset asset = new Asset(
-                "lecture.mp4", "Lecture", AssetStatus.PROCESSING, new Workspace(UUID.randomUUID(), "Workspace")
+                "lecture.mp4", "Lecture", AssetStatus.PROCESSING, UUID.randomUUID()
         );
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;

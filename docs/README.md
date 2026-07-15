@@ -8,16 +8,17 @@ For the current Spring product-core baseline, this is the fastest useful reading
 
 1. `submission/project3-final-baseline.md`
 2. `submission/project3-validation-matrix.md`
-3. `architecture/00-reviewer-overview.md`
-4. `architecture/05-end-to-end-diagram-pack.md`
-5. `architecture/01-system-context.md`
-6. `architecture/02-service-boundaries.md`
-7. `architecture/deprecations.md`
-8. `architecture/phase1-implemented-product-flow.md`
-9. `api/API.md`
-10. `data/Database.md`
-11. `runbooks/local-dev.md`
-12. `testing/integration-smoke-checklist.md`
+3. `architecture/backend-modularity-baseline.md`
+4. `architecture/00-reviewer-overview.md`
+5. `architecture/05-end-to-end-diagram-pack.md`
+6. `architecture/01-system-context.md`
+7. `architecture/02-service-boundaries.md`
+8. `architecture/deprecations.md`
+9. `architecture/phase1-implemented-product-flow.md`
+10. `api/API.md`
+11. `data/Database.md`
+12. `runbooks/local-dev.md`
+13. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -43,6 +44,7 @@ These are the main current-source-of-truth docs for understanding how the backen
 ## Architecture Documents
 
 - `architecture/00-reviewer-overview.md`: fastest reviewer/instructor onboarding note for the current backend baseline
+- `architecture/backend-modularity-baseline.md`: authoritative current module ownership, API/port rules, package convention, and strict architecture gate
 - `architecture/01-system-context.md`: top-level view of product core, processing service, and data dependencies
 - `architecture/02-service-boundaries.md`: ownership boundaries across Spring Boot, FastAPI, search, and storage
 - `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role

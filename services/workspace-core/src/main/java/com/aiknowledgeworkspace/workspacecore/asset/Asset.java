@@ -1,14 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -33,10 +30,8 @@ public class Asset {
     @Column(nullable = false, length = 32)
     private AssetStatus status;
 
-    @JsonIgnore
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "workspace_id", nullable = false)
-    private Workspace workspace;
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
 
     @JsonIgnore
     @Column(name = "storage_bucket", nullable = false, length = 255)
@@ -65,11 +60,11 @@ public class Asset {
     protected Asset() {
     }
 
-    public Asset(String originalFilename, String title, AssetStatus status, Workspace workspace) {
+    public Asset(String originalFilename, String title, AssetStatus status, UUID workspaceId) {
         this.originalFilename = originalFilename;
         this.title = title;
         this.status = status;
-        this.workspace = Objects.requireNonNull(workspace, "workspace is required");
+        this.workspaceId = Objects.requireNonNull(workspaceId, "workspaceId is required");
     }
 
     public Asset(
@@ -77,14 +72,14 @@ public class Asset {
             String originalFilename,
             String title,
             AssetStatus status,
-            Workspace workspace,
+            UUID workspaceId,
             String storageBucket,
             String objectKey,
             String contentType,
             long sizeBytes,
             String eTag
     ) {
-        this(originalFilename, title, status, workspace);
+        this(originalFilename, title, status, workspaceId);
         this.id = id;
         this.storageBucket = storageBucket;
         this.objectKey = objectKey;
@@ -136,16 +131,12 @@ public class Asset {
         this.status = status;
     }
 
-    public Workspace getWorkspace() {
-        return workspace;
-    }
-
-    public void setWorkspace(Workspace workspace) {
-        this.workspace = workspace;
-    }
-
     public UUID getWorkspaceId() {
-        return workspace != null ? workspace.getId() : null;
+        return workspaceId;
+    }
+
+    public void setWorkspaceId(UUID workspaceId) {
+        this.workspaceId = Objects.requireNonNull(workspaceId, "workspaceId is required");
     }
 
     public String getStorageBucket() {

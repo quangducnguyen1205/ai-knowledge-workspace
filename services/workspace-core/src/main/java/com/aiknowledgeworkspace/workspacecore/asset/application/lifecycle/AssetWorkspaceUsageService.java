@@ -17,6 +17,6 @@ public class AssetWorkspaceUsageService {
 
     @Transactional(readOnly = true)
     public boolean workspaceHasAssets(UUID workspaceId) {
-        return assetRepository.countByWorkspace_Id(workspaceId) > 0;
+        return assetRepository.countByWorkspaceId(workspaceId) > 0;
     }
 }

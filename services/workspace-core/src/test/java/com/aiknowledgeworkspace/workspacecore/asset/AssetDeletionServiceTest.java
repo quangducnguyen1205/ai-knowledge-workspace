@@ -20,10 +20,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient;
+import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
@@ -48,7 +48,7 @@ class AssetDeletionServiceTest {
     private AssetPersistenceService assetPersistenceService;
 
     @Mock
-    private ObjectStorageClient objectStorageClient;
+    private ObjectStorageApplication objectStorageClient;
 
     private MockRestServiceServer mockServer;
     private AssetDeletionService assetDeletionService;
@@ -150,7 +150,7 @@ class AssetDeletionServiceTest {
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500");
 
         verify(assetPersistenceService, never()).deleteAssetRecords(asset);
@@ -175,7 +175,7 @@ class AssetDeletionServiceTest {
                         """, org.springframework.http.MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("Elasticsearch delete removed only 1 of 2 transcript documents");
 
         verify(assetPersistenceService, never()).deleteAssetRecords(asset);
@@ -203,7 +203,8 @@ class AssetDeletionServiceTest {
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
         doThrow(new ObjectStorageException("delete failed", new RuntimeException("minio down")))
                 .when(objectStorageClient)
-                .delete("workspace-media", "objects/raw.mp4");
+                .delete(argThat(reference -> reference.bucket().equals("workspace-media")
+                        && reference.objectKey().equals("objects/raw.mp4")));
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -241,7 +242,7 @@ class AssetDeletionServiceTest {
     }
 
     private Asset asset(UUID assetId, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", "Lecture", status, new Workspace(UUID.randomUUID(), "Workspace"));
+        Asset asset = new Asset("lecture.mp4", "Lecture", status, UUID.randomUUID());
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;
     }

@@ -1,645 +1,187 @@
-# Backend Modularity Baseline
-
-Status: historical ratchet record plus current v1 pointer. This document is evidence from
-the Spring Boot backend and does not change behavior, packages, dependencies, APIs, schemas,
-or event contracts.
-
-> **Current v1.1.A3 result:** strict `ApplicationModules.verify()` passes with 0
-> violation messages and 0 cycle messages. The canonical submission and validation
-> documents are [`project3-final-baseline.md`](../submission/project3-final-baseline.md)
-> and [`project3-validation-matrix.md`](../submission/project3-validation-matrix.md).
-> Counts below describe historical ratchet steps unless explicitly marked current.
-
-## Scope And Non-Goals
-
-This baseline maps the current modular-monolith shape of `services/workspace-core` so the next phase can introduce the smallest useful architecture verification and only then refactor packages or public module APIs.
-
-Non-goals:
-
-- no microservice split;
-- no broad clean-architecture or hexagonal rewrite;
-- no Java package reorganization in this phase;
-- no runtime Spring Modulith feature, ArchUnit, jMolecules, or production dependency addition;
-- no database schema, Flyway, API, Kafka event, outbox, auth, processing, search, or assistant behavior change.
-
-The current backend is one Maven module, `services/workspace-core/pom.xml`, on Spring Boot `3.3.5` and Java `21`. P3-BE1 adds only Spring Modulith `1.2.5` as test-scoped architecture inspection support through the Spring Modulith BOM plus `spring-modulith-starter-test`. After P3-BE2A, the production Java tree contains about `9,553` lines across the Spring application root `com.aiknowledgeworkspace.workspacecore`.
-
-## P3-BE1 Verification Baseline
-
-P3-BE1 `[ĐÃ XÁC MINH TỪ CODE]` adds `BackendModularityBaselineTest` under
-`services/workspace-core/src/test/java/.../architecture/`. The test uses:
-
-```java
-ApplicationModules.of(WorkspaceCoreApplication.class)
-```
-
-with Spring Modulith's default direct-package detection. It does not use custom
-detection, broad allow-lists, open modules, module exclusions, `@ApplicationModule`,
-`@NamedInterface`, or `allowedDependencies`.
-
-The test has two checks:
-
-- the detected direct package roots remain:
-  `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`,
-  `search`, `storage`, and `workspace`;
-- the real `detectViolations()` output matched the then-committed baseline resource
-  (the historical resource was retired after P3-V1.1.A3 strict verification became the
-  active gate).
-
-This is a ratchet. A future failure means module detection changed or the
-violation report changed. That can be good or bad, but it must be reviewed
-intentionally instead of silently drifting in CI.
-
-P3-BE1.1 stabilizes that ratchet by normalizing non-semantic Java source line
-locations in the Modulith report. Entries such as `(AssetPersistenceService.java:104)`
-are stored and compared as `(AssetPersistenceService.java)`: class/file names,
-cycle text, module/package names, and dependency descriptions remain preserved,
-but harmless line movement no longer fails the baseline. This does not suppress,
-filter, or hash away any module violation.
-
-Strict `ApplicationModules.verify()` is intentionally not green yet. The
-P3-BE1.1 baseline recorded `137` violation messages, including dependency cycles
-and non-exposed type dependencies.
-
-## P3-BE2A Asset Application Boundary
-
-P3-BE2A `[ĐÃ XÁC MINH TỪ CODE]` introduces a narrow public application boundary
-owned by the `asset` root package. The new public contracts are:
-
-- `AssetReadService` plus immutable read models (`AssetDetails`,
-  `AssetIndexingSource`, `AssetTranscriptContext`, `AssetTranscriptRowView`) for
-  authorized asset details, canonical transcript context, searchable visibility,
-  and indexing-source reads.
-- `AssetProcessingResultApplicationService` plus `AssetTranscriptRowInput` for
-  applying the asset-owned portion of successful or failed processing results,
-  including terminal asset state and canonical transcript snapshot replacement.
-- `AssetSearchabilityService` for asset-owned lifecycle transitions to
-  `TRANSCRIPT_READY` and `SEARCHABLE`.
-
-Processing, search, and assistant code now consume these asset contracts instead
-of the selected direct `AssetRepository`, `AssetTranscriptRowSnapshotRepository`,
-`Asset`, `AssetService`, or `AssetPersistenceService` internals that P3-BE0
-identified. Asset remains owner of asset lifecycle, canonical transcript
-snapshots, transcript context, and searchability state. Search still owns
-indexing jobs and Elasticsearch writes; processing still owns result-event
-idempotency, processing jobs, FastAPI artifact retrieval, and result orchestration;
-assistant owns context packing plus the public grounded answer orchestration.
-
-The Modulith baseline changed intentionally after this refactor. Module roots are
-unchanged, strict `ApplicationModules.verify()` is still not green, and the
-committed violation report now records `161` messages: the same `51` cycle
-messages and `110` non-exposed-type dependency messages. The increase is caused
-by the new explicit asset public contracts and by preserving current transitional
-edges such as `asset -> integration.fastapi`; it is a reviewed ratchet update,
-not proof of full modularity.
-
-P3-BE2B `[ĐÃ XÁC MINH TỪ CODE]` adds one more asset-owned public query:
-`AssetWorkspaceUsageService.workspaceHasAssets(UUID workspaceId)`. Workspace
-deletion now consumes this boolean application fact instead of injecting
-`AssetRepository` and calling `countByWorkspace_Id` directly. Asset repository
-ownership remains internal to the asset module. The module-level `workspace ->
-asset` dependency remains intentional, and the same `161`-message Modulith
-baseline remains a ratchet.
-
-P3-F2A.1 `[ĐÃ XÁC MINH TỪ CODE]` exposes only the assistant-specific FastAPI
-transport records and client as the named `integration::assistant` Modulith API.
-The HTTP `FastApiAssistantClientImpl` lives under `integration.fastapi.assistant.internal`,
-so the assistant module no longer depends on non-exposed FastAPI assistant
-types. The baseline remains `161` messages; strict verification is still blocked
-by older deferred edges.
-
-## P3-S5.B1 Structural Foundation Ratchet
-
-P3-S5.B1 `[VERIFIED BY TESTS]` establishes the first behavior-preserving module
-boundaries without changing HTTP, Kafka, persistence, profile, or recovery
-contracts:
-
-- `outbox::application` is the named neutral API for enqueue, relay, automatic
-  reconciliation, and retained manual recovery. Its immutable `OutboxDraft`
-  carries only the generic persisted envelope values: event identity, type and
-  version, aggregate identity, event key, and serialized payload. JPA entities
-  and repositories remain internal to outbox.
-- Processing owns the `asset.processing.requested` codec under
-  `processing::request-event`; search owns the `asset.indexing.requested` codec
-  under `search::indexing-request-event`. Contract tests freeze topic selection,
-  event/key/aggregate identities, payload field names and values, null handling,
-  and timestamp formats. In particular, processing payload `requestedAt` remains
-  numeric epoch seconds while envelope `occurredAt` remains an ISO date-time.
-- Relay callers now use `RelayRequest`, `RelaySelection`, and
-  `RelayExecutionPolicy` instead of nullable event selectors and boolean failure
-  switches. The existing claim/publish/failure state machine and publisher are
-  still single implementations inside outbox.
-- Feature-specific exception mappings now live in feature-owned advice classes.
-  `common.web` retains neutral framework, validation, authentication, and
-  fallback mappings plus the shared error response shape.
-- OIDC provisioning calls a narrow `common::workspace-provisioning` port whose
-  workspace-owned adapter creates the default workspace inside the existing
-  user-creation transaction. This removes the reverse common-to-workspace
-  repository/entity dependency without changing authentication behavior.
-
-The architecture ratchet now fingerprints the exact normalized violation set
-instead of storing thousands of repeated detail lines. It records `107`
-violation messages and `5` cycle messages, down from `161` and `51`. Direct
-`asset <-> outbox`, `common <-> search`, and `common <-> workspace` cycles are
-removed. Dedicated ArchUnit rules prevent outbox from importing product feature
-implementations and prevent `common.web` from importing feature or integration
-packages.
-
-Strict `ApplicationModules.verify()` is still intentionally red. The remaining
-cycle paths are combinations of `asset`, `processing`, `search`, and `workspace`
-orchestration and are deferred to P3-S5.B2. They are legacy debt recorded by the
-ratchet, not the target architecture and not permission to introduce new edges.
-
-## P3-S5.B2A Orchestration Cycle Elimination
-
-P3-S5.B2A `[VERIFIED BY TESTS]` removes the five remaining product-orchestration
-cycle messages through consumer-owned ports and state-owning adapters. Processing,
-search, and workspace declare the asset capabilities they consume under their
-named `application` interfaces; package-private asset adapters implement those
-ports by delegating to the existing asset-owned services. Processing-result
-idempotency and parsing remain in processing, canonical transcript and lifecycle
-state remain in asset, indexing jobs and Elasticsearch writes remain in search,
-and workspace deletion still consults the single asset-owned usage query.
-
-The reverse direction is also narrowed. Asset now creates and reads processing
-jobs through `processing::application`, and invokes automatic/explicit indexing
-and search maintenance through `search::application`; it no longer imports the
-processing or search repositories, entities, or concrete orchestration services.
-All calls remain synchronous and join the same existing transaction boundaries.
-No application event, extra database transaction, schema change, or contract
-change was introduced.
-
-The reviewed ratchet is now `101` violation messages and `0` cycle messages,
-down from `107` and `5`. Strict verification remains red because non-cycle
-named-interface/exposure debt still exists. Direct architecture rules now guard
-the new directions: processing/search/workspace cannot depend on asset
-implementations, while asset may consume only the processing/search application
-boundaries (plus the existing public processing status enum used by the frozen
-asset response contract). B2B may decompose orchestration classes only after
-these zero-cycle rules and the event/error contract tests remain green.
-
-## P3-S5.B2B Asset And Transcript Decomposition
-
-P3-S5.B2B `[VERIFIED BY TESTS]` keeps the B2A dependency graph and makes the
-normal asset flow readable through dedicated application use cases:
-
-- `UploadAssetApplicationService` owns validation, workspace resolution, object
-  storage, trigger selection, persistence delegation, and failure cleanup.
-- `AssetQueryApplicationService` owns list/detail/status/transcript response
-  projection; `AssetController`, title update, and deletion call it rather than
-  the former god service.
-- `AssetTranscriptSnapshotService` is the single canonical snapshot write owner.
-  It filters unusable compatibility rows, replaces the PostgreSQL snapshot,
-  creates automatic indexing intent through the existing search application
-  API, and applies transcript-ready/failed lifecycle rules.
-- `AssetTranscriptQueryService` is the single ordered canonical read owner for
-  indexing sources, transcript context, assistant context, and search adapters.
-- `DirectProcessingCompatibilityAdapter` contains the deprecated FastAPI direct
-  upload/status/transcript mapping. It is package-private and delegates every
-  captured transcript to the canonical snapshot service.
-
-The upload coordinator and controller transcript fallback remain outside an
-enclosing database transaction, while asset/job/outbox persistence, async result
-application, and indexing fallback retain their existing transactional
-participation. No event, HTTP, schema, profile, or compatibility contract is
-changed. The reviewed ratchet is `83` violation messages and `0` cycle messages,
-down from `101` and `0`. Strict verification remains red only for reviewed
-non-cycle exposure debt. A thin non-bean `AssetService` facade remains for legacy
-unit fixtures and is explicitly deferred to B2C; it delegates all methods and
-contains no business rules.
-
-## P3-S5.B2C Processing Result And Indexing Orchestration
-
-P3-S5.B2C `[VERIFIED BY TESTS]` separates integration adapters from application
-orchestration while preserving the previously characterized behavior:
-
-- `ProcessingResultKafkaListener` retains offset acknowledgement and listener
-  error semantics only. `ProcessingResultEventHandler` parses and selects
-  exact-ID recovery input; `ProcessingResultInbox` owns durable consumed-event
-  idempotency; `TranscriptArtifactGatewayAdapter` maps the existing HTTP
-  transport to processing-owned rows; and
-  `ApplyProcessingResultApplicationService` applies both normal and manually
-  recovered outcomes in the same required transaction participation.
-- `AssetIndexingEventHandler` is the Kafka entry adapter and
-  `TranscriptIndexingService` remains the explicit application entry. Both call
-  `ExecuteIndexJobApplicationService`. Its writer port is implemented by the
-  existing `TranscriptSearchIndexClient`, while
-  `IndexingAttemptTransactionService` preserves the exact begin-transaction,
-  external-write, finalize-transaction split and the final fingerprint recheck.
-- The package-private non-bean `AssetService` facade and its constructor seams
-  are removed. Legacy unit coverage now composes the actual upload/query/
-  compatibility use cases through a test-only fixture.
-
-The reviewed ratchet is `79` violation messages and `0` cycle messages, down
-from `83` and `0`. Strict verification remains red for non-cycle module exposure
-debt; it is not relaxed or suppressed.
-
-## P3-V1.1.A1 FastAPI Processing Transport Internalization
-
-P3-V1.1.A1 `[VERIFIED BY TESTS]` removes product-module dependencies on FastAPI
-processing wire contracts. Asset consumes the named `asset::compatibility` gateway;
-processing consumes the named `processing::artifact` gateway and neutral transcript
-rows. FastAPI HTTP calls, response validation, wire DTO mapping, and integration-error
-translation are implemented only by adapters under
-`integration.fastapi.processing.internal`.
-
-The existing processing-result artifact call remains in its characterized transaction
-participation. Direct-upload compatibility remains deprecated, profile-gated, and
-functionally unchanged; the normal Kafka path and all public contracts are unchanged.
-The reviewed ratchet is now `23` non-cycle messages and `0` cycle messages. The remaining
-messages are the previously reviewed configuration/current-user exposure debt deferred to
-the next bounded cleanup phase.
-
-## P3-V1.1.A2 Intentional Spring Module APIs
-
-P3-V1.1.A2 `[VERIFIED BY TESTS]` removes the remaining reviewed configuration and
-current-user exposure messages and protects root-package implementation leaks with
-direct architecture rules. Elasticsearch properties and client configuration now live
-under the search infrastructure boundary; no non-search module consumes those types.
-
-The workspace module consumes the neutral `common.identity::api` current-user contract,
-while `CurrentUserService` remains the identity-owned implementation. Assistant context
-assembly consumes assistant-owned search and transcript-context ports with neutral
-assistant records; package-private adapters preserve the existing authorization,
-ordering, bounds, and citation-source semantics. Asset upload/deletion uses the
-storage-owned application capability rather than S3/MinIO implementation or property
-types, and workspace access remains behind its existing application boundary.
-
-Processing status is exposed from `processing::application` with the existing persisted
-enum values unchanged. The asset–workspace JPA association, synchronous transaction
-participation, HTTP/Kafka contracts, profiles, authentication, storage semantics,
-assistant behavior, and Elasticsearch request behavior remain frozen.
-
-The reviewed architecture ratchet was `0` Modulith violation messages and `0` cycle
-messages, fingerprint
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, down from `23` and
-`0`. This was an honest reviewed result, not a broad allow-list or suppression. A3
-completed the bounded physical internalization described below without changing runtime
-behavior.
-
-## P3-V1.1.A3 Selective Spring Module Internalization
-
-P3-V1.1.A3 `[VERIFIED BY STRICT MODULITH TEST]` moves accidental implementation classes
-out of module roots into responsibility-oriented subpackages while retaining intentional
-root APIs, controllers, entities, public DTOs, configuration entrypoints, and framework
-types. The move is physical and visibility-oriented; it does not change module ownership,
-transaction boundaries, persistence mappings, event contracts, profiles, or runtime
-behavior.
-
-The current production tree uses these bounded ownership locations:
-
-- `asset.application` contains upload, query, transcript, lifecycle, and compatibility
-  use cases; `asset.infrastructure.persistence` contains repositories and snapshot
-  persistence; `asset.adapter` contains state-owning cross-module adapters.
-- `assistant.application` contains context/answer orchestration and `assistant.adapter`
-  contains provider-facing context adapters.
-- `outbox.domain`, `outbox.infrastructure.persistence`,
-  `outbox.infrastructure.publication`, `outbox.relay`, `outbox.recovery`, and
-  `outbox.operator` separate envelope state, persistence, publication, scheduling, and
-  operator recovery.
-- `processing.domain`, `processing.infrastructure.persistence`, and
-  `processing.application.internal` keep processing state and request implementation
-  details behind the existing named application APIs.
-- `search.application.query`, `search.configuration`, `search.indexing.*`, and
-  `search.infrastructure.elasticsearch` separate query, configuration, indexing, and
-  the unchanged Elasticsearch client.
-- `storage.infrastructure.s3` contains the S3/MinIO implementation and configuration;
-  `workspace.application.internal` and `workspace.infrastructure.persistence` contain
-  workspace policy and persistence internals.
-
-The narrow named interfaces remain the only intentional cross-module implementation
-surfaces. `WorkspaceKafkaProperties` and other root configuration/API types remain at
-the module root where multiple framework or product entrypoints require them. Direct
-ArchUnit rules continue to protect outbox/common boundaries, consumer-owned ports,
-FastAPI transport isolation, listener/repository separation, and the moved internal
-packages.
-
-`BackendModularityBaselineTest` now runs strict
-`ApplicationModules.of(WorkspaceCoreApplication.class).verify()`; the obsolete empty
-violation resource and fingerprint ratchet are removed. The strict result is 0 messages
-and 0 cycles. No A4 package expansion is implied; architecture cleanup is closed for
-this bounded phase and the next work is delivery engineering.
-
-## Historical Package Inventory (before A3)
-
-Direct packages under `com.aiknowledgeworkspace.workspacecore`:
-
-| Package | Files | Current responsibilities | Controllers | Services / schedulers | Repositories / entities | Event, adapter, or contract notes | Domain or technical |
-|---|---:|---|---|---|---|---|---|
-| `asset` | 43 | Asset metadata, focused upload/query use cases, canonical transcript snapshot write/read ownership, object-storage reference handling, compatibility adaptation, lifecycle persistence, and title/delete/index API entrypoints. | `AssetController` | `UploadAssetApplicationService`, `AssetQueryApplicationService`, `AssetTranscriptSnapshotService`, `AssetTranscriptQueryService`, `AssetPersistenceService`, `AssetSearchabilityService`, `AssetWorkspaceUsageService`, `AssetDeletionService`, `AssetTitleUpdateService`; package-private `DirectProcessingCompatibilityAdapter` | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`; entities `Asset`, `AssetTranscriptRowSnapshot` | Controllers and B2A adapters consume focused asset use cases; compatibility uses the asset-owned gateway and receives no FastAPI wire types. The obsolete `AssetService` facade is removed. | Domain/application-specific with persistence and compatibility adapters kept explicit. |
-| `assistant` | 13 | Assistant context pack API and grounded answer orchestration. | `AssistantContextController`, `AssistantAnswerController` | `AssistantContextService`, `AssistantAnswerService` | none | DTOs for context/answer request, source, citation, response; reuses search and asset context services; calls the named `integration::assistant` FastAPI contract for answer generation. | Domain/application-specific. |
-| `common` | 35 | Technical cross-cutting concerns plus identity/auth and shared config. | `AuthController`, `HealthController`; `ApiExceptionHandler` advice | `AuthService`, `CurrentUserService`, `OidcUserProvisioningService` | `UserAccountRepository`; entity `UserAccount` | Security configs, current-user resolution, OIDC mapping/provisioning, Elasticsearch/FastAPI properties/configs, shared API error handling. | Mixed: identity domain plus technical/shared. |
-| `integration` | 14 | FastAPI client boundary, assistant FastAPI named interface, internal processing transport DTOs, and HTTP implementations. | none | internal processing/assistant client components | none | Uses `RestClient`; processing wire DTOs and adapters remain under `integration.fastapi.processing.internal`; exposes only assistant answer transport records/client via `integration::assistant`. | Technical adapter, provider-specific. |
-| `outbox` | 16 | Durable outbox event model, event factory, relay state machine, Kafka/logging/failing publishers, Kafka topic settings. | none | `OutboxRelayService` | `OutboxEventRepository`; entity `OutboxEvent` | Owns `asset.processing.requested` and `asset.indexing.requested` payload records and relay status transitions. | Technical platform with product event-contract knowledge. |
-| `processing` | 52 | Processing job entity/state, trigger mode config, request relay scheduler, result event parsing/application, durable result inbox, artifact gateway, result listener, recovery/smoke commands. | none | `ApplyProcessingResultApplicationService`, `ProcessingResultEventHandler`, `ProcessingResultInbox`, `ProcessingRecoveryService`, request relay scheduler | `ProcessingJobRepository`; entity `ProcessingJob`; `ConsumedProcessingResultEventRepository`; entity `ConsumedProcessingResultEvent` | Kafka listener for `asset.processing.result.v1`, result envelope/payload contracts, and the neutral `processing::artifact` gateway; FastAPI transport implementation is outside this module. | Domain/application integration. |
-| `search` | 61 | Search API, Elasticsearch client, transcript index documents/mapping, indexing jobs, event and explicit entry adapters, shared execution use case, indexing relay/smoke. | `SearchController` | `SearchService`, `TranscriptIndexingService`, `AssetIndexingEventHandler`, `ExecuteIndexJobApplicationService`, `IndexingAttemptTransactionService`, `AssetSearchIndexRequestService`, relay scheduler | `AssetSearchIndexJobRepository`; entity `AssetSearchIndexJob` | Kafka listener for `asset.indexing.requested.v1`; `TranscriptIndexWriter` is the indexing-write boundary implemented by the existing Elasticsearch client. | Domain/application plus technical adapter. |
-| `storage` | 8 | Object storage abstraction, S3/MinIO adapter, object key generation and properties. | none | `S3ObjectStorageClient` component | none | Uses AWS S3 SDK `S3Client`; exposes object-storage request/result records. | Technical adapter. |
-| `workspace` | 15 | Workspace model, ownership/access policy, default workspace, workspace CRUD. | `WorkspaceController` | `WorkspaceService`, `WorkspaceAccessPolicy` | `WorkspaceRepository`; entity `Workspace` | Public workspace DTOs and validation exceptions. | Domain-specific. |
-
-The table above is the pre-A3 inventory retained as historical context. Current package
-locations and the strict result are recorded in the A3 section above; tests still mirror
-the same module roots.
-
-Large production files that are useful refactor signals:
-
-| File | Lines | Observation |
-|---|---:|---|
-| `search/TranscriptSearchIndexClient.java` | 473 | Combines Elasticsearch query construction, index bootstrap/mapping, bulk writes, deletes, title sync, response validation, and exception translation. |
-| `common/web/ApiExceptionHandler.java` | 273 | Centralizes HTTP error mapping but imports exceptions from nearly every domain package. |
-| `outbox/OutboxRelayService.java` | 266 | Owns claim/publish/finalize/failure mechanics plus typed request/indexing relay entrypoints. |
-| `assistant/AssistantContextService.java` | 260 | Orchestrates search results and transcript context; currently appropriately reuses services rather than repositories. |
-| `processing/result/ProcessingResultEventParser.java` | 250 | Owns processing result envelope parsing/validation. |
-| `asset/AssetPersistenceService.java` | 239 | Owns asset/job/snapshot persistence but also creates processing outbox and triggers indexing auto-request. |
-| `workspace/WorkspaceService.java` | 226 | Owns workspace/default-workspace behavior and uses asset repository for delete conflict guard. |
-| `search/ExecuteIndexJobApplicationService.java` | 209 | Coordinates the derived write between explicit begin/finalize transaction operations and preserves safe failure diagnostics. |
-| `processing/result/ProcessingResultEventParser.java` | 250 | Owns validation of the frozen processing-result envelope and payload contracts. |
-
-## Historical Dependency Map (pre-A3)
-
-The table below records meaningful cross-package dependencies in production code. "Acceptable" means aligned with the current implementation and product flow. "Questionable" means it may be right today but should be narrowed or made explicit before architecture enforcement. "Violation candidate" means likely to fail a strict module boundary if introduced as-is.
-
-| From | Depends on | Kind | Classification | Evidence |
-|---|---|---|---|---|
-| `asset` | `workspace` | Ownership and workspace resolution application service/entity. | Intentional product dependency; workspace state remains workspace-owned. | `asset/UploadAssetApplicationService.java`, `asset/AssetQueryApplicationService.java`, `asset/Asset.java` |
-| `asset` | `storage` | Object key generation, object storage write/delete, stored object metadata. | Acceptable platform dependency. | `asset/UploadAssetApplicationService.java`, `asset/AssetDeletionService.java` |
-| `integration.fastapi.processing.internal` | `asset::compatibility`, `processing::artifact` | Deprecated direct-upload and processing-result artifact transport adapters only. | Internal integration boundary maps FastAPI wire DTOs to neutral product-owned contracts; product modules do not import this package. | `integration/fastapi/processing/internal/DirectProcessingCompatibilityGatewayAdapter.java`, `integration/fastapi/processing/internal/TranscriptArtifactGatewayAdapter.java` |
-| `asset` | `processing` | Processing request creation and read projections through `processing::application`. | Intentional application API dependency; asset no longer imports processing repositories or entities. | `asset/UploadAssetApplicationService.java`, `asset/AssetQueryApplicationService.java` |
-| `asset` | `outbox` | Creates and stores processing request outbox rows. | Questionable; durable outbox mechanics are platform, but product event creation is currently inside asset persistence. | `asset/AssetPersistenceService.java:5-7`, `asset/AssetPersistenceService.java:104-120` |
-| `asset` | `search` | Explicit/automatic indexing and search maintenance through `search::application`. | Intentional one-way application API dependency protected by architecture rules. | `asset/AssetController.java`, `asset/AssetTranscriptSnapshotService.java`, `asset/AssetDeletionService.java`, `asset/AssetTitleUpdateService.java` |
-| `workspace` | `common.identity` | Current user and access policy. | Acceptable if identity is a named public API. | `workspace/WorkspaceService.java:4`, `workspace/WorkspaceAccessPolicy.java:3` |
-| `workspace` | `asset` | State-owning asset adapter implements the workspace-owned delete-usage port. | Inverted in P3-S5.B2A; workspace production code has no asset implementation dependency. | `workspace/application/WorkspaceAssetUsagePort.java`, `asset/WorkspaceAssetUsagePortAdapter.java` |
-| `processing` | `asset` | State-owning asset adapter implements the processing-owned result port. | Inverted in P3-S5.B2A; processing application code depends only on its own port. | `processing/application/ProcessingResultAssetPort.java`, `asset/ProcessingResultAssetPortAdapter.java` |
-| `integration.fastapi.processing.internal` | `processing::artifact` | `TranscriptArtifactGatewayAdapter` maps and validates artifact rows, then returns processing-owned records. | Acceptable internal adapter dependency; application orchestration consumes no FastAPI transport DTO. | `integration/fastapi/processing/internal/TranscriptArtifactGatewayAdapter.java`, `processing/application/artifact/TranscriptArtifactValidator.java` |
-| `processing` | `outbox` | Recovery, smoke, request relay, listener config use outbox state and Kafka properties. | Acceptable platform dependency, but should be through named outbox relay API. | `processing/request/ProcessingRequestRelayScheduler.java:3-4`, `processing/recovery/ProcessingRecoveryService.java:3-6` |
-| `search` | `asset` | State-owning asset adapters implement search-owned query/indexing ports. | Inverted in P3-S5.B2A; search application code has no asset implementation dependency. | `search/application/IndexingAssetPort.java`, `asset/SearchAssetPortAdapter.java` |
-| `search` | `processing` | Explicit indexing reads processing readiness through `processing::application`. | Intentional application API dependency; no processing repository access remains. | `search/TranscriptIndexingService.java` |
-| `search` | `outbox` | Indexing event payload parsing, auto-request outbox creation, indexing relay/smoke. | Acceptable but needs named outbox event-contract interface. | `search/AssetSearchIndexRequestService.java:5-7`, `search/AssetIndexingEventParser.java:3-4` |
-| `search` | `common.config` | Elasticsearch properties. | Acceptable technical config dependency, but config may move under platform. | `search/TranscriptSearchIndexClient.java:4` |
-| `assistant` | `search` | Reuses existing search API/service. | Acceptable; this is the intended retrieval boundary. | `assistant/AssistantContextService.java:11-13` |
-| `assistant` | `asset` | Reuses the asset public transcript-context/searchability read API. | Improved in P3-BE2A; assistant no longer depends on `AssetService`, `Asset`, or asset HTTP response DTOs for context assembly. | `assistant/AssistantContextService.java` |
-| `outbox` | `asset`, `workspace`, `storage` | Event factory accepts entities/value records to build payloads. | Violation candidate for strict platform module; outbox platform currently contains product event construction. | `outbox/OutboxEventFactory.java:3-5`, `outbox/OutboxEventFactory.java:28-67` |
-| `common.web` | all domain packages | Global exception handler imports domain exceptions and infrastructure exceptions. | Confirmed boundary-leak risk for default Modulith verification; common technical code depends inward on all modules. | `common/web/ApiExceptionHandler.java:3-28` |
-| `common.identity` | `workspace` | OIDC first-login provisioning uses workspace repository/properties. | Questionable but intentional product flow; should become identity -> workspace public API. | `common/identity/TransactionalOidcUserCreationExecutor.java:3-5` |
-| `assistant` | `integration.fastapi.assistant` | Calls the explicit named FastAPI assistant transport API for grounded answer generation. | Acceptable after P3-F2A.1; only the assistant-specific client and transport records are exposed, while HTTP implementation remains internal. | `assistant/AssistantAnswerService.java`, `integration/fastapi/assistant/package-info.java` |
-| `integration.fastapi` | Spring `RestClient` | External HTTP adapter. | Acceptable technical adapter. | `integration/fastapi/processing/internal/FastApiProcessingClientImpl.java`, `integration/fastapi/assistant/internal/FastApiAssistantClientImpl.java` |
-| `storage` | AWS S3 SDK | MinIO/S3 adapter. | Acceptable technical adapter. | `storage/ObjectStorageConfig.java`, `storage/S3ObjectStorageClient.java` |
-
-## Boundary Strengths Already Present
-
-- Controllers generally delegate to services rather than repositories: `AssetController`, `WorkspaceController`, `SearchController`, and `AssistantContextController` do not contain persistence logic.
-- Workspace ownership policy is centralized through `WorkspaceService.resolveWorkspaceOrDefault`, `WorkspaceService.isOwnedByCurrentUser`, and `WorkspaceAccessPolicy`.
-- Search and assistant retrieval reuse product-level services instead of reading Elasticsearch or transcript repositories from controller code.
-- PostgreSQL ownership remains explicit: JPA entities/repositories own asset, workspace, processing, outbox, consumed-result, indexing-job, transcript snapshot, and user-account state.
-- Kafka and Elasticsearch are accessed through adapter/service boundaries (`OutboxMessagePublisher`, `KafkaOutboxMessagePublisher`, `TranscriptSearchIndexClient`, listeners).
-- Manual and automatic relays are scoped by event type, not broad arbitrary outbox scans.
-- Assistant answer orchestration uses bounded context and the named FastAPI assistant contract; it still has no embedding, chat persistence, generic provider framework, or direct browser-to-FastAPI path.
-
-## Historical Boundary-Leak Risks (reviewed before A3)
-
-### Confirmed
-
-- Spring Modulith reports no dependency cycle, while `23` reviewed non-cycle
-  configuration/current-user exposure messages remain after the A1 transport cleanup.
-- `TranscriptSearchIndexClient` still combines search-query and indexing-write
-  adapter responsibilities; B2C deliberately introduces only the narrow writer
-  port and does not split the client.
-- Several public classes remain internal implementation details because package
-  visibility and named-interface cleanup is incomplete, including repositories,
-  parsers, schedulers, smoke command runners, and DTOs.
-
-### Likely
-
-- `TranscriptSearchIndexClient` combines adapter, query DSL construction, index mapping/bootstrap, bulk write, delete, title sync, and response validation.
-- `ProcessingResultEventParser` remains a deliberately visible complex contract
-  validator; further simplification must preserve rejection categories and event
-  compatibility.
-- `common` is not neutral: it contains identity product behavior, web advice, configuration, and health.
-
-### Needs Later Confirmation
-
-- Whether explicit indexing should remain surfaced from `AssetController` or move behind a search-owned application API with an asset-facing facade.
-- Whether `processing` should own `ProcessingJob` as a separate module or whether processing job state should be treated as part of asset lifecycle inside an `asset` module with processing as integration.
-- Whether event payload records should live with product modules while `outbox` keeps only envelope/state/publisher mechanics.
-- Whether Elasticsearch mapping/query code should be split from search application service before or after Spring Modulith verification.
-
-## Historical Candidate Module Boundaries
-
-These candidate boundaries are review frames, not instructions to move packages in this phase.
-
-### `workspace`
-
-- Provided API: resolve current user's workspace/default workspace, workspace ownership check, create/list/update/delete workspace.
-- Internal implementation: `Workspace`, `WorkspaceRepository`, name validation, default workspace creation.
-- Required dependencies: identity current-user API.
-- Dependencies to remove or narrow: P3-BE2B removed the direct `AssetRepository`
-  delete guard; the remaining dependency is the intentional asset public
-  workspace-usage query.
-- Current package root: `workspace` is a plausible module root after the asset delete-check dependency is narrowed.
-- Package-private practicality: controllers/DTOs stay public; repository/entity/service internals can later be package-private or under `internal` after tests adapt.
-
-### `asset`
-
-- Provided API: asset lookup with authorization, upload command, status query, transcript snapshot/context reader, asset title/delete commands, canonical transcript replacement.
-- Internal implementation: `Asset`, `AssetTranscriptRowSnapshot`, repositories, snapshot sorting/replacement, object-reference metadata.
-- Required dependencies: workspace public API, storage adapter, processing request API, outbox event intent API.
-- Dependencies to remove or narrow: direct `ProcessingJobRepository`, FastAPI DTOs in asset persistence, direct search indexing request/sync dependencies.
-- Current package root: plausible but currently too broad and cyclic.
-- Package-private practicality: entity/repository classes are currently widely imported by search/processing/tests, so package-private visibility is not practical until APIs are extracted.
-
-### `processing`
-
-- Provided API: processing request trigger configuration, request relay scheduler, result listener/handler, result recovery.
-- Internal implementation: `ProcessingJob`, consumed-result entity/repository, result envelope parser, artifact validator, listener configs.
-- Required dependencies: outbox relay API, FastAPI artifact client, asset result-application API.
-- Dependencies to remove or narrow: direct `AssetRepository` and direct asset status mutation.
-- Current package root: plausible module root, with `request`, `result`, `listener`, `recovery`, and `smoke` as internals.
-- Package-private practicality: likely good after listener/config/smoke public needs are isolated.
-
-### `search`
-
-- Provided API: search query, explicit indexing command, indexing request creation, indexing event handling, transcript index write/search adapter.
-- Internal implementation: `AssetSearchIndexJob`, indexing job repository, fingerprinting, Elasticsearch client and document mapper.
-- Required dependencies: asset visibility/snapshot API, outbox event intent API, platform Elasticsearch adapter.
-- Dependencies to remove or narrow: direct `AssetRepository`, `AssetTranscriptRowSnapshotRepository`, `ProcessingJobRepository`, and direct asset status mutation.
-- Current package root: plausible module root after public asset snapshot/status contracts are extracted.
-- Package-private practicality: job repository/entity and ES client are good internal candidates later.
-
-### `assistant`
-
-- Provided API: `POST /api/assistant/context` context pack and `POST /api/assistant/answer` grounded answer.
-- Internal implementation: request normalization, source/citation shaping, dedupe/bounds, Spring-owned source IDs, and final citation validation.
-- Required dependencies: search public API, asset transcript-context public API, and the named `integration::assistant` FastAPI transport API.
-- Dependencies to remove or narrow: remaining search/asset named interfaces should be made explicit in later phases.
-- Current package root: currently the cleanest candidate module root.
-- Package-private practicality: service internals can be hidden later; DTO/controller stay public API.
-
-### `identity`
-
-- Provided API: current product user ID, auth/session APIs, JWT-to-local-user provisioning.
-- Internal implementation: `UserAccount`, repository, auth services, OIDC mapper/provisioning.
-- Current location: under `common/identity`, which is not ideal for domain ownership.
-- Required dependencies: workspace default-workspace provisioning public API.
-- Dependencies to remove or narrow: direct `WorkspaceRepository` in transactional OIDC provisioning.
-- Current package root: would likely need extraction from `common.identity` to either `identity` or a clearly named module in a later phase.
-
-### `platform`
-
-- Proposed contents: Kafka publisher/listener technical configuration, outbox state machine, storage adapter, FastAPI adapter, Elasticsearch adapter, neutral configuration, health.
-- Current locations: `outbox`, `storage`, `integration`, `common/config`, `common/health`.
-- Required dependencies: should generally be depended on by product modules, but should not depend on product entities.
-- Dependencies to remove or narrow: `OutboxEventFactory` product payload construction and global API exception mapping.
-- Current package root: no single root today; P3-BE1 can document these as allowed infrastructure modules or exclude some from default module verification.
-
-### `common`
-
-- Proposed contents: only neutral cross-cutting primitives and API error shapes.
-- Current contents: identity/auth, web exception mapping, config, health.
-- Recommendation: do not treat current `common` as a coherent domain module. Split or explicitly classify its subpackages in a later phase.
-
-## Proposed Dependency Direction
-
-Target direction for the modular monolith:
+# Project3 Final Architecture
+
+Status: authoritative description of the current Project3 architecture. Git history and the
+submission documents retain validation history; this document describes the architecture that
+new code must preserve.
+
+## Architectural Style
+
+Project3 is a DDD-oriented modular monolith with hexagonal boundaries inside meaningful Spring
+modules. Spring Modulith discovers and verifies the module graph. The architecture has nine
+Spring module roots and strict verification reports zero violations and zero dependency cycles.
+
+The system deliberately combines three communication styles:
+
+- direct Java calls through explicit module APIs for synchronous product decisions;
+- Spring application events for future in-process asynchronous reactions that do not require a
+  durable cross-process guarantee (no current durable workflow is implemented this way); and
+- transactional outbox plus Kafka for durable processing and indexing workflows.
+
+This is not a microservice decomposition. Spring remains the only public product backend.
+FastAPI is an internal execution subsystem behind Spring-owned or consumer-owned ports.
+
+## System Ownership
+
+| Boundary | Owner | Rule |
+|---|---|---|
+| Browser-facing HTTP, authorization, workspace and asset lifecycle | Spring | The frontend calls Spring only. |
+| Canonical transcript snapshot and product workflow state | Spring PostgreSQL | PostgreSQL is product truth. |
+| Binary uploads and processing artifacts | MinIO | Product references remain in PostgreSQL; storage SDK types stay in adapters. |
+| Processing execution and LLM provider calls | FastAPI | Internal transport DTOs never become Spring product contracts. |
+| Durable cross-process transport | Transactional outboxes and Kafka | Kafka acknowledgement is not a product commit. |
+| Search documents | Elasticsearch | Derived, rebuildable state; never product truth. |
+| Cache and task infrastructure | Redis | Cache/Celery infrastructure only; never canonical product state. |
+
+## Spring Modules
+
+| Module | Owns | Intentional cross-module surface |
+|---|---|---|
+| `asset` | asset metadata/lifecycle, upload policy, canonical transcript snapshots, authorized asset reads | `asset::compatibility`, `asset::transcript`, and state-owning adapters for consumer-owned ports |
+| `assistant` | bounded context assembly, answer policy, citation validation | `assistant::port` provider and context capabilities |
+| `common` | identity/auth integration, shared web error shape, neutral bootstrapping concerns | `common::api`, `common::workspace-provisioning`, `common::web` |
+| `integration` | FastAPI HTTP configuration, wire DTOs, validation, transport-to-neutral mapping | no FastAPI wire package is a product module API |
+| `outbox` | durable intent envelope, claim/publish/finalize/reconciliation mechanics | `outbox::application`, recovery configuration |
+| `processing` | request intent, jobs, result parsing/inbox/idempotency/recovery, artifact orchestration | `processing::application`, `processing::artifact`, `processing::request-event` |
+| `search` | indexing policy/jobs, query policy, Elasticsearch derived-state adapter | `search::application`, `search::query`, `search::configuration`, `search::indexing-request-event` |
+| `storage` | object-storage capability and S3/MinIO implementation | `storage::application` |
+| `workspace` | workspace model, ownership policy, default workspace and CRUD | `workspace::application` |
+
+Root-level controllers, public HTTP DTOs, entities, and configuration entrypoints can remain
+public for framework use. Java `public` visibility alone does not make a type a supported module
+API. Named interfaces, explicit application contracts, and direct architecture rules define the
+supported cross-module surface.
+
+## Module API Versus Application Port
+
+A module API is provider-owned. It is appropriate when another module synchronously invokes a
+stable product capability, such as workspace resolution, object storage, processing request
+creation, or search maintenance. A named interface exposes only the required immutable records
+and operations; repositories and entities are not returned.
+
+An application port is consumer-owned. It is appropriate when the consumer must state the exact
+capability it needs without importing the provider implementation. Examples include processing
+applying an asset result, search changing asset searchability, workspace checking asset usage,
+assistant invoking an answer provider, and search writing/querying the derived index. The
+state-owning or integration module supplies the adapter.
+
+Input ports are introduced only when they give a real use-case entry contract. Controllers and
+listeners are inbound adapters and call application use cases. Output ports describe required
+capabilities; S3/MinIO, Elasticsearch, FastAPI HTTP, persistence, and Kafka implementations are
+outbound adapters. One-method interfaces are not created mechanically, and domain/JPA models are
+not duplicated unless their meanings genuinely differ.
+
+## Current Dependency Corrections
+
+The final convergence keeps the existing behavior while making these boundaries explicit:
+
+- assistant answer orchestration depends on `AssistantAnswerProviderPort` and assistant-owned
+  neutral records; the package-private FastAPI adapter owns all assistant wire DTO mapping;
+- FastAPI properties and HTTP client configuration live under the integration boundary rather
+  than `common`;
+- search query, maintenance, and indexing execution depend on search-owned output ports;
+  `TranscriptSearchIndexClient` owns Elasticsearch JSON, request, response, and exception
+  translation;
+- asset stores `workspace_id` as the existing scalar foreign-key value and obtains authorized
+  workspace facts through the workspace API; it does not import the workspace JPA entity or
+  repository;
+- asset uses the storage application capability; obsolete root storage compatibility DTOs and
+  clients are removed; and
+- repositories and JPA entities remain inside their owning Spring module.
+
+`TranscriptSearchIndexClient` intentionally remains one Elasticsearch adapter. Splitting its
+query, write, bootstrap, delete, and title-update implementation would add churn without changing
+the dependency direction; its consumers already see narrow application-owned ports.
+
+## Package Convention
+
+New modules, and existing modules that undergo a meaningful refactor, converge toward the
+following shape where the responsibilities exist:
 
 ```text
-controllers
--> module application services
--> module-owned repositories/entities
--> platform adapters only through narrow interfaces
-
-assistant -> search public API + asset transcript/context public API
-search -> asset visibility/snapshot public API + outbox event-intent API + Elasticsearch adapter
-processing -> asset processing-result application API + FastAPI artifact adapter + outbox relay API
-asset -> workspace public API + storage adapter + processing request API + outbox event-intent API
-workspace -> identity current-user API
-identity -> workspace default-workspace provisioning API
-platform -> no product entities when practical
-common -> neutral API/error primitives only
+<module>/
+├── api/
+└── internal/
+    ├── application/
+    │   ├── port/in/
+    │   ├── port/out/
+    │   ├── service/
+    │   ├── command/
+    │   ├── query/
+    │   └── result/
+    ├── domain/
+    ├── adapter/
+    │   ├── in/
+    │   └── out/
+    └── configuration/
 ```
 
-Concrete direction changes after P3-BE2A:
+Only folders justified by real code should be created. Existing packages such as
+`application`, `adapter`, `infrastructure`, `integration`, and `transaction` remain valid when
+they already communicate ownership clearly and pass the dependency rules. Forwarding facades,
+empty layers, duplicate models, and cosmetic package moves are rejected.
 
-- completed in P3-BE2B: replace `workspace -> AssetRepository` with an asset public workspace-usage query;
-- completed in P3-BE2A: replace `processing -> AssetRepository/Asset` with an asset application command for processing results;
-- completed in P3-BE2A: replace affected `search -> AssetRepository/AssetTranscriptRowSnapshotRepository/Asset` flows with asset visibility, transcript snapshot, indexing source, and searchability command APIs;
-- move product event payload construction out of platform outbox or expose it through product module event factories;
-- split `common.identity` from neutral `common`;
-- split `TranscriptSearchIndexClient` adapter/query/mapping responsibilities only if architecture verification proves this coupling obstructs module boundaries.
+## Dependency And Communication Rules
 
-## Historical Proposed Public API Vs Internal Ownership
+1. No module accesses another module's repository, JPA entity, adapter, internal service, wire
+   DTO, SDK type, or provider exception.
+2. Synchronous cross-module calls use a narrow named interface/module API or a consumer-owned
+   port with a state-owning/provider adapter.
+3. Domain and application decisions do not depend on HTTP controllers, JPA repositories, Kafka
+   records, MinIO/AWS SDK types, Elasticsearch clients/JSON, or FastAPI wire DTOs.
+4. Inbound adapters parse and validate transport contracts before calling application use cases.
+   Outbound adapters map neutral application values to technology-specific contracts.
+5. In-process events are not a substitute for a required synchronous transaction or durable
+   workflow. Cross-process processing/indexing remains transactional-outbox plus Kafka.
+6. PostgreSQL changes, canonical transcript replacement, inbox/outbox idempotency, and indexing
+   begin/write/finalize semantics retain their characterized transaction boundaries.
+7. Elasticsearch remains outside the database transactions where it is outside them today and
+   remains rebuildable derived state.
+8. Compatibility and exact-ID/manual recovery paths remain explicit, secondary entrypoints and
+   reuse the normal application use cases.
 
-Initial public APIs should be small Java service contracts or named interfaces, not new HTTP APIs:
+## Spring/FastAPI Boundary
 
-| Module | Public API candidates | Internal candidates |
-|---|---|---|
-| `workspace` | workspace resolution, ownership check, default workspace provisioning | `WorkspaceRepository`, `Workspace`, validators, default ID creation |
-| `asset` | authorized asset lookup, transcript snapshot/context reader, processing-result apply command, asset delete/title/upload commands | `AssetRepository`, `AssetTranscriptRowSnapshotRepository`, entities, snapshot replacement internals |
-| `processing` | request relay command/scheduler API, result event handler entrypoint | parsers, consumed-event repository/entity, recovery/smoke commands, listener config |
-| `search` | search query service, explicit index command, indexing-event handler, indexing request creation | job repository/entity, fingerprinting, ES document mapper/client |
-| `assistant` | context pack builder and controller DTOs | validation/dedupe/source assembly helpers |
-| `identity` | current product user, login/register/me, JWT provisioning facade | `UserAccountRepository`, OIDC mapper/executors |
-| `platform/outbox` | append durable event, relay selected/due typed events, publisher interface | `OutboxEventRepository`, `OutboxEvent`, Kafka publisher implementation |
+The normal processing path is Spring durable request intent, Kafka request, FastAPI execution and
+durable result intent, Kafka result, Spring result inbox, canonical transcript replacement, and
+automatic indexing. Direct-upload compatibility is retained but is not the default path.
 
-## Spring Modulith Adoption Assessment
+Product modules consume neutral asset/processing/assistant contracts. Only integration-internal
+adapters know FastAPI URL paths, snake-case/camel-case wire fields, response validation rules,
+timeouts, or integration exceptions. FastAPI does not own public product state or browser APIs.
 
-1. The application root package `com.aiknowledgeworkspace.workspacecore` and its direct subpackages are syntactically compatible with Spring Modulith default module detection.
-2. P3-BE1 confirmed default detection creates modules for `asset`, `assistant`, `common`, `integration`, `outbox`, `processing`, `search`, `storage`, and `workspace`.
-3. `BackendModularityBaselineTest` now runs the default
-   `ApplicationModules.of(WorkspaceCoreApplication.class).verify()` as a passing strict
-   gate. P3-V1.1.A3 reached this result through reviewed package internalization and
-   narrow existing APIs, not exclusions or broad allow-lists.
-4. The historical ratchet resources document the earlier review steps; they are no longer
-   the active gate. Direct ArchUnit rules remain in place for boundaries that need
-   source-level protection beyond Modulith's module graph.
-5. Candidate first product module roots: `assistant`, `workspace`, `asset`, `processing`, `search`.
-6. Candidate technical/platform roots: `outbox`, `storage`, `integration.fastapi`, `common.config`, `common.web`, `common.health`.
-7. Maven review for P3-BE1 happened in `services/workspace-core/pom.xml`: Spring Modulith `1.2.5` is imported through the Spring Modulith BOM and only `spring-modulith-starter-test` is added with test scope.
-8. The strict verification target is now active:
+## Architecture Enforcement
+
+`BackendModularityBaselineTest` executes:
 
 ```java
-@Test
-void verifiesApplicationModules() {
-    ApplicationModules.of(WorkspaceCoreApplication.class).verify();
-}
+ApplicationModules.of(WorkspaceCoreApplication.class).verify();
 ```
 
-The test passes at the current A3 commit. Future changes must keep this strict gate green;
-they must not replace it with exclusions, open modules, or broad allow-lists.
+`ModuleBoundaryRulesTest` additionally protects seams that implicit root-package exposure alone
+cannot express: FastAPI transport isolation, assistant/provider isolation, search/Elasticsearch
+separation, listener and transaction boundaries, repository/entity ownership, workspace and
+storage boundaries, and removal of obsolete facades/contracts.
 
-Spring Modulith alone can express and verify module dependencies once public APIs/named interfaces are clear. ArchUnit is not needed now. ArchUnit may complement Spring Modulith later for more specific rules, for example:
+The required architecture result is zero violations and zero cycles. No open modules, broad
+allow-lists, exclusions, suppressions, or ratchet baselines may replace strict verification.
 
-- controllers must not inject repositories;
-- repositories/entities should not be imported outside their owning module;
-- provider-specific FastAPI DTOs should not leak outside processing/asset transition code;
-- `common` must not depend on product modules except through explicitly allowed error contracts.
+## Decisions Requiring Explicit Reapproval
 
-## Historical Staged Next-Step Plan
+Do not change the following without an explicit architecture decision and contract/transaction
+characterization:
 
-### P3-BE1: Minimum Architecture Verification Baseline
+- Spring as the sole public backend or FastAPI as an internal subsystem;
+- PostgreSQL truth, MinIO binary ownership, Redis cache-only use, or Elasticsearch derived-state
+  status;
+- public HTTP or Kafka contracts;
+- schema/Flyway mappings or canonical transcript semantics;
+- outbox, inbox, retry, recovery, acknowledgement, or idempotency semantics;
+- processing-result transaction participation or indexing begin/write/finalize boundaries;
+- authentication/profile behavior or retained compatibility/recovery paths; or
+- a new infrastructure framework, service split, or speculative abstraction layer.
 
-- Completed: add Spring Modulith test-only dependency support.
-- Completed: add default-detection module-root assertion.
-- Completed: record exact current `detectViolations()` output as a committed baseline ratchet.
-- Completed: keep strict verification honest by not making `ApplicationModules.verify()` appear green through exclusions, open modules, or broad allow-lists.
-- Completed: do not change product behavior, schema, API, events, or runtime controls.
+The canonical validation command is:
 
-### P3-BE2A: Asset Public Application Boundary
-
-- Completed: add public asset read models and services for indexing-source reads,
-  transcript context, searchability checks, processing-result application, and
-  searchability transitions.
-- Completed: migrate normal production `processing`, `search`, and `assistant`
-  consumers away from selected direct asset persistence/entity internals.
-- Completed: update the Modulith violation baseline after reviewing that module
-  roots stayed stable and changed messages reflect the intended asset boundary.
-- Still blocked: strict `ApplicationModules.verify()` because deferred edges
-  remain.
-
-### P3-BE2B: Workspace Asset-Usage Guard
-
-- Completed: add `AssetWorkspaceUsageService.workspaceHasAssets(UUID)` as the
-  minimal asset-owned public query for workspace delete checks.
-- Completed: migrate `WorkspaceService.deleteWorkspace` away from direct
-  `AssetRepository.countByWorkspace_Id` access while preserving default
-  workspace, ownership/not-found, conflict, and successful delete behavior.
-- Completed: update the Modulith baseline after reviewing that module roots and
-  message counts stayed stable and the changed lines represent the intentional
-  `workspace -> asset public API` dependency.
-- Still blocked: strict `ApplicationModules.verify()` because deferred edges
-  remain.
-
-### P3-F2A.1: Assistant FastAPI Contract Export
-
-- Completed: move the assistant FastAPI transport records and client into the
-  named `integration::assistant` API.
-- Completed: keep `FastApiAssistantClientImpl` and HTTP exception translation
-  under `integration.fastapi.assistant.internal`.
-- Completed: update the Modulith baseline after reviewing that the F2A
-  assistant-to-non-exposed-integration messages disappeared and the count
-  returned to `161`.
-- Still blocked: strict `ApplicationModules.verify()` because deferred edges
-  remain.
-
-### Later P3-BE2 Steps
-
-Potential first refactors, in order of least blast radius:
-
-1. Split identity from neutral `common` conceptually or via named interface.
-2. Move product event payload construction out of platform `outbox` or hide it behind product-facing factories.
-3. Narrow `ApiExceptionHandler` coupling only after error contract ownership is agreed.
-4. Decide whether `search -> ProcessingJobRepository` belongs behind a product transcript-availability API.
-
-### Future
-
-- Add focused ArchUnit rules only where Spring Modulith cannot express the desired constraint.
-- Consider package-private/internal subpackages after public APIs are stable.
-- Keep the backend a modular monolith; do not split microservices merely to satisfy package boundaries.
-
-## Refactors Deliberately Postponed
-
-- No package moves in P3-BE0.
-- No dependency additions in P3-BE0.
-- No schema, migration, API, or Kafka event changes.
-- No search/indexing contract changes.
-- No upload/processing trigger changes.
-- No assistant LLM/provider/chat persistence work.
-- No generic platform rewrite or microservice extraction.
+```bash
+mvn -q -f services/workspace-core/pom.xml test
+```

@@ -7,11 +7,14 @@ product core, FastAPI as an internal processing/provider service, and a React
 frontend that calls Spring only. This document consolidates the final P3-S5
 repository baseline and the evidence accepted for submission.
 
-The code baseline was statically revalidated on 2026-07-14. The Spring suite,
+The submission code baseline was statically revalidated on 2026-07-14. The Spring suite,
 FastAPI suite and import/configuration checks, and frontend test/typecheck/build
-all passed. The Spring Modulith ratchet reports 79 reviewed non-cycle exposure
-messages and zero cycle messages. Strict Modulith verification is therefore not
-claimed to be fully clean.
+all passed. At that frozen C1 baseline, the Spring Modulith ratchet reported 79
+reviewed non-cycle exposure messages and zero cycle messages. The subsequent
+behavior-preserving v1.1 architecture cleanup replaced that ratchet with strict
+verification at zero violations and zero cycles. The authoritative current rules
+are in [`Project3 Final Architecture`](../architecture/backend-modularity-baseline.md);
+the C1 counts below remain historical submission evidence.
 
 Runtime evidence is inherited from the bounded Project3 validation phases; C1
 did not start services or repeat browser, media, provider, database, or Kafka
@@ -282,8 +285,9 @@ security-certification claims.
 
 ## Known limitations and deferred debt
 
-- Spring strict Modulith verification still reports 79 reviewed non-cycle
-  exposure messages. Cycles are zero, but exposure debt is not declared solved.
+- The C1 submission recorded 79 reviewed non-cycle exposure messages. That
+  specific debt is resolved by the later strict zero-violation architecture gate;
+  the historical C1 validation table remains unchanged as evidence.
 - `TranscriptSearchIndexClient` still combines several Elasticsearch concerns.
 - Processing transcript-artifact HTTP retrieval retains its characterized
   transaction participation; C1 does not redesign that boundary.

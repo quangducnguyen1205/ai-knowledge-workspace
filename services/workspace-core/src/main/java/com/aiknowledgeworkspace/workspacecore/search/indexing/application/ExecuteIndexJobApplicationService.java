@@ -4,13 +4,12 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingFai
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingAttempt;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingFailureDiagnostic;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexDocument;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexDocumentMapper;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriteOperation;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexDocument;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriteOperation;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriter;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexConnectivityException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingFailureDiagnostic.Category;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingFailureDiagnostic.FailureStage;
@@ -129,7 +128,7 @@ public class ExecuteIndexJobApplicationService {
                             rowMetadata,
                             failure.category(),
                             failure.failureStage(),
-                            failure.originalException()
+                            diagnosticExceptionType(failure.originalException())
                     )
             );
         } catch (RuntimeException diagnosticFailure) {
@@ -138,23 +137,33 @@ public class ExecuteIndexJobApplicationService {
     }
 
     private FailureStage failureStage(RuntimeException exception, FailureStage integrationStage) {
-        if (exception instanceof ElasticsearchConnectivityException) {
+        if (exception instanceof SearchIndexConnectivityException) {
             return FailureStage.TRANSPORT;
         }
-        if (exception instanceof ElasticsearchIntegrationException) {
+        if (exception instanceof SearchIndexOperationException) {
             return integrationStage;
         }
         return FailureStage.UNEXPECTED;
     }
 
     private Category failureCategory(RuntimeException exception, Category integrationCategory) {
-        if (exception instanceof ElasticsearchConnectivityException) {
+        if (exception instanceof SearchIndexConnectivityException) {
             return Category.ELASTICSEARCH_TRANSPORT_FAILURE;
         }
-        if (exception instanceof ElasticsearchIntegrationException) {
+        if (exception instanceof SearchIndexOperationException) {
             return integrationCategory;
         }
         return Category.INDEXING_UNEXPECTED_FAILURE;
+    }
+
+    private String diagnosticExceptionType(RuntimeException exception) {
+        if (exception instanceof SearchIndexConnectivityException) {
+            return "ElasticsearchConnectivityException";
+        }
+        if (exception instanceof SearchIndexOperationException) {
+            return "ElasticsearchIntegrationException";
+        }
+        return exception == null ? null : exception.getClass().getSimpleName();
     }
 
     private IndexingPlan toIndexOperations(IndexingAssetSource indexingSource) {

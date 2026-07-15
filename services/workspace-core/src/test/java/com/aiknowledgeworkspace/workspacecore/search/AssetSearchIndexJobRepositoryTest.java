@@ -100,7 +100,7 @@ class AssetSearchIndexJobRepositoryTest {
                 "lecture.mp4",
                 "Lecture",
                 AssetStatus.TRANSCRIPT_READY,
-                workspace,
+                workspace.getId(),
                 "workspace-media",
                 "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
                 "video/mp4",

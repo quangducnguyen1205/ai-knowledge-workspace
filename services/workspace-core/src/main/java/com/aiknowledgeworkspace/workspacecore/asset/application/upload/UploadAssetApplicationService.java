@@ -11,8 +11,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
@@ -30,7 +30,7 @@ public class UploadAssetApplicationService {
     private final ProcessingRequestApplication processingRequestApplication;
     private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
     private final AssetPersistenceService assetPersistenceService;
-    private final WorkspaceQueryApplication workspaceQueryApplication;
+    private final WorkspaceAccessApplication workspaceQueryApplication;
     private final ObjectStorageApplication objectStorageApplication;
     private final SupportedUploadMediaPolicy supportedUploadMediaPolicy;
 
@@ -38,7 +38,7 @@ public class UploadAssetApplicationService {
             ProcessingRequestApplication processingRequestApplication,
             DirectProcessingCompatibilityAdapter compatibilityAdapter,
             AssetPersistenceService assetPersistenceService,
-            WorkspaceQueryApplication workspaceQueryApplication,
+            WorkspaceAccessApplication workspaceQueryApplication,
             ObjectStorageApplication objectStorageApplication,
             SupportedUploadMediaPolicy supportedUploadMediaPolicy
     ) {
@@ -55,13 +55,13 @@ public class UploadAssetApplicationService {
             throw new InvalidUploadRequestException("A non-empty file is required");
         }
 
-        Workspace workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
+        WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
         ValidatedUploadMedia uploadMedia = supportedUploadMediaPolicy.validate(file);
         String originalFilename = uploadMedia.originalFilename();
         String title = resolveTitle(requestedTitle, originalFilename);
         UUID assetId = UUID.randomUUID();
         StoredObjectReference storedObject = storeUploadedObject(
-                file, workspace.getOwnerId(), workspace.getId(), assetId, uploadMedia
+                file, workspace.ownerId(), workspace.workspaceId(), assetId, uploadMedia
         );
 
         try {
@@ -70,11 +70,11 @@ public class UploadAssetApplicationService {
                         file.getResource(), originalFilename, title
                 );
                 return assetPersistenceService.persistDirectUploadResult(
-                        assetId, originalFilename, title, workspace, storedObject, result
+                        assetId, originalFilename, title, workspace.workspaceId(), storedObject, result
                 );
             }
             return assetPersistenceService.persistKafkaRequestUpload(
-                    assetId, originalFilename, title, workspace, storedObject
+                    assetId, originalFilename, title, workspace.workspaceId(), workspace.ownerId(), storedObject
             );
         } catch (RuntimeException exception) {
             cleanupStoredObjectBestEffort(storedObject);

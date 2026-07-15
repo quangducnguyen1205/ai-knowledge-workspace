@@ -3,9 +3,6 @@ package com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.int
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.InvalidFastApiResponseException;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.FastApiAssistantClient;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,12 +14,12 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class FastApiAssistantClientImpl implements FastApiAssistantClient {
+class FastApiAssistantClientImpl implements FastApiAssistantClient {
 
     private final RestClient fastApiAssistantRestClient;
     private final String assistantAnswerPath;
 
-    public FastApiAssistantClientImpl(
+    FastApiAssistantClientImpl(
             @Qualifier("fastApiAssistantRestClient") RestClient fastApiAssistantRestClient,
             @Value("${integration.fastapi.assistant-answer-path:/internal/assistant/answer}") String assistantAnswerPath
     ) {

@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.common.config.FastApiProperties;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration.FastApiProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.WorkspaceSecurityProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;

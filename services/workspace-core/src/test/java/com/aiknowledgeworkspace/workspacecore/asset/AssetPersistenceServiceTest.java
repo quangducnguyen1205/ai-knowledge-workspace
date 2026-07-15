@@ -19,7 +19,7 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProce
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.StoredObject;
+import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
 import java.util.List;
 import java.util.UUID;
@@ -51,7 +51,7 @@ class AssetPersistenceServiceTest {
         DirectProcessingUploadResult directResult = new DirectProcessingUploadResult(
                 "task-1", "video-1", "pending", ProcessingJobStatus.PENDING, AssetStatus.PROCESSING
         );
-        StoredObject storedObject = new StoredObject(
+        StoredObjectReference storedObject = new StoredObjectReference(
                 "workspace-media",
                 "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
                 12L,
@@ -72,7 +72,7 @@ class AssetPersistenceServiceTest {
                 assetId,
                 "lecture.mp4",
                 "Lecture",
-                workspace,
+                workspace.getId(),
                 storedObject,
                 directResult
         );
@@ -83,7 +83,7 @@ class AssetPersistenceServiceTest {
         verify(assetRepository).save(assetCaptor.capture());
         verify(processingRequestApplication).createDirectJob(processingJobCaptor.capture());
 
-        assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
+        assertThat(assetCaptor.getValue().getWorkspaceId()).isEqualTo(workspace.getId());
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
         assertThat(assetCaptor.getValue().getStorageBucket()).isEqualTo("workspace-media");
         assertThat(assetCaptor.getValue().getObjectKey()).isEqualTo(storedObject.objectKey());
@@ -109,7 +109,7 @@ class AssetPersistenceServiceTest {
 
         UUID assetId = UUID.randomUUID();
         Workspace workspace = new Workspace(UUID.randomUUID(), "Algorithms", "user-1", false);
-        StoredObject storedObject = new StoredObject(
+        StoredObjectReference storedObject = new StoredObjectReference(
                 "workspace-media",
                 "users/user-1/workspaces/%s/assets/%s/raw/lecture.mp4".formatted(workspace.getId(), assetId),
                 12L,
@@ -127,7 +127,8 @@ class AssetPersistenceServiceTest {
                 assetId,
                 "lecture.mp4",
                 "Lecture",
-                workspace,
+                workspace.getId(),
+                workspace.getOwnerId(),
                 storedObject
         );
 
@@ -137,7 +138,7 @@ class AssetPersistenceServiceTest {
         verify(assetRepository).save(assetCaptor.capture());
         verify(processingRequestApplication).createKafkaJobAndRequest(processingCommand.capture());
 
-        assertThat(assetCaptor.getValue().getWorkspace()).isSameAs(workspace);
+        assertThat(assetCaptor.getValue().getWorkspaceId()).isEqualTo(workspace.getId());
         assertThat(assetCaptor.getValue().getId()).isEqualTo(assetId);
         assertThat(assetCaptor.getValue().getStatus()).isEqualTo(AssetStatus.PROCESSING);
         assertThat(assetCaptor.getValue().getStorageBucket()).isEqualTo("workspace-media");
@@ -237,7 +238,7 @@ class AssetPersistenceServiceTest {
                 "lecture.mp4",
                 "Lecture",
                 AssetStatus.TRANSCRIPT_READY,
-                new Workspace(UUID.randomUUID(), "Workspace")
+                UUID.randomUUID()
         );
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;

@@ -17,7 +17,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.Di
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +41,7 @@ class AssetTranscriptQueryServiceTest {
     private DirectProcessingCompatibilityGateway compatibilityGateway;
 
     @Mock
-    private WorkspaceService workspaceService;
+    private WorkspaceAccessApplication workspaceService;
 
     @Mock
     private IndexingRequestApplication indexingRequestApplication;
@@ -97,7 +97,7 @@ class AssetTranscriptQueryServiceTest {
         UUID workspaceId = UUID.randomUUID();
         Asset asset = asset(assetId, workspaceId, AssetStatus.PROCESSING);
         when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspace())).thenReturn(true);
+        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspaceId())).thenReturn(true);
         when(assetPersistenceService.loadTranscriptSnapshot(assetId)).thenReturn(List.of());
         when(compatibilityGateway.transcriptRows("video-1")).thenReturn(List.of(
                 new DirectProcessingTranscriptRow("blank", "video-1", 0, " ", "2026-06-26T00:00:00Z"),
@@ -135,7 +135,7 @@ class AssetTranscriptQueryServiceTest {
     }
 
     private Asset asset(UUID assetId, UUID workspaceId, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", "Lecture", status, new Workspace(workspaceId, "Workspace"));
+        Asset asset = new Asset("lecture.mp4", "Lecture", status, workspaceId);
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;
     }

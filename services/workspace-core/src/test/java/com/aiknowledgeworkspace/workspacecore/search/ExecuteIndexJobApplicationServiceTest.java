@@ -2,14 +2,14 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexDocumentMapper;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexDocument;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexDocumentMapper;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexDocument;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -294,7 +294,7 @@ class ExecuteIndexJobApplicationServiceTest {
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500");
 
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
@@ -360,7 +360,7 @@ class ExecuteIndexJobApplicationServiceTest {
                         """.formatted(unsafeProviderReason), MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining(unsafeProviderReason);
 
         assertThat(documentMappingCalls).hasValue(0);
@@ -421,7 +421,7 @@ class ExecuteIndexJobApplicationServiceTest {
                         """.formatted(assetId, unsafeTranscriptRowId, unsafeProviderReason), MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining(unsafeProviderReason);
 
         assertThat(indexingJob.getStatus()).isEqualTo(AssetSearchIndexJobStatus.INDEXING);
@@ -463,7 +463,7 @@ class ExecuteIndexJobApplicationServiceTest {
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500")
                 .hasMessageNotContaining("DIAGNOSTIC_SAVE_SHOULD_NOT_MASK");
 
@@ -522,7 +522,7 @@ class ExecuteIndexJobApplicationServiceTest {
                         """.formatted(assetId, unsafeProviderReason), MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining(unsafeProviderReason)
                 .hasMessageNotContaining("SECOND_MAPPING_SHOULD_NOT_MASK");
 

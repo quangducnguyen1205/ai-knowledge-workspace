@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -89,7 +89,7 @@ class TranscriptSearchIndexClientTest {
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
         assertThatThrownBy(client::ensureTranscriptIndexExists)
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("HTTP 500")
                 .hasMessageContaining("checking transcript index existence");
 
@@ -114,7 +114,7 @@ class TranscriptSearchIndexClientTest {
                                 """));
 
         assertThatThrownBy(client::ensureTranscriptIndexExists)
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("HTTP 400")
                 .hasMessageContaining("creating transcript index");
 

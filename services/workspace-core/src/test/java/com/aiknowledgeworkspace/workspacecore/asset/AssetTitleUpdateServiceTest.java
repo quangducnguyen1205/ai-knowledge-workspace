@@ -19,7 +19,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
 import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
@@ -205,7 +205,7 @@ class AssetTitleUpdateServiceTest {
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessageContaining("Elasticsearch returned HTTP 500");
 
         verify(assetPersistenceService, never()).updateAssetTitle(asset, "New Title");
@@ -231,7 +231,7 @@ class AssetTitleUpdateServiceTest {
                         """, MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessage("Elasticsearch title sync did not match any transcript documents for asset " + assetId);
 
         verify(assetPersistenceService, never()).updateAssetTitle(asset, "New Title");
@@ -285,7 +285,7 @@ class AssetTitleUpdateServiceTest {
                         """, MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> assetTitleUpdateService.updateAssetTitle(assetId, new UpdateAssetTitleRequest("New Title")))
-                .isInstanceOf(ElasticsearchIntegrationException.class)
+                .isInstanceOf(SearchIndexOperationException.class)
                 .hasMessage("Elasticsearch title sync accounted for only 2 of 3 transcript documents for asset " + assetId);
 
         verify(assetPersistenceService, never()).updateAssetTitle(asset, "New Title");
@@ -293,7 +293,7 @@ class AssetTitleUpdateServiceTest {
     }
 
     private Asset asset(UUID assetId, String title, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", title, status, new Workspace(UUID.randomUUID(), "Study Workspace"));
+        Asset asset = new Asset("lecture.mp4", title, status, UUID.randomUUID());
         ReflectionTestUtils.setField(asset, "id", assetId);
         return asset;
     }

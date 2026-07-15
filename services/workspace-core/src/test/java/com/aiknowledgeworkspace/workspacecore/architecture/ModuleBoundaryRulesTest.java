@@ -4,6 +4,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetController;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration.FastApiProperties;
 import com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal.FastApiTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchClientConfig;
@@ -18,7 +19,7 @@ import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchRes
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexingService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.elasticsearch.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriter;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
@@ -39,6 +40,7 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import jakarta.persistence.Entity;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 
@@ -204,7 +206,7 @@ class ModuleBoundaryRulesTest {
     @Test
     void assistantApplicationDoesNotDependOnConcreteAssetOrSearchServices() {
         noClasses()
-                .that().haveSimpleName("AssistantContextService")
+                .that().resideInAPackage("..assistant.application..")
                 .should().dependOnClassesThat().haveSimpleName("AssetTranscriptQueryService")
                 .orShould().dependOnClassesThat().haveSimpleName("SearchService")
                 .orShould().dependOnClassesThat().haveSimpleName("SearchResponse")
@@ -215,15 +217,71 @@ class ModuleBoundaryRulesTest {
     }
 
     @Test
+    void assistantApplicationDoesNotDependOnFastApiTransport() {
+        noClasses()
+                .that().resideInAPackage("..assistant.application..")
+                .should().dependOnClassesThat().resideInAPackage("..integration.fastapi..")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void fastApiAssistantTransportRemainsIntegrationInternal() {
+        noClasses()
+                .that().resideOutsideOfPackage("..integration.fastapi.assistant.internal..")
+                .should().dependOnClassesThat().resideInAPackage("..integration.fastapi.assistant.internal..")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void searchApplicationDoesNotDependOnElasticsearchImplementationOrWireTypes() {
+        noClasses()
+                .that().resideInAnyPackage("..search.application..", "..search.indexing.application..")
+                .should().dependOnClassesThat().resideInAPackage("..search.infrastructure.elasticsearch..")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName("com.fasterxml.jackson.databind.JsonNode")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName("org.springframework.web.client.RestClient")
+                .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
     void assetDoesNotDependOnConcreteWorkspaceOrStorageInfrastructure() {
         noClasses()
                 .that().resideInAPackage("..asset..")
                 .should().dependOnClassesThat().haveSimpleName("WorkspaceService")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.aiknowledgeworkspace.workspacecore.workspace.Workspace")
                 .orShould().dependOnClassesThat().haveSimpleName("ObjectStorageProperties")
                 .orShould().dependOnClassesThat().haveSimpleName("ObjectKeyFactory")
                 .orShould().dependOnClassesThat().haveSimpleName("S3ObjectStorageClient")
                 .orShould().dependOnClassesThat().haveSimpleName("ObjectStorageConfig")
                 .check(WORKSPACE_CORE_CLASSES);
+    }
+
+    @Test
+    void repositoriesAndEntitiesRemainInsideTheirOwningModules() {
+        List<Dependency> forbiddenDependencies = WORKSPACE_CORE_CLASSES.stream()
+                .flatMap(javaClass -> javaClass.getDirectDependenciesFromSelf().stream())
+                .filter(dependency -> isWorkspaceCoreType(dependency.getOriginClass().getPackageName()))
+                .filter(dependency -> isWorkspaceCoreType(dependency.getTargetClass().getPackageName()))
+                .filter(dependency -> !moduleName(dependency.getOriginClass().getPackageName())
+                        .equals(moduleName(dependency.getTargetClass().getPackageName())))
+                .filter(dependency -> dependency.getTargetClass().getSimpleName().endsWith("Repository")
+                        || dependency.getTargetClass().isAnnotatedWith(Entity.class))
+                .toList();
+
+        assertThat(forbiddenDependencies)
+                .as("repositories and JPA entities are implementation details of their owning module")
+                .isEmpty();
+    }
+
+    @Test
+    void obsoleteStorageCompatibilityContractsDoNotReturn() {
+        assertThat(WORKSPACE_CORE_CLASSES.stream()
+                .map(javaClass -> javaClass.getFullName())
+                .noneMatch(className -> className.equals(
+                                "com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageClient")
+                        || className.equals("com.aiknowledgeworkspace.workspacecore.storage.StoreObjectRequest")
+                        || className.equals("com.aiknowledgeworkspace.workspacecore.storage.StoredObject")))
+                .isTrue();
     }
 
     @Test
@@ -269,6 +327,8 @@ class ModuleBoundaryRulesTest {
                 .isEqualTo("com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3");
         assertThat(WorkspaceService.class.getPackageName())
                 .isEqualTo("com.aiknowledgeworkspace.workspacecore.workspace.application.internal");
+        assertThat(FastApiProperties.class.getPackageName())
+                .isEqualTo("com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration");
     }
 
     private static boolean isProcessingOrSearch(String packageName) {
@@ -280,6 +340,16 @@ class ModuleBoundaryRulesTest {
         return packageName.equals("com.aiknowledgeworkspace.workspacecore.processing.application")
                 || packageName.equals("com.aiknowledgeworkspace.workspacecore.processing.application.artifact")
                 || packageName.equals("com.aiknowledgeworkspace.workspacecore.search.application");
+    }
+
+    private static boolean isWorkspaceCoreType(String packageName) {
+        return packageName.startsWith("com.aiknowledgeworkspace.workspacecore.");
+    }
+
+    private static String moduleName(String packageName) {
+        String relativePackage = packageName.substring("com.aiknowledgeworkspace.workspacecore.".length());
+        int separator = relativePackage.indexOf('.');
+        return separator < 0 ? relativePackage : relativePackage.substring(0, separator);
     }
 
 }
