@@ -142,6 +142,6 @@ class AssistantContextControllerTest {
                                 """.formatted(workspaceId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 }

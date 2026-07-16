@@ -5,7 +5,10 @@ import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAns
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -98,7 +101,9 @@ class AssistantAnswerControllerTest {
     @Test
     void providerUnavailableReturnsStructuredServiceUnavailable() throws Exception {
         when(assistantAnswerService.answer(any()))
-                .thenThrow(new AssistantProviderUnavailableException("Assistant provider is unavailable"));
+                .thenThrow(new AssistantProviderUnavailableException(
+                        "FastAPI returned HTTP 500 from http://internal:8000 with raw response body"
+                ));
 
         mockMvc.perform(post("/api/assistant/answer")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -109,7 +114,10 @@ class AssistantAnswerControllerTest {
                                 }
                                 """.formatted(UUID.randomUUID())))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("ASSISTANT_PROVIDER_UNAVAILABLE"))
-                .andExpect(jsonPath("$.message").value("Assistant provider is unavailable"));
+                .andExpect(jsonPath("$.code").value("ASSISTANT_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."))
+                .andExpect(content().string(not(containsString("FastAPI"))))
+                .andExpect(content().string(not(containsString("internal:8000"))))
+                .andExpect(content().string(not(containsString("raw response body"))));
     }
 }

@@ -4,47 +4,51 @@ import com.aiknowledgeworkspace.workspacecore.search.application.port.out.Search
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
+import com.aiknowledgeworkspace.workspacecore.common.web.PublicApiErrorResponses;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class SearchApiExceptionHandler {
 
     @ExceptionHandler(SearchIndexConnectivityException.class)
     ResponseEntity<ApiErrorResponse> handleElasticsearchConnectivity(SearchIndexConnectivityException exception) {
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ApiErrorResponse("ELASTICSEARCH_UNAVAILABLE", exception.getMessage()));
+        return PublicApiErrorResponses.serviceUnavailable("SEARCH_SERVICE_UNAVAILABLE", exception);
     }
 
     @ExceptionHandler(SearchIndexOperationException.class)
     ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(SearchIndexOperationException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("ELASTICSEARCH_INTEGRATION_ERROR", exception.getMessage()));
+        return PublicApiErrorResponses.serviceUnavailable("SEARCH_SERVICE_UNAVAILABLE", exception);
     }
 
     @ExceptionHandler(InvalidSearchRequestException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidSearchRequest(InvalidSearchRequestException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(SearchProcessingJobNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleProcessingJobNotFound(SearchProcessingJobNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("PROCESSING_JOB_NOT_FOUND", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND, "PROCESSING_JOB_NOT_FOUND", "Processing job not found", exception
+        );
     }
 
     @ExceptionHandler(SearchTranscriptUnavailableException.class)
     ResponseEntity<ApiErrorResponse> handleTranscriptUnavailable(SearchTranscriptUnavailableException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, exception.getCode(), exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(SearchAssetNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleAssetNotFound(SearchAssetNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("ASSET_NOT_FOUND", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(HttpStatus.NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found", exception);
     }
 }

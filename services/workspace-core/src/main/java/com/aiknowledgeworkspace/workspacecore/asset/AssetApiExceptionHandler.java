@@ -1,69 +1,83 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
+import com.aiknowledgeworkspace.workspacecore.common.web.PublicApiErrorResponses;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class AssetApiExceptionHandler {
 
     @ExceptionHandler(AssetNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleAssetNotFound(AssetNotFoundException exception) {
-        return response(HttpStatus.NOT_FOUND, "ASSET_NOT_FOUND", exception.getMessage());
+        return PublicApiErrorResponses.clientError(HttpStatus.NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found", exception);
     }
 
     @ExceptionHandler(ProcessingJobNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleProcessingJobNotFound(ProcessingJobNotFoundException exception) {
-        return response(HttpStatus.NOT_FOUND, "PROCESSING_JOB_NOT_FOUND", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND, "PROCESSING_JOB_NOT_FOUND", "Processing job not found", exception
+        );
     }
 
     @ExceptionHandler(InvalidAssetTitleException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidAssetTitle(InvalidAssetTitleException exception) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_ASSET_TITLE", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_ASSET_TITLE", exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(InvalidUploadRequestException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidUploadRequest(InvalidUploadRequestException exception) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_UPLOAD_FILE", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_UPLOAD_FILE", exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(InvalidTranscriptContextWindowException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidTranscriptContextWindow(
             InvalidTranscriptContextWindowException exception
     ) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_TRANSCRIPT_CONTEXT_WINDOW", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_TRANSCRIPT_CONTEXT_WINDOW", exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(TranscriptUnavailableException.class)
     ResponseEntity<ApiErrorResponse> handleTranscriptUnavailable(TranscriptUnavailableException exception) {
-        return response(HttpStatus.CONFLICT, exception.getCode(), exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, exception.getCode(), exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(TranscriptRowNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleTranscriptRowNotFound(TranscriptRowNotFoundException exception) {
-        return response(HttpStatus.NOT_FOUND, "TRANSCRIPT_ROW_NOT_FOUND", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND, "TRANSCRIPT_ROW_NOT_FOUND", "Transcript row not found", exception
+        );
     }
 
     @ExceptionHandler(AssetListRequestException.class)
     ResponseEntity<ApiErrorResponse> handleAssetListRequest(AssetListRequestException exception) {
-        return response(HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(DirectProcessingConnectivityException.class)
     ResponseEntity<ApiErrorResponse> handleDirectProcessingConnectivity(DirectProcessingConnectivityException exception) {
-        return response(HttpStatus.GATEWAY_TIMEOUT, "FASTAPI_CONNECTIVITY_ERROR", exception.getMessage());
+        return PublicApiErrorResponses.serviceUnavailable("PROCESSING_SERVICE_UNAVAILABLE", exception);
     }
 
     @ExceptionHandler(DirectProcessingIntegrationException.class)
     ResponseEntity<ApiErrorResponse> handleDirectProcessingIntegration(DirectProcessingIntegrationException exception) {
-        return response(HttpStatus.BAD_GATEWAY, "FASTAPI_INTEGRATION_ERROR", exception.getMessage());
-    }
-
-    private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {
-        return ResponseEntity.status(status).body(new ApiErrorResponse(code, message));
+        return PublicApiErrorResponses.serviceUnavailable("PROCESSING_SERVICE_UNAVAILABLE", exception);
     }
 }

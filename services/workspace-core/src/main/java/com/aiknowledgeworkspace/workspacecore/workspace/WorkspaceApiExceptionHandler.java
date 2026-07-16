@@ -1,35 +1,51 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
+import com.aiknowledgeworkspace.workspacecore.common.web.PublicApiErrorResponses;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class WorkspaceApiExceptionHandler {
 
     @ExceptionHandler(WorkspaceNotFoundException.class)
     ResponseEntity<ApiErrorResponse> handleWorkspaceNotFound(WorkspaceNotFoundException exception) {
-        return response(HttpStatus.NOT_FOUND, "WORKSPACE_NOT_FOUND", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND, "WORKSPACE_NOT_FOUND", "Workspace not found", exception
+        );
     }
 
     @ExceptionHandler(InvalidWorkspaceNameException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidWorkspaceName(InvalidWorkspaceNameException exception) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_WORKSPACE_NAME", exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_WORKSPACE_NAME", exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(WorkspaceDeleteConflictException.class)
     ResponseEntity<ApiErrorResponse> handleWorkspaceDeleteConflict(WorkspaceDeleteConflictException exception) {
-        return response(HttpStatus.CONFLICT, exception.getCode(), exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, exception.getCode(), safeWorkspaceConflictMessage(exception.getCode()), exception
+        );
     }
 
     @ExceptionHandler(DefaultWorkspaceConflictException.class)
     ResponseEntity<ApiErrorResponse> handleDefaultWorkspaceConflict(DefaultWorkspaceConflictException exception) {
-        return response(HttpStatus.CONFLICT, exception.getCode(), exception.getMessage());
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, exception.getCode(), safeWorkspaceConflictMessage(exception.getCode()), exception
+        );
     }
 
-    private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {
-        return ResponseEntity.status(status).body(new ApiErrorResponse(code, message));
+    private String safeWorkspaceConflictMessage(String code) {
+        return switch (code) {
+            case "DEFAULT_WORKSPACE_DELETE_FORBIDDEN" -> "Default workspace cannot be deleted";
+            case "WORKSPACE_NOT_EMPTY" -> "Workspace cannot be deleted while it still contains assets";
+            default -> "Workspace setup could not be completed";
+        };
     }
 }

@@ -11,15 +11,17 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAss
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -75,7 +77,6 @@ class AssetControllerTest {
                 .setControllerAdvice(
                         new ApiExceptionHandler(),
                         new AssetApiExceptionHandler(),
-                        new FastApiExceptionHandler(),
                         new SearchApiExceptionHandler(),
                         new ObjectStorageApiExceptionHandler(),
                         new WorkspaceApiExceptionHandler()
@@ -102,7 +103,7 @@ class AssetControllerTest {
                         .param("title", "Lecture 1"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 
     @Test
@@ -119,9 +120,11 @@ class AssetControllerTest {
         mockMvc.perform(multipart("/api/assets/upload")
                         .file(file)
                         .param("title", "Lecture 1"))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("OBJECT_STORAGE_ERROR"))
-                .andExpect(jsonPath("$.message").value("Object storage upload failed"));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("STORAGE_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."))
+                .andExpect(content().string(not(containsString("minio"))))
+                .andExpect(content().string(not(containsString("Object storage"))));
     }
 
     @Test
@@ -235,7 +238,7 @@ class AssetControllerTest {
                         .param("workspaceId", workspaceId.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 
     @Test
@@ -431,10 +434,10 @@ class AssetControllerTest {
 
         mockMvc.perform(delete("/api/assets/{assetId}", assetId))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_UNAVAILABLE"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch is unavailable while trying to delete transcript documents for asset " + assetId
-                ));
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."))
+                .andExpect(content().string(not(containsString("Elasticsearch"))))
+                .andExpect(content().string(not(containsString("connection refused"))));
     }
 
     @Test
@@ -445,11 +448,9 @@ class AssetControllerTest {
         )).when(assetDeletionService).deleteAsset(assetId);
 
         mockMvc.perform(delete("/api/assets/{assetId}", assetId))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch returned HTTP 500 while trying to delete transcript documents for asset " + assetId
-                ));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."));
     }
 
     @Test
@@ -568,10 +569,8 @@ class AssetControllerTest {
                                 {"title":"New Title"}
                                 """))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_UNAVAILABLE"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch is unavailable while trying to sync search metadata for asset " + assetId
-                ));
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."));
     }
 
     @Test
@@ -587,11 +586,9 @@ class AssetControllerTest {
                         .content("""
                                 {"title":"New Title"}
                                 """))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch title sync failed for asset " + assetId + ": queue full"
-                ));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."));
     }
 
     @Test
@@ -605,10 +602,8 @@ class AssetControllerTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
                         "/api/assets/{assetId}/index", assetId))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_UNAVAILABLE"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch is unavailable while trying to bulk index transcript rows for asset " + assetId
-                ));
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."));
     }
 
     @Test
@@ -620,11 +615,9 @@ class AssetControllerTest {
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
                         "/api/assets/{assetId}/index", assetId))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("ELASTICSEARCH_INTEGRATION_ERROR"))
-                .andExpect(jsonPath("$.message").value(
-                        "Elasticsearch bulk indexing failed for document " + assetId + "-row-1 with status 429: queue full"
-                ));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."));
     }
 
     @Test
@@ -735,7 +728,7 @@ class AssetControllerTest {
                         .param("window", "2"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRANSCRIPT_ROW_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Transcript row not found for asset " + assetId + ": row-404"));
+                .andExpect(jsonPath("$.message").value("Transcript row not found"));
     }
 
     @Test

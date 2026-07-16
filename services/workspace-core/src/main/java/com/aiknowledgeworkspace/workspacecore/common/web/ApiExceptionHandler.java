@@ -6,52 +6,75 @@ import com.aiknowledgeworkspace.workspacecore.common.identity.EmailAlreadyRegist
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidAuthRequestException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCredentialsException;
 import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidCurrentUserIdException;
+import com.aiknowledgeworkspace.workspacecore.common.identity.InvalidJwtIdentityException;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
 
     @ExceptionHandler(InvalidCurrentUserIdException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidCurrentUserId(InvalidCurrentUserIdException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_CURRENT_USER_ID", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_CURRENT_USER_ID", "userId is required", exception
+        );
     }
 
     @ExceptionHandler(InvalidAuthRequestException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidAuthRequest(InvalidAuthRequestException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(exception.getCode(), exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage(), exception
+        );
     }
 
     @ExceptionHandler(EmailAlreadyRegisteredException.class)
     public ResponseEntity<ApiErrorResponse> handleEmailAlreadyRegistered(EmailAlreadyRegisteredException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse("EMAIL_ALREADY_REGISTERED", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, "EMAIL_ALREADY_REGISTERED", "Email is already registered", exception
+        );
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new ApiErrorResponse("INVALID_CREDENTIALS", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect", exception
+        );
     }
 
     @ExceptionHandler(AuthenticationRequiredException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthenticationRequired(AuthenticationRequiredException exception) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new ApiErrorResponse("AUTHENTICATION_REQUIRED", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Authentication is required", exception
+        );
     }
 
     @ExceptionHandler(AuthModeUnavailableException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthModeUnavailable(AuthModeUnavailableException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse("AUTH_MODE_UNAVAILABLE", exception.getMessage()));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT,
+                "AUTH_MODE_UNAVAILABLE",
+                "The selected authentication mode is unavailable",
+                exception
+        );
+    }
+
+    @ExceptionHandler(InvalidJwtIdentityException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidJwtIdentity(InvalidJwtIdentityException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Authentication is required", exception
+        );
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -68,8 +91,7 @@ public class ApiExceptionHandler {
             message = "Missing required request parameter " + exception.getParameterName();
         }
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(errorCode, message));
+        return PublicApiErrorResponses.clientError(HttpStatus.BAD_REQUEST, errorCode, message, exception);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
@@ -86,14 +108,17 @@ public class ApiExceptionHandler {
             message = "Required request part " + exception.getRequestPartName() + " is missing";
         }
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(errorCode, message));
+        return PublicApiErrorResponses.clientError(HttpStatus.BAD_REQUEST, errorCode, message, exception);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse("INVALID_REQUEST_BODY", "Request body is missing or malformed"));
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_REQUEST_BODY",
+                "Request body is missing or malformed",
+                exception
+        );
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -122,7 +147,34 @@ public class ApiExceptionHandler {
             message = "Invalid value for request parameter " + exception.getName();
         }
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiErrorResponse(errorCode, message));
+        return PublicApiErrorResponses.clientError(HttpStatus.BAD_REQUEST, errorCode, message, exception);
     }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.METHOD_NOT_ALLOWED,
+                "METHOD_NOT_ALLOWED",
+                "This request method is not supported",
+                exception
+        );
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "UNSUPPORTED_MEDIA_TYPE",
+                "This request content type is not supported",
+                exception
+        );
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoResourceFound(NoResourceFoundException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "Resource not found", exception
+        );
+    }
+
 }

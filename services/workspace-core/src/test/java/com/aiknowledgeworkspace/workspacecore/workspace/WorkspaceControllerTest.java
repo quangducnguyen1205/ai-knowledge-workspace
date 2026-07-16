@@ -166,7 +166,7 @@ class WorkspaceControllerTest {
         mockMvc.perform(get("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 
     @Test
@@ -216,7 +216,7 @@ class WorkspaceControllerTest {
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 
     @Test
@@ -236,7 +236,7 @@ class WorkspaceControllerTest {
         mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Workspace not found: " + workspaceId));
+                .andExpect(jsonPath("$.message").value("Workspace not found"));
     }
 
     @Test
