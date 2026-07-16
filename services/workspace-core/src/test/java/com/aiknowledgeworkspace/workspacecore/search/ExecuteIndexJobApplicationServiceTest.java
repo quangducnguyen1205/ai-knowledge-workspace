@@ -289,7 +289,7 @@ class ExecuteIndexJobApplicationServiceTest {
         when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
@@ -342,7 +342,7 @@ class ExecuteIndexJobApplicationServiceTest {
         when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""
                         {
@@ -458,7 +458,7 @@ class ExecuteIndexJobApplicationServiceTest {
         when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
 
         expectIndexExists();
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
@@ -607,7 +607,7 @@ class ExecuteIndexJobApplicationServiceTest {
     }
 
     private void expectDeleteRequest(UUID assetId) {
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
                 .andRespond(withSuccess("""

@@ -116,7 +116,7 @@ public class TranscriptSearchIndexClient implements
     public void deleteTranscriptRows(UUID assetId) {
         JsonNode responseBody = execute(
                 () -> elasticsearchRestClient.post()
-                        .uri("/{indexName}/_delete_by_query?refresh=true",
+                        .uri("/{indexName}/_delete_by_query?refresh=true&ignore_unavailable=true",
                                 elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(Map.of(

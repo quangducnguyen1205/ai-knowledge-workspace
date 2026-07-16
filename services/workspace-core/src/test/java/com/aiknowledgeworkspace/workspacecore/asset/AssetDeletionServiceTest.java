@@ -88,11 +88,12 @@ class AssetDeletionServiceTest {
     }
 
     @Test
-    void deletingProcessingAssetRemovesLocalRecordsWithoutElasticsearchCleanup() {
+    void deletingProcessingAssetCleansEveryOwnedResourceEvenWhenNoSearchDocumentsExist() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
+        expectSearchCleanup(assetId, 0);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -103,11 +104,12 @@ class AssetDeletionServiceTest {
     }
 
     @Test
-    void deletingTranscriptReadyAssetRemovesLocalRecordsWithoutElasticsearchCleanup() {
+    void deletingTranscriptReadyAssetRemovesPartiallyWrittenSearchDocuments() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.TRANSCRIPT_READY);
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
+        expectSearchCleanup(assetId, 1);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -118,24 +120,16 @@ class AssetDeletionServiceTest {
     @Test
     void deletingSearchableAssetCleansElasticsearchThenRemovesLocalRecords() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
+        Asset asset = asset(assetId, AssetStatus.SEARCHABLE, "workspace-media", "objects/complete.mp4");
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
-                .andRespond(withSuccess("""
-                        {
-                          "total": 2,
-                          "deleted": 2,
-                          "version_conflicts": 0,
-                          "failures": []
-                        }
-                        """, org.springframework.http.MediaType.APPLICATION_JSON));
+        expectSearchCleanup(assetId, 2);
 
         assetDeletionService.deleteAsset(assetId);
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
+        verify(objectStorageClient).delete(argThat(reference ->
+                reference.bucket().equals("workspace-media") && reference.objectKey().equals("objects/complete.mp4")));
         mockServer.verify();
     }
 
@@ -145,7 +139,7 @@ class AssetDeletionServiceTest {
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
@@ -163,7 +157,7 @@ class AssetDeletionServiceTest {
         Asset asset = asset(assetId, AssetStatus.SEARCHABLE);
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true"))
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("""
                         {
@@ -183,11 +177,12 @@ class AssetDeletionServiceTest {
     }
 
     @Test
-    void deletingFailedAssetRemovesLocalRecordsWithoutElasticsearchCleanup() {
+    void deletingFailedAssetStillCleansDerivedDocumentsBeforeLocalRecords() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.FAILED);
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
+        expectSearchCleanup(assetId, 0);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -196,21 +191,25 @@ class AssetDeletionServiceTest {
     }
 
     @Test
-    void deletingAssetStillRemovesLocalRecordsWhenObjectCleanupFails() {
+    void deletingAssetDoesNotReportSuccessOrRemoveProductTruthWhenObjectCleanupFails() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING, "workspace-media", "objects/raw.mp4");
 
         when(assetQueryApplicationService.getAsset(assetId)).thenReturn(asset);
+        expectSearchCleanup(assetId, 0);
         doThrow(new ObjectStorageException("delete failed", new RuntimeException("minio down")))
                 .when(objectStorageClient)
                 .delete(argThat(reference -> reference.bucket().equals("workspace-media")
                         && reference.objectKey().equals("objects/raw.mp4")));
 
-        assetDeletionService.deleteAsset(assetId);
+        assertThatThrownBy(() -> assetDeletionService.deleteAsset(assetId))
+                .isInstanceOf(ObjectStorageException.class)
+                .hasMessageContaining("delete failed");
 
-        verify(assetPersistenceService).deleteAssetRecords(asset);
+        verify(assetPersistenceService, never()).deleteAssetRecords(asset);
         verify(objectStorageClient).delete(argThat(reference ->
                 reference.bucket().equals("workspace-media") && reference.objectKey().equals("objects/raw.mp4")));
+        mockServer.verify();
     }
 
     @Test
@@ -231,6 +230,7 @@ class AssetDeletionServiceTest {
         when(assetQueryApplicationService.getAsset(assetId))
                 .thenReturn(asset)
                 .thenThrow(new AssetNotFoundException());
+        expectSearchCleanup(assetId, 0);
 
         assetDeletionService.deleteAsset(assetId);
 
@@ -239,6 +239,23 @@ class AssetDeletionServiceTest {
                 .hasMessageContaining("Asset not found");
 
         verify(assetPersistenceService).deleteAssetRecords(asset);
+        mockServer.verify();
+    }
+
+    private void expectSearchCleanup(UUID assetId, int documentCount) {
+        mockServer.expect(once(), requestTo(
+                        "http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"
+                ))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"assetId.keyword\":\"" + assetId + "\"")))
+                .andRespond(withSuccess("""
+                        {
+                          "total": %d,
+                          "deleted": %d,
+                          "version_conflicts": 0,
+                          "failures": []
+                        }
+                        """.formatted(documentCount, documentCount), org.springframework.http.MediaType.APPLICATION_JSON));
     }
 
     private Asset asset(UUID assetId, AssetStatus status) {

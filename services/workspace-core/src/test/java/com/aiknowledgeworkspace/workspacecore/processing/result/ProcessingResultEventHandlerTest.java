@@ -434,6 +434,41 @@ class ProcessingResultEventHandlerTest {
     }
 
     @Test
+    void lateTranscriptResultAfterAssetDeletionIsTerminalAndCannotRecreateProductData() {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset deletedAsset = persistedAsset(
+                AssetStatus.PROCESSING,
+                ProcessingJobStatus.RUNNING,
+                processingRequestEventId
+        );
+        UUID deletedAssetId = deletedAsset.getId();
+        processingJobRepository.deleteAll();
+        assetRepository.delete(deletedAsset);
+        assetRepository.flush();
+        UUID eventId = UUID.randomUUID();
+        String lateEvent = transcriptReadyEvent(
+                eventId,
+                deletedAssetId,
+                processingRequestEventId,
+                processingRequestEventId
+        );
+
+        ProcessingResultHandleResult firstResult = processingResultEventHandler.handle(lateEvent);
+        ProcessingResultHandleResult duplicateResult = processingResultEventHandler.handle(lateEvent);
+
+        assertThat(firstResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(firstResult.applied()).isFalse();
+        assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(duplicateResult.applied()).isFalse();
+        assertThat(assetRepository.findById(deletedAssetId)).isEmpty();
+        assertThat(processingJobRepository.findByAssetId(deletedAssetId)).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.findByAssetId(deletedAssetId)).isEmpty();
+        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+                .contains("Processing job was not found");
+        verify(transcriptArtifactGateway, never()).loadValidatedRows(processingRequestEventId);
+    }
+
+    @Test
     void directUploadProcessingJobDoesNotRequireProcessingRequestEventId() {
         ProcessingJob processingJob = new ProcessingJob(
                 UUID.randomUUID(),
