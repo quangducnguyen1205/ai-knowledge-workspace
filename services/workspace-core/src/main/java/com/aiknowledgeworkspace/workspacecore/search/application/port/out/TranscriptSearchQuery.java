@@ -7,10 +7,12 @@ public record TranscriptSearchQuery(
         String query,
         UUID workspaceId,
         UUID assetId,
-        List<UUID> eligibleAssetIds
+        List<UUID> eligibleAssetIds,
+        List<String> meaningfulTerms
 ) {
 
     public TranscriptSearchQuery {
         eligibleAssetIds = List.copyOf(eligibleAssetIds);
+        meaningfulTerms = List.copyOf(meaningfulTerms);
     }
 }

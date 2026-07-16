@@ -33,9 +33,12 @@ public class TranscriptSearchIndexClient implements
         TranscriptSearchQueryPort,
         TranscriptSearchMaintenancePort {
 
-    private static final int DEFAULT_RESULT_SIZE = 20;
-    private static final float TEXT_PHRASE_BOOST = 6.0f;
-    private static final float ASSET_TITLE_PHRASE_BOOST = 4.0f;
+    private static final int SEARCH_CANDIDATE_SIZE = 60;
+    private static final String MINIMUM_MEANINGFUL_TERM_MATCH = "2<75%";
+    private static final float TEXT_EXACT_PHRASE_BOOST = 10.0f;
+    private static final float TEXT_NEAR_PHRASE_BOOST = 6.0f;
+    private static final float ASSET_TITLE_EXACT_PHRASE_BOOST = 8.0f;
+    private static final float ASSET_TITLE_NEAR_PHRASE_BOOST = 4.0f;
     private static final MediaType BULK_MEDIA_TYPE = MediaType.parseMediaType("application/x-ndjson");
 
     private final RestClient elasticsearchRestClient;
@@ -59,7 +62,8 @@ public class TranscriptSearchIndexClient implements
                         .uri("/{indexName}/_search", elasticsearchProperties.getTranscriptIndexName())
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(buildSearchBody(
-                                query.query(), query.workspaceId(), query.assetId(), query.eligibleAssetIds()
+                                query.query(), query.meaningfulTerms(), query.workspaceId(), query.assetId(),
+                                query.eligibleAssetIds()
                         ))
                         .retrieve()
                         .body(JsonNode.class),
@@ -317,6 +321,7 @@ public class TranscriptSearchIndexClient implements
 
     private Map<String, Object> buildSearchBody(
             String query,
+            List<String> meaningfulTerms,
             UUID workspaceId,
             UUID assetId,
             List<UUID> eligibleAssetIds
@@ -335,8 +340,10 @@ public class TranscriptSearchIndexClient implements
         }
 
         Map<String, Object> multiMatchQuery = new LinkedHashMap<>();
-        multiMatchQuery.put("query", query);
-        multiMatchQuery.put("fields", List.of("text^3", "assetTitle"));
+        multiMatchQuery.put("query", String.join(" ", meaningfulTerms));
+        multiMatchQuery.put("fields", List.of("text^4", "assetTitle^2"));
+        multiMatchQuery.put("type", "cross_fields");
+        multiMatchQuery.put("minimum_should_match", MINIMUM_MEANINGFUL_TERM_MATCH);
 
         Map<String, Object> boolQuery = new LinkedHashMap<>();
         boolQuery.put("must", List.of(Map.of("multi_match", multiMatchQuery)));
@@ -344,7 +351,7 @@ public class TranscriptSearchIndexClient implements
         boolQuery.put("filter", filterClauses);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("size", DEFAULT_RESULT_SIZE);
+        body.put("size", SEARCH_CANDIDATE_SIZE);
         body.put("query", Map.of("bool", boolQuery));
         body.put("sort", buildSortClauses());
         return body;
@@ -352,15 +359,18 @@ public class TranscriptSearchIndexClient implements
 
     private List<Map<String, Object>> buildPhraseBoostClauses(String query) {
         return List.of(
-                matchPhraseClause("text", query, TEXT_PHRASE_BOOST),
-                matchPhraseClause("assetTitle", query, ASSET_TITLE_PHRASE_BOOST)
+                matchPhraseClause("text", query, TEXT_EXACT_PHRASE_BOOST, 0),
+                matchPhraseClause("text", query, TEXT_NEAR_PHRASE_BOOST, 2),
+                matchPhraseClause("assetTitle", query, ASSET_TITLE_EXACT_PHRASE_BOOST, 0),
+                matchPhraseClause("assetTitle", query, ASSET_TITLE_NEAR_PHRASE_BOOST, 2)
         );
     }
 
-    private Map<String, Object> matchPhraseClause(String field, String query, float boost) {
+    private Map<String, Object> matchPhraseClause(String field, String query, float boost, int slop) {
         Map<String, Object> phraseOptions = new LinkedHashMap<>();
         phraseOptions.put("query", query);
         phraseOptions.put("boost", boost);
+        phraseOptions.put("slop", slop);
         return Map.of("match_phrase", Map.of(field, phraseOptions));
     }
 

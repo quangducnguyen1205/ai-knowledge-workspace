@@ -1,0 +1,163 @@
+package com.aiknowledgeworkspace.workspacecore.search;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class SearchRelevancePolicyTest {
+
+    @Mock
+    private WorkspaceQueryApplication workspaceQueryApplication;
+
+    @Mock
+    private SearchAssetQueryPort searchAssetQueryPort;
+
+    @Mock
+    private TranscriptSearchQueryPort transcriptSearchQueryPort;
+
+    private SearchService searchService;
+
+    @BeforeEach
+    void setUp() {
+        searchService = new SearchService(
+                workspaceQueryApplication,
+                searchAssetQueryPort,
+                transcriptSearchQueryPort
+        );
+    }
+
+    @Test
+    void whatIsCodexKeepsCodexMomentsAndEnforcesWorkspaceCaps() {
+        UUID workspaceId = UUID.randomUUID();
+        List<UUID> eligibleAssetIds = List.of(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()
+        );
+        UUID ieltsAssetId = eligibleAssetIds.get(5);
+        List<TranscriptSearchHit> candidates = new ArrayList<>();
+        candidates.add(hit(
+                ieltsAssetId,
+                "IELTS Speaking Practice",
+                "row-ielts",
+                0,
+                "What is the best way to answer this IELTS speaking prompt?",
+                100.0
+        ));
+        for (int assetIndex = 0; assetIndex < 5; assetIndex++) {
+            UUID assetId = eligibleAssetIds.get(assetIndex);
+            for (int moment = 0; moment < 4; moment++) {
+                candidates.add(hit(
+                        assetId,
+                        "Codex Course " + assetIndex,
+                        "row-" + assetIndex + "-" + moment,
+                        moment,
+                        "Codex helps with grounded software tasks, example " + moment + ".",
+                        90.0 - (assetIndex * 10) - moment
+                ));
+            }
+        }
+
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(eligibleAssetIds);
+        when(transcriptSearchQueryPort.search(any())).thenReturn(candidates);
+
+        SearchResponse response = searchService.search("what is codex", workspaceId, null);
+
+        assertThat(response.results()).hasSize(12);
+        assertThat(response.resultCount()).isEqualTo(12);
+        assertThat(response.results())
+                .allSatisfy(result -> assertThat(result.text()).containsIgnoringCase("codex"))
+                .noneSatisfy(result -> assertThat(result.assetId()).isEqualTo(ieltsAssetId));
+        assertThat(response.results().stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        result -> result.assetId(),
+                        java.util.stream.Collectors.counting()
+                )))
+                .allSatisfy((assetId, count) -> assertThat(count).isLessThanOrEqualTo(3));
+
+        ArgumentCaptor<TranscriptSearchQuery> queryCaptor = ArgumentCaptor.forClass(TranscriptSearchQuery.class);
+        verify(transcriptSearchQueryPort).search(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().query()).isEqualTo("what is codex");
+        assertThat(queryCaptor.getValue().meaningfulTerms()).containsExactly("codex");
+        assertThat(queryCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
+        assertThat(queryCaptor.getValue().eligibleAssetIds()).containsExactlyElementsOf(eligibleAssetIds);
+    }
+
+    @Test
+    void equalScoresHaveDeterministicSegmentAssetAndRowOrdering() {
+        UUID workspaceId = UUID.randomUUID();
+        UUID firstAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId))
+                .thenReturn(List.of(firstAssetId, secondAssetId));
+        when(transcriptSearchQueryPort.search(any())).thenReturn(List.of(
+                hit(secondAssetId, "Codex", "row-b", 2, "Codex details", 4.0),
+                hit(secondAssetId, "Codex", "row-a", 1, "Codex details", 4.0),
+                hit(firstAssetId, "Codex", "row-c", 1, "Codex details", 4.0)
+        ));
+
+        SearchResponse response = searchService.search("codex", workspaceId, null);
+
+        assertThat(response.results())
+                .extracting(result -> result.assetId() + ":" + result.transcriptRowId())
+                .containsExactly(
+                        firstAssetId + ":row-c",
+                        secondAssetId + ":row-a",
+                        secondAssetId + ":row-b"
+                );
+    }
+
+    @Test
+    void genericOnlyQueryReturnsNoLooseMatches() {
+        UUID workspaceId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(assetId));
+
+        SearchResponse response = searchService.search("what is this", workspaceId, null);
+
+        assertThat(response.resultCount()).isZero();
+        assertThat(response.results()).isEmpty();
+        verify(transcriptSearchQueryPort, never()).search(any());
+    }
+
+    private TranscriptSearchHit hit(
+            UUID assetId,
+            String assetTitle,
+            String transcriptRowId,
+            int segmentIndex,
+            String text,
+            double score
+    ) {
+        return new TranscriptSearchHit(
+                assetId,
+                assetTitle,
+                transcriptRowId,
+                segmentIndex,
+                text,
+                "2026-07-16T00:00:00Z",
+                score
+        );
+    }
+}

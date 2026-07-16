@@ -38,14 +38,18 @@ public class SearchService {
         UUID resolvedWorkspaceId = workspaceQueryApplication.resolveWorkspaceId(workspaceId);
         UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
         List<UUID> eligibleAssetIds = resolveEligibleAssetIds(resolvedWorkspaceId, validatedAssetId);
-        if (eligibleAssetIds.isEmpty()) {
+        List<String> meaningfulTerms = SearchRelevancePolicy.meaningfulTerms(normalizedQuery);
+        if (eligibleAssetIds.isEmpty() || meaningfulTerms.isEmpty()) {
             return new SearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, 0, List.of());
         }
         List<TranscriptSearchHit> hits = transcriptSearchQueryPort.search(new TranscriptSearchQuery(
-                normalizedQuery, resolvedWorkspaceId, validatedAssetId, eligibleAssetIds
+                normalizedQuery, resolvedWorkspaceId, validatedAssetId, eligibleAssetIds, meaningfulTerms
         ));
 
-        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, hits);
+        List<TranscriptSearchHit> focusedHits = SearchRelevancePolicy.select(
+                hits, meaningfulTerms, validatedAssetId == null
+        );
+        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, focusedHits);
     }
 
     private String normalizeQuery(String query) {
