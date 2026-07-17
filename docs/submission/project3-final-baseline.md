@@ -53,9 +53,9 @@ configured upstreams before C1 validation:
 
 | Repository | Role | Configured remote | Validated code HEAD | Primary stack | Canonical validation |
 |---|---|---|---|---|---|
-| `ai-knowledge-workspace` | Spring product core and submission documentation | `git@github.com:quangducnguyen1205/ai-knowledge-workspace.git` | `2ebe71b9c02d3528e9e717be742d487c22a93fad` | Java 21, Spring Boot 3.3.5, Maven | `mvn -q -f services/workspace-core/pom.xml test` |
-| `DemoFastAPI` | Internal processing, result delivery, and provider adapter | `https://github.com/quangducnguyen1205/DemoFastAPI.git` | `1bb878f6e430cebce7bdf9ea4c297d4c1aa023e4` | Python, FastAPI 0.116.1, SQLAlchemy 2.0.42, Celery | `PYTHONPATH=backend python -m unittest discover -s backend -p 'test_*.py'` |
-| `ai-knowledge-workspace-fe` | Browser presentation and interaction | `https://github.com/quangducnguyen1205/ai-knowledge-workspace-fe.git` | `b71e32615ad1ee4c468b1ffe01f3603ea98f8eed` | TypeScript 5.6, React 18.3, Vite 5.4, pnpm | `pnpm test && pnpm typecheck && pnpm build` |
+| `ai-knowledge-workspace` | Spring product core and submission documentation | `git@github.com:quangducnguyen1205/ai-knowledge-workspace.git` | `e78011dd3e7434cf5057960780abbb7ea0d74c25` | Java 21, Spring Boot 3.3.5, Maven | `mvn -q -f services/workspace-core/pom.xml test` |
+| `DemoFastAPI` | Internal processing, result delivery, and provider adapter | `https://github.com/quangducnguyen1205/DemoFastAPI.git` | `978476fd2737c9b3012e94088ec2ab09a27ff3e5` | Python, FastAPI 0.116.1, SQLAlchemy 2.0.42, Celery | `PYTHONPATH=backend python -m unittest discover -s backend -p 'test_*.py'` |
+| `ai-knowledge-workspace-fe` | Browser presentation and interaction | `https://github.com/quangducnguyen1205/ai-knowledge-workspace-fe.git` | `eecd42c44a2fe5bab7b90f004c999f68b2cd7137` | TypeScript 5.6, React 18.3, Vite 5.4, pnpm | `pnpm test && pnpm typecheck && pnpm build` |
 
 The Spring submission documentation commit is intentionally layered on the
 validated product-code HEAD. It cannot self-record its own hash without changing
@@ -381,9 +381,9 @@ not substitute for the bounded runtime and browser evidence described above.
 
 The final code commits verified for submission are:
 
-- Spring: `2ebe71b9c02d3528e9e717be742d487c22a93fad`
-- FastAPI: `1bb878f6e430cebce7bdf9ea4c297d4c1aa023e4`
-- Frontend: `b71e32615ad1ee4c468b1ffe01f3603ea98f8eed`
+- Spring: `e78011dd3e7434cf5057960780abbb7ea0d74c25`
+- FastAPI: `978476fd2737c9b3012e94088ec2ab09a27ff3e5`
+- Frontend: `eecd42c44a2fe5bab7b90f004c999f68b2cd7137`
 
 Each repository uses the same annotated local submission tag:
 `project3-submission-v1`. In Spring the tag identifies the final documentation
