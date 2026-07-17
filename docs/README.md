@@ -24,6 +24,7 @@ These are the main current-source-of-truth docs for understanding how the backen
 
 ## Sections
 
+- `project-history/`: historical journey and project evolution summaries
 - `product/`: problem framing, vision, and MVP definition
 - `submission/`: final cross-repository baseline and validation evidence
 - `architecture/`: system-level design and service boundaries
@@ -33,6 +34,10 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `planning/`: execution plans and early delivery milestones
 - `testing/`: smoke and verification checklists
 - `runbooks/`: local setup and operational notes
+
+## Historical Journey
+
+- `project-history/project2-to-project3-evolution.md`: authoritative history of the engineering evolution from Project2 to the current Project3 architecture
 
 ## Product Documents
 
