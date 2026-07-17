@@ -100,12 +100,12 @@ flowchart LR
     Request_Outbox --> Kafka
     Kafka --> FastAPI_Consumer_Celery
     FastAPI_Consumer_Celery --> FastAPI_Result_Outbox
-    FastAPI_Result_Outbox --> Kafka_Result
+    FastAPI_Result_Outbox --> Kafka_Resul
     Kafka_Result --> Spring_Result_Inbox
-    Spring_Result_Inbox --> Canonical_Transcript
-    Canonical_Transcript --> Indexing_Intent
+    Spring_Result_Inbox --> Canonical_Transcrip
+    Canonical_Transcript --> Indexing_Inten
     Indexing_Intent --> Elasticsearch
-    Elasticsearch --> Spring_Search_Assistant
+    Elasticsearch --> Spring_Search_Assistan
     Spring_Search_Assistant --> Browser_Citation_Navigation
 ```
 
@@ -187,7 +187,7 @@ The project evolved from basic unit tests and stubs to:
 * Browser acceptance.
 * Final manual regression.
 
-## 13. Key commit and tag manifest
+## 13. Key commit and tag manifes
 
 **Project2 baseline:**
 | Repo | Commit | Description |
@@ -231,20 +231,86 @@ The project evolved from basic unit tests and stubs to:
 * Avoid speculative abstractions.
 * Optimize UI around user tasks rather than backend states.
 
-## 15. Handoff toward graduation thesis
-**Strongest continuation direction:**
-Evolve AI Knowledge Workspace into an evaluated, grounded learning-video retrieval and assistant platform.
+## 15. Personal Learning Roadmap
 
-**Candidate research/engineering tracks:**
-* Timestamp-aware media playback and citation navigation.
-* Hybrid lexical/vector retrieval.
-* Reranking and retrieval evaluation.
-* Multilingual Vietnamese/English transcript quality.
-* Grounded-answer evaluation and hallucination controls.
-* Workspace collaboration and RBAC.
-* Observability, SLOs and production deployment.
-* Internal-service security.
-* Cost/latency evaluation.
+The stable Project3 baseline is complete. Product development continues as a personal learning roadmap, and graduation-thesis use is only a possible future option.
+
+**Future Direction:**
+> AI Knowledge Workspace — a timestamp-grounded video learning workspace that turns YouTube and private videos into searchable, watchable and citable knowledge.
+
+This is a personal project intended for learning and controlled testing with the owner and trusted acquaintances. It is not being positioned as a public SaaS or production-certified platform. The immediate next implementation phase is timestamp-aware transcript support. DevOps study begins after the defined product feature freeze.
+
+### Phase 1 — Timestamp-aware transcript foundation
+Carry `startMs` and `endMs` through:
+- Whisper/FastAPI transcript output;
+- processing artifact contract;
+- Spring canonical transcript;
+- PostgreSQL;
+- Elasticsearch;
+- search responses;
+- assistant citations;
+- frontend transcript models.
+
+Stable transcript row identity remains canonical. Timestamp is playback metadata, not the sole identity.
+
+### Phase 2 — YouTube source vertical slice
+Support:
+- pasting a validated YouTube URL;
+- `YOUTUBE_VIDEO` alongside `UPLOADED_VIDEO`;
+- Spring-owned product metadata;
+- async processing through the existing outbox/Kafka/FastAPI/Celery/result pipeline;
+- controlled temporary audio acquisition through a `yt-dlp` adapter;
+- transcription, canonical snapshot and automatic indexing;
+- cleanup, timeout, duration and concurrency limits.
+
+Search and Assistant must remain independent of the media source. (Note: `yt-dlp` is a deliberate choice for this personal-project scope and is not documented as production-ready or suitable for a public SaaS. YouTube playback itself must remain embedded from YouTube rather than streamed from project infrastructure).
+
+### Phase 3 — Embedded player and exact-time navigation
+Document the target behavior:
+- Workspace Search result opens the correct asset and transcript row;
+- transcript row resolves to `startMs`;
+- the embedded YouTube player seeks to that moment;
+- transcript clicks and Assistant citations reuse the same canonical navigation;
+- the currently playing transcript segment can be highlighted;
+- direct URL, refresh, Back and Forward preserve context.
+
+### Phase 4 — Keycloak authentication experience
+Document:
+- a custom Keycloak theme aligned with the existing product identity;
+- login, registration, password recovery, verification, errors and required actions;
+- legacy-session React screens retained as a compatibility/local profile;
+- Keycloak remains identity infrastructure, not product truth.
+
+### Phase 5 — Product landing experience
+Document:
+- a product-relevant 3D hero;
+- the story Video → Transcript → Search → Exact Moment → Grounded Citation;
+- lazy loading, static fallback, mobile simplification and reduced-motion support;
+- no 3D inside authenticated productivity screens.
+
+### Phase 6 — Feature freeze and DevOps learning
+After manual acceptance of the product phases, freeze product features and use the application as a personal engineering laboratory for:
+1. container and delivery baseline;
+2. CI/CD and image registry;
+3. VM/cloud deployment;
+4. HTTPS, reverse proxy, secrets and firewall;
+5. PostgreSQL and MinIO backup/restore;
+6. metrics, logs, tracing and alerting;
+7. Terraform and configuration automation;
+8. reliability drills and SLOs;
+9. Kubernetes and GitOps only after the VM/Compose baseline is understood.
+
+### Architecture-learning framing
+These new features are an opportunity to validate the recently refactored architecture through real change. Architecture changes should be driven by real implementation friction, not speculative redesign. Future work must evaluate:
+- product truth ownership;
+- module ownership;
+- application ports;
+- technology adapters;
+- transaction boundaries;
+- failure classification;
+- retry/idempotency;
+- compatibility paths;
+- late/duplicate event handling.
 
 ## 16. Report-ready appendix
 * **Terminology glossary:** See section 2.
@@ -252,4 +318,4 @@ Evolve AI Knowledge Workspace into an evaluated, grounded learning-video retriev
 * **Phase-to-report-chapter mapping:** S1-S5 translates to Architecture, Async Implementation, and Resilience chapters.
 * **Suggested diagrams:** Final module map, Async state machine, System context.
 * **Code-reading order:** Product API -> Outbox -> Kafka -> FastAPI -> Result Relay -> Inbox -> Canonical Snapshot -> Indexing -> Search -> Assistant.
-* **Evidence:** Capture fresh logs of the 10-run observation before thesis submission.
+* **Evidence:** Capture fresh logs of the 10-run observation before potential future thesis submission.
