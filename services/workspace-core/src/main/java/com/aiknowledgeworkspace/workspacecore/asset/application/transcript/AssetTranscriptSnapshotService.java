@@ -6,9 +6,9 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowInput;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
 
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
@@ -21,30 +21,27 @@ import org.springframework.util.StringUtils;
 @Service
 public class AssetTranscriptSnapshotService {
 
-    private final AssetRepository assetRepository;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetStore assetStore;
+    private final CanonicalTranscriptStore transcriptStore;
     private final IndexingRequestApplication indexingRequestApplication;
 
     public AssetTranscriptSnapshotService(
-            AssetRepository assetRepository,
-            AssetPersistenceService assetPersistenceService,
+            AssetStore assetStore,
+            CanonicalTranscriptStore transcriptStore,
             IndexingRequestApplication indexingRequestApplication
     ) {
-        this.assetRepository = assetRepository;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetStore = assetStore;
+        this.transcriptStore = transcriptStore;
         this.indexingRequestApplication = indexingRequestApplication;
     }
 
     @Transactional
-    public List<AssetTranscriptRowSnapshot> replaceCanonicalSnapshot(
+    public List<AssetTranscriptRowView> replaceCanonicalSnapshot(
             Asset asset,
             List<AssetTranscriptRowInput> transcriptRows
     ) {
         List<AssetTranscriptRowInput> usableRows = usableRows(transcriptRows);
-        List<AssetTranscriptRowSnapshot> snapshots = assetPersistenceService.replaceTranscriptSnapshot(
-                asset,
-                usableRows
-        );
+        List<AssetTranscriptRowView> snapshots = transcriptStore.replace(asset.getId(), usableRows);
         indexingRequestApplication.requestIndexingIfEnabled(asset.getId(), toIndexingRequestRows(snapshots));
         return snapshots;
     }
@@ -56,7 +53,7 @@ public class AssetTranscriptSnapshotService {
     ) {
         replaceCanonicalSnapshot(asset, transcriptRows);
         if (asset.getStatus() != AssetStatus.SEARCHABLE) {
-            assetPersistenceService.updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+            updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
         }
     }
 
@@ -65,19 +62,19 @@ public class AssetTranscriptSnapshotService {
         AssetStatus updatedStatus = asset.getStatus() == AssetStatus.SEARCHABLE
                 ? AssetStatus.SEARCHABLE
                 : AssetStatus.TRANSCRIPT_READY;
-        assetPersistenceService.updateAssetStatus(asset, updatedStatus);
+        updateAssetStatus(asset, updatedStatus);
     }
 
     @Transactional
     public void markProcessingFailed(UUID assetId) {
         Asset asset = loadAsset(assetId);
         if (asset.getStatus() != AssetStatus.FAILED) {
-            assetPersistenceService.updateAssetStatus(asset, AssetStatus.FAILED);
+            updateAssetStatus(asset, AssetStatus.FAILED);
         }
     }
 
     public Asset loadAsset(UUID assetId) {
-        return assetRepository.findById(assetId)
+        return assetStore.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
     }
 
@@ -98,15 +95,22 @@ public class AssetTranscriptSnapshotService {
         return row != null && row.segmentIndex() != null && StringUtils.hasText(row.text());
     }
 
-    private List<IndexingRequestRow> toIndexingRequestRows(List<AssetTranscriptRowSnapshot> snapshots) {
+    private List<IndexingRequestRow> toIndexingRequestRows(List<AssetTranscriptRowView> snapshots) {
         return snapshots.stream()
                 .map(snapshot -> new IndexingRequestRow(
-                        snapshot.getTranscriptRowId(),
-                        snapshot.getVideoId(),
-                        snapshot.getSegmentIndex(),
-                        snapshot.getText(),
-                        snapshot.getCreatedAt()
+                        snapshot.id(),
+                        snapshot.videoId(),
+                        snapshot.segmentIndex(),
+                        snapshot.text(),
+                        snapshot.createdAt()
                 ))
                 .toList();
+    }
+
+    private void updateAssetStatus(Asset asset, AssetStatus status) {
+        if (asset.getStatus() != status) {
+            asset.setStatus(status);
+            assetStore.save(asset);
+        }
     }
 }

@@ -6,19 +6,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProcessingAsyncConfiguration {
 
-    private final ProcessingProperties processingProperties;
     private final ProcessingRequestRelayProperties requestRelayProperties;
 
-    public ProcessingAsyncConfiguration(
-            ProcessingProperties processingProperties,
-            ProcessingRequestRelayProperties requestRelayProperties
-    ) {
-        this.processingProperties = processingProperties;
+    public ProcessingAsyncConfiguration(ProcessingRequestRelayProperties requestRelayProperties) {
         this.requestRelayProperties = requestRelayProperties;
-    }
-
-    public boolean isKafkaRequestMode() {
-        return processingProperties.getTriggerMode() == ProcessingTriggerMode.KAFKA_REQUEST;
     }
 
     public boolean isRequestRelayEnabled() {

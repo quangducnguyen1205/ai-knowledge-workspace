@@ -100,15 +100,14 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Confirm `asset.processing.result.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Confirm `asset.indexing.requested.v1` has one partition and replication factor one with `kafka-topics.sh --describe`.
 - [ ] Optionally produce and consume one harmless CLI test record directly through Kafka to verify the broker path without creating a fake product outbox row.
-- [ ] The normal v1 upload smoke path uses the `project3` profile and therefore requires Kafka
-      request/result delivery plus automatic indexing. The retained compatibility smoke may use
-      `direct_upload` without Kafka, but it is not the normal product path.
-- [ ] Kafka request-path smoke should use `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, `WORKSPACE_CORE_KAFKA_ENABLED=true`, `WORKSPACE_CORE_OUTBOX_RELAY_ENABLED=true`, `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once`, and `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>` for an explicit scoped one-shot relay invocation. Do not relay request outbox rows for ordinary `direct_upload` uploads; the smoke command relays only the selected event ID and will not publish arbitrary due outbox rows.
-- [ ] P3-D2 `[ĐÃ SMOKE THỰC TẾ]` verified the async processing path with
-      `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`, Kafka, automatic request/result
-      relays and the Spring result listener. The integrated `project3` profile now enables this
-      path by default; use `compatibility` only for the rollback smoke and keep its explicit
-      indexing fallback visible.
+- [ ] The normal upload smoke uses the `project3` profile and requires Kafka request/result
+      delivery plus automatic indexing. There is no alternate Spring processing path.
+- [ ] A scoped request-path smoke may use `WORKSPACE_CORE_KAFKA_ENABLED=true`,
+      `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=relay_request_outbox_once`, and
+      `WORKSPACE_CORE_PROCESSING_SMOKE_REQUEST_OUTBOX_EVENT_ID=<outbox-event-id>`. The command
+      relays only the selected request event and never arbitrary due rows.
+- [ ] P3-D2 `[ĐÃ SMOKE THỰC TẾ]` historically verified Kafka, automatic request/result relays and
+      the Spring result listener. The integrated `project3` profile enables this path.
 - [ ] P3-D4 `[ĐÃ SMOKE THỰC TẾ]` verified the fully automatic result-publication path: run the FastAPI overlay `result-relay` service with `PROCESSING_OUTBOX_AUTO_RELAY_ENABLED=true` and `PROCESSING_RESULT_PUBLISHER_ENABLED=true`, do not invoke the base one-shot relay, keep `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`, and confirm request/result topic offsets each advance by exactly one while `asset.indexing.requested.v1` does not move.
 - [ ] Kafka publishing requires idempotent future consumers; there is no generic all-event scheduler, retry topic, or DLQ.
 - [ ] Spring result-event handling can run through either the one-shot local file handler or the disabled-by-default Kafka listener. For the manual file path, use `WORKSPACE_CORE_PROCESSING_SMOKE_COMMAND=handle_result_file_once` with a temporary result-envelope file.
@@ -116,10 +115,14 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Listener acknowledgement policy: `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported records commit offsets with `MANUAL_IMMEDIATE`; unexpected runtime or infrastructure failures do not acknowledge and should redeliver. No retry topic, Kafka DLQ, or automatic recovery of durable consumed-result handler failures is enabled. Bounded outbox reconciliation applies only to typed transient publication failures.
 - [ ] Durable `FAILED` result rows can be retried only through exact-ID operator recovery: `WORKSPACE_CORE_PROCESSING_RECOVERY_COMMAND=retry_failed_result_event_once` plus `WORKSPACE_CORE_PROCESSING_RECOVERY_RESULT_EVENT_ID=<result-event-id>`. This uses the retained bounded metadata-only envelope; it is not a scan of all failed rows.
 - [ ] Stale request outbox rows in `PUBLISHING` can be requeued only through exact-ID operator recovery: `WORKSPACE_CORE_PROCESSING_RECOVERY_COMMAND=requeue_stuck_outbox_event_once`, `WORKSPACE_CORE_PROCESSING_RECOVERY_OUTBOX_EVENT_ID=<outbox-event-id>`, and `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE=<duration>`. Requeue does not publish; invoke the scoped request relay separately if needed.
-- [ ] For manual result-event handling, confirm `payload.processingRequestId` equals `causationEventId` and matches `ProcessingJob.processingRequestEventId`; do not use `fastapiTaskId` for Kafka result correlation.
+- [ ] For manual result-event handling, confirm `payload.processingRequestId` equals
+      `causationEventId` and matches `ProcessingJob.processingRequestEventId`.
 - [ ] Derived search indexing auto-request is disabled by default with `WORKSPACE_CORE_SEARCH_INDEXING_AUTO_REQUEST_ENABLED=false`.
 - [ ] The automatic indexing request relay is also disabled by default with `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=false`. P3-E1 `[ĐÃ XÁC MINH TỪ CODE]` verifies the relay selects only due `asset.indexing.requested` rows and leaves processing request/result rows untouched. Enabling this relay alone does not create indexing jobs or start the indexing listener.
-- [ ] P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verified the complete opt-in automatic path: one `kafka_request` upload used automatic processing request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay, Spring automatic result listener, automatic indexing request creation, automatic indexing request relay, and Spring indexing listener. Request, result, and indexing topics each advanced by exactly one; the selected asset reached `SEARCHABLE`; workspace search, asset-scoped search, and transcript context returned it; and PostgreSQL product-state gating hid its stale Elasticsearch document after a temporary `SEARCHABLE -> TRANSCRIPT_READY` update. No manual relay, result-file handler, recovery command, retry topic, DLQ, reindex, rebuild, or reconcile workflow was used.
+- [ ] P3-E2 `[ĐÃ SMOKE THỰC TẾ]` historically verified the complete automatic upload,
+      processing-result and indexing chain. Request, result and indexing topics each advanced once;
+      the asset reached `SEARCHABLE`; search/context returned it; PostgreSQL gating hid a stale
+      derived document after a temporary state change.
 - [ ] If validating the indexing event path later, use a stable Spring-owned transcript snapshot, enable auto-request explicitly, capture the selected `asset.indexing.requested` outbox event ID, and relay only that selected row with either `WORKSPACE_CORE_SEARCH_SMOKE_COMMAND=relay_indexing_outbox_once` plus `WORKSPACE_CORE_SEARCH_SMOKE_INDEXING_OUTBOX_EVENT_ID=<outbox-event-id>` or the opt-in indexing relay. Start the indexing listener separately before publication when the smoke goal is listener consumption.
 - [ ] The indexing listener is off by default. Enable it only for a controlled local run with `WORKSPACE_CORE_KAFKA_INDEXING_LISTENER_ENABLED=true`; the default consumer group is `workspace-search-indexer-v1`, and default offset reset is `latest`.
 - [ ] Indexing events must contain bounded metadata only: `assetId`, `indexingJobId`, and `snapshotFingerprint`. Do not include transcript text, object keys, raw media bytes, credentials, or stack traces.
@@ -285,8 +288,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
   - [ ] `processingJobId`
   - [ ] `assetStatus`
   - [ ] `workspaceId`
-- [ ] Confirm the response does not expose raw `fastapiTaskId`.
-- [ ] Confirm the response does not expose raw `fastapiVideoId`.
+- [ ] Confirm the response exposes no internal processing correlation or object-storage secret.
 - [ ] If `workspaceId` was omitted, confirm the response uses the current user's default workspace.
 - [ ] Confirm initial `assetStatus` is:
   - [ ] `PROCESSING` for accepted upstream work

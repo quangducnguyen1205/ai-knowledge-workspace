@@ -4,7 +4,7 @@ import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryService;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
@@ -20,8 +20,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-outbox-recovery;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -36,17 +36,17 @@ import org.springframework.test.util.ReflectionTestUtils;
         "outbox.recovery.batch-size=50",
         "outbox.recovery.max-cycles=3"
 })
+@Transactional
 class OutboxRecoveryServiceTest {
 
     @Autowired
-    private OutboxEventRepository repository;
+    private OutboxEventStore repository;
 
     @Autowired
     private OutboxRecoveryService recoveryService;
 
     @BeforeEach
     void setUp() {
-        repository.deleteAll();
     }
 
     @Test
@@ -96,7 +96,7 @@ class OutboxRecoveryServiceTest {
                 OutboxFailureDisposition.TRANSIENT,
                 now,
                 3,
-                PageRequest.of(0, 50)
+                50
         );
 
         assertThat(ids).containsExactly(eligible.getId());
@@ -201,7 +201,7 @@ class OutboxRecoveryServiceTest {
         ReflectionTestUtils.setField(event, "recoveryCycleCount", recoveryCycleCount);
         ReflectionTestUtils.setField(event, "attemptCount", status == OutboxEventStatus.FAILED ? 5 : 0);
         ReflectionTestUtils.setField(event, "lastFailureCategory", "TEST_CATEGORY");
-        return repository.saveAndFlush(event);
+        return repository.save(event);
     }
 
     private OutboxEvent newProcessingEvent() {

@@ -1,16 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.search.indexing.application;
 
 import com.aiknowledgeworkspace.workspacecore.search.SearchAssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.search.SearchProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.search.SearchTranscriptUnavailableException;
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingApplication;
 import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingResult;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
@@ -22,20 +18,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class TranscriptIndexingService implements ExplicitIndexingApplication {
 
-    private final ProcessingRequestApplication processingRequestApplication;
     private final IndexingAssetPort indexingAssetPort;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final AssetSearchIndexRequestService searchIndexRequestService;
     private final ExecuteIndexJobApplicationService executeIndexJobApplicationService;
 
     public TranscriptIndexingService(
-            ProcessingRequestApplication processingRequestApplication,
             IndexingAssetPort indexingAssetPort,
             TranscriptSnapshotFingerprintService fingerprintService,
             AssetSearchIndexRequestService searchIndexRequestService,
             ExecuteIndexJobApplicationService executeIndexJobApplicationService
     ) {
-        this.processingRequestApplication = processingRequestApplication;
         this.indexingAssetPort = indexingAssetPort;
         this.fingerprintService = fingerprintService;
         this.searchIndexRequestService = searchIndexRequestService;
@@ -44,22 +37,17 @@ public class TranscriptIndexingService implements ExplicitIndexingApplication {
 
     @Override
     public ExplicitIndexingResult indexAssetTranscript(UUID assetId) {
-        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
-                .orElseThrow(SearchProcessingJobNotFoundException::new);
-        if (processingJob.status() != ProcessingJobStatus.SUCCEEDED) {
-            throw new SearchTranscriptUnavailableException(
-                    "TRANSCRIPT_NOT_READY",
-                    "Transcript is not ready until processing reaches terminal success"
-            );
-        }
-
         IndexingAssetSource indexingSource;
         try {
-            indexingSource = indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(
-                    assetId, processingJob.fastapiVideoId()
-            );
+            indexingSource = indexingAssetPort.loadAuthorizedIndexingSource(assetId);
         } catch (SearchAssetUnavailableException exception) {
             throw new SearchAssetNotFoundException();
+        }
+        if (indexingSource.transcriptRows().isEmpty()) {
+            throw new SearchTranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_READY",
+                    "Canonical transcript is unavailable until processing reaches terminal success"
+            );
         }
         String snapshotFingerprint = fingerprintService.fingerprint(indexingSource.transcriptRows());
         AssetSearchIndexJob indexingJob = searchIndexRequestService.createExplicitJob(assetId, snapshotFingerprint);

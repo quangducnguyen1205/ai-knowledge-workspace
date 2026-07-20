@@ -1,24 +1,25 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
-
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetPage;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetStatusView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -29,76 +30,105 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AssetQueryApplicationServiceTest {
 
     @Mock
-    private AssetRepository assetRepository;
-    @Mock
-    private ProcessingRequestApplication processingRequestApplication;
-    @Mock
-    private DirectProcessingCompatibilityAdapter compatibilityAdapter;
-    @Mock
-    private AssetPersistenceService assetPersistenceService;
-    @Mock
-    private WorkspaceAccessApplication workspaceService;
+    private AssetStore assetStore;
 
-    @Test
-    void localStatusProjectionDoesNotCallCompatibilityRuntimeWithoutATaskId() {
-        UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, AssetStatus.PROCESSING);
-        ProcessingJobView job = new ProcessingJobView(
-                UUID.randomUUID(), assetId, null, null, ProcessingJobStatus.PENDING, null
-        );
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspaceId())).thenReturn(true);
-        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(job));
+    @Mock
+    private ProcessingRequestApplication processingRequests;
 
-        AssetStatusResponse result = service().getAssetStatus(assetId);
+    @Mock
+    private AssetTranscriptQueryService transcripts;
 
-        assertThat(result.processingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
-        verify(compatibilityAdapter, never()).taskState(org.mockito.Mockito.any());
+    @Mock
+    private WorkspaceAccessApplication workspaceAccess;
+
+    private AssetQueryApplicationService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new AssetQueryApplicationService(assetStore, processingRequests, transcripts, workspaceAccess);
     }
 
     @Test
-    void directStatusRefreshDelegatesPersistenceAfterCompatibilityRead() {
+    void statusQueryReadsCanonicalStateWithoutPollingOrMutation() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, AssetStatus.PROCESSING);
-        ProcessingJobView job = new ProcessingJobView(
-                UUID.randomUUID(), assetId, "task-1", "video-1", ProcessingJobStatus.RUNNING, "running"
-        );
-        DirectProcessingTaskState taskState = new DirectProcessingTaskState(
-                "success", ProcessingJobStatus.SUCCEEDED, AssetStatus.PROCESSING
-        );
-        AssetStatusResponse expected = new AssetStatusResponse(
-                assetId, job.id(), AssetStatus.PROCESSING, ProcessingJobStatus.SUCCEEDED
-        );
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
-        when(workspaceService.isOwnedByCurrentUser(asset.getWorkspaceId())).thenReturn(true);
-        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(job));
-        when(compatibilityAdapter.taskState("task-1")).thenReturn(taskState);
-        when(assetPersistenceService.refreshAssetStatus(
-                asset,
-                job,
-                "success",
-                ProcessingJobStatus.SUCCEEDED,
-                AssetStatus.PROCESSING
-        )).thenReturn(expected);
+        UUID workspaceId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, AssetStatus.TRANSCRIPT_READY, Instant.parse("2026-01-01T00:00:00Z"));
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+        when(processingRequests.findByAssetId(assetId)).thenReturn(Optional.of(
+                new ProcessingJobView(jobId, assetId, ProcessingJobStatus.SUCCEEDED, "completed")
+        ));
 
-        assertThat(service().getAssetStatus(assetId)).isEqualTo(expected);
+        AssetStatusView result = service.getAssetStatus(assetId);
+
+        assertThat(result).isEqualTo(new AssetStatusView(
+                assetId, jobId, AssetStatus.TRANSCRIPT_READY, ProcessingJobStatus.SUCCEEDED
+        ));
+        verifyNoInteractions(transcripts);
     }
 
-    private AssetQueryApplicationService service() {
-        return new AssetQueryApplicationService(
-                assetRepository,
-                processingRequestApplication,
-                compatibilityAdapter,
-                assetPersistenceService,
-                workspaceService
-        );
+    @Test
+    void nonOwnedAssetIsHiddenAsNotFound() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(
+                asset(assetId, workspaceId, AssetStatus.PROCESSING, Instant.now())
+        ));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getAsset(assetId))
+                .isInstanceOf(AssetNotFoundException.class);
     }
 
-    private Asset asset(UUID assetId, AssetStatus status) {
-        Asset asset = new Asset(
-                "lecture.mp4", "Lecture", status, UUID.randomUUID()
+    @Test
+    void listAppliesStableOrderingFilteringAndPaginationInApplicationLayer() {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceAccess.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, "owner-1"));
+        Asset older = asset(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                workspaceId,
+                AssetStatus.SEARCHABLE,
+                Instant.parse("2026-01-01T00:00:00Z")
         );
-        ReflectionTestUtils.setField(asset, "id", assetId);
+        Asset newer = asset(
+                UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                workspaceId,
+                AssetStatus.SEARCHABLE,
+                Instant.parse("2026-01-02T00:00:00Z")
+        );
+        when(assetStore.findByWorkspaceId(workspaceId)).thenReturn(List.of(older, newer));
+
+        AssetPage page = service.listAssets(workspaceId, 0, 1, AssetStatus.SEARCHABLE);
+
+        assertThat(page.totalElements()).isEqualTo(2);
+        assertThat(page.hasNext()).isTrue();
+        assertThat(page.items()).extracting(item -> item.id()).containsExactly(newer.getId());
+    }
+
+    @Test
+    void successfulJobWithoutCanonicalRowsIsNotSilentlyRefreshedFromFastApi() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, AssetStatus.TRANSCRIPT_READY, Instant.now());
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+        when(processingRequests.findByAssetId(assetId)).thenReturn(Optional.of(
+                new ProcessingJobView(UUID.randomUUID(), assetId, ProcessingJobStatus.SUCCEEDED, "completed")
+        ));
+        when(transcripts.loadUsableSnapshot(assetId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.getAssetTranscript(assetId))
+                .isInstanceOf(TranscriptUnavailableException.class)
+                .hasMessageContaining("Canonical transcript is unavailable");
+    }
+
+    private Asset asset(UUID id, UUID workspaceId, AssetStatus status, Instant createdAt) {
+        Asset asset = new Asset("lecture.mp4", "Lecture", status, workspaceId);
+        ReflectionTestUtils.setField(asset, "id", id);
+        ReflectionTestUtils.setField(asset, "createdAt", createdAt);
+        ReflectionTestUtils.setField(asset, "updatedAt", createdAt);
         return asset;
     }
 }

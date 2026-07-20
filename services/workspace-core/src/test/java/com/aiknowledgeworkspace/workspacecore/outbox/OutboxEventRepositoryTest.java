@@ -2,20 +2,20 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
 
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingJobStore;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-outbox;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -35,32 +36,25 @@ import org.springframework.boot.test.context.SpringBootTest;
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.flyway.enabled=true"
 })
+@Transactional
 class OutboxEventRepositoryTest {
 
     @Autowired
-    private OutboxEventRepository outboxEventRepository;
+    private OutboxEventStore outboxEventRepository;
 
     @Autowired
-    private ProcessingJobRepository processingJobRepository;
+    private ProcessingJobStore processingJobRepository;
 
     @Autowired
-    private AssetRepository assetRepository;
+    private AssetStore assetRepository;
 
     @Autowired
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @Autowired
     private EntityManager entityManager;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-
-    @BeforeEach
-    void setUp() {
-        processingJobRepository.deleteAll();
-        assetRepository.deleteAll();
-        workspaceRepository.deleteAll();
-        outboxEventRepository.deleteAll();
-    }
 
     @Test
     void persistsPendingOutboxEventWithFlywayManagedSchemaThroughRelayStateMigration() {
@@ -74,7 +68,7 @@ class OutboxEventRepositoryTest {
                 "{\"assetId\":\"%s\"}".formatted(assetId)
         );
 
-        OutboxEvent savedEvent = outboxEventRepository.saveAndFlush(event);
+        OutboxEvent savedEvent = outboxEventRepository.save(event);
 
         assertThat(savedEvent.getId()).isNotNull();
         assertThat(savedEvent.getEventVersion()).isEqualTo(1);
@@ -89,7 +83,7 @@ class OutboxEventRepositoryTest {
         assertThat(savedEvent.getLastFailureCategory()).isNull();
         assertThat(savedEvent.getRecoveryExhaustedAt()).isNull();
 
-        List<OutboxEvent> aggregateEvents = outboxEventRepository.findByAggregateTypeAndAggregateId(
+        List<OutboxEvent> aggregateEvents = outboxEventRepository.findByAggregate(
                 ProcessingRequestedEventContract.AGGREGATE_TYPE,
                 assetId
         );
@@ -138,30 +132,27 @@ class OutboxEventRepositoryTest {
                         """.formatted(assetId, workspace.getId(), assetId)
         );
 
-        outboxEventRepository.saveAndFlush(event);
+        outboxEventRepository.save(event);
+        entityManager.flush();
         entityManager.clear();
 
         OutboxEvent reloadedEvent = outboxEventRepository.findById(preassignedEventId).orElseThrow();
         assertThat(reloadedEvent.getId()).isEqualTo(preassignedEventId);
 
         ProcessingJob processingJob = new ProcessingJob(
-                assetId,
-                null,
-                null,
-                ProcessingJobStatus.PENDING,
-                "kafka_request_pending"
+                assetId, ProcessingJobStatus.PENDING, "processing_request_pending"
         );
         processingJob.setProcessingRequestEventId(preassignedEventId);
-        ProcessingJob savedProcessingJob = processingJobRepository.saveAndFlush(processingJob);
+        ProcessingJob savedProcessingJob = processingJobRepository.save(processingJob);
+        entityManager.flush();
         UUID processingJobId = savedProcessingJob.getId();
         entityManager.clear();
 
-        assertThat(processingJobRepository.findByAssetIdAndProcessingRequestEventId(assetId, preassignedEventId))
+        assertThat(processingJobRepository.findByAssetIdAndRequestEventId(assetId, preassignedEventId))
                 .map(ProcessingJob::getId)
                 .contains(processingJobId);
-        ProcessingJob reloadedProcessingJob = processingJobRepository.findById(processingJobId).orElseThrow();
-        assertThat(reloadedProcessingJob.getFastapiTaskId()).isNull();
-        assertThat(reloadedProcessingJob.getFastapiVideoId()).isNull();
+        ProcessingJob reloadedProcessingJob = processingJobRepository.findJobById(processingJobId).orElseThrow();
+        assertThat(reloadedProcessingJob.getProcessingRequestEventId()).isEqualTo(preassignedEventId);
 
         KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(
                 kafkaProperties(),

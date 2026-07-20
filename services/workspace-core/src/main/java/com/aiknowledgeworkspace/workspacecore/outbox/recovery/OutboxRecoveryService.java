@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.outbox.recovery;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxFailureRecovery;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
@@ -11,21 +11,20 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class OutboxRecoveryService implements OutboxFailureRecovery {
 
-    private final OutboxEventRepository repository;
+    private final OutboxEventStore repository;
     private final OutboxRecoveryProperties properties;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     @Autowired
     public OutboxRecoveryService(
-            OutboxEventRepository repository,
+            OutboxEventStore repository,
             OutboxRecoveryProperties properties,
             TransactionTemplate transactionTemplate
     ) {
@@ -33,7 +32,7 @@ public class OutboxRecoveryService implements OutboxFailureRecovery {
     }
 
     public OutboxRecoveryService(
-            OutboxEventRepository repository,
+            OutboxEventStore repository,
             OutboxRecoveryProperties properties,
             TransactionTemplate transactionTemplate,
             Clock clock
@@ -56,7 +55,7 @@ public class OutboxRecoveryService implements OutboxFailureRecovery {
                 OutboxFailureDisposition.TRANSIENT,
                 now,
                 properties.getMaxCycles(),
-                PageRequest.of(0, properties.getBatchSize())
+                properties.getBatchSize()
         );
 
         int requeued = 0;

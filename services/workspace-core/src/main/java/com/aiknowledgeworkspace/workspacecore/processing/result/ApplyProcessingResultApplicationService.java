@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
-import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingJobStore;
 
 import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
@@ -26,18 +26,18 @@ class ApplyProcessingResultApplicationService {
     private static final int MAX_RAW_UPSTREAM_STATE_LENGTH = 64;
 
     private final ProcessingResultInbox processingResultInbox;
-    private final ProcessingJobRepository processingJobRepository;
+    private final ProcessingJobStore processingJobStore;
     private final TranscriptArtifactGateway transcriptArtifactGateway;
     private final ProcessingResultAssetPort processingResultAssetPort;
 
     ApplyProcessingResultApplicationService(
             ProcessingResultInbox processingResultInbox,
-            ProcessingJobRepository processingJobRepository,
+            ProcessingJobStore processingJobStore,
             TranscriptArtifactGateway transcriptArtifactGateway,
             ProcessingResultAssetPort processingResultAssetPort
     ) {
         this.processingResultInbox = processingResultInbox;
-        this.processingJobRepository = processingJobRepository;
+        this.processingJobStore = processingJobStore;
         this.transcriptArtifactGateway = transcriptArtifactGateway;
         this.processingResultAssetPort = processingResultAssetPort;
     }
@@ -89,7 +89,7 @@ class ApplyProcessingResultApplicationService {
         applyAssetTranscriptReady(event.aggregateId(), transcriptRows);
         processingJob.setProcessingJobStatus(ProcessingJobStatus.SUCCEEDED);
         processingJob.setRawUpstreamTaskState("transcript.ready");
-        processingJobRepository.save(processingJob);
+        processingJobStore.save(processingJob);
     }
 
     private void applyProcessingFailed(ProcessingResultEventEnvelope event) {
@@ -97,12 +97,12 @@ class ApplyProcessingResultApplicationService {
         ProcessingJob processingJob = loadProcessingJob(event.aggregateId(), event.causationEventId());
         processingJob.setProcessingJobStatus(ProcessingJobStatus.FAILED);
         processingJob.setRawUpstreamTaskState(safeRawUpstreamState(payload));
-        processingJobRepository.save(processingJob);
+        processingJobStore.save(processingJob);
         applyAssetProcessingFailed(event.aggregateId());
     }
 
     private ProcessingJob loadProcessingJob(UUID assetId, UUID processingRequestEventId) {
-        return processingJobRepository.findByAssetIdAndProcessingRequestEventId(assetId, processingRequestEventId)
+        return processingJobStore.findByAssetIdAndRequestEventId(assetId, processingRequestEventId)
                 .orElseThrow(() -> new ProcessingResultEventApplyException(
                         "Processing job was not found for result event request correlation"
                 ));

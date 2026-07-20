@@ -7,7 +7,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.application.Transc
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventEnvelope;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
@@ -27,9 +27,6 @@ import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPo
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -43,9 +40,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TranscriptIndexingServiceTest {
 
     @Mock
-    private ProcessingRequestApplication processingRequestApplication;
-
-    @Mock
     private IndexingAssetPort indexingAssetPort;
 
     @Mock
@@ -55,7 +49,7 @@ class TranscriptIndexingServiceTest {
     private AssetSearchIndexRequestService searchIndexRequestService;
 
     @Mock
-    private AssetSearchIndexJobRepository searchIndexJobRepository;
+    private SearchIndexJobStore searchIndexJobRepository;
 
     @Mock
     private ExecuteIndexJobApplicationService executeIndexJobApplicationService;
@@ -66,15 +60,13 @@ class TranscriptIndexingServiceTest {
     @Test
     void explicitIndexingUsesSharedIndexingJobExecutor() {
         UUID assetId = UUID.randomUUID();
-        ProcessingJobView processingJob = processingJob(assetId);
         IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture", List.of(
                 transcriptRow(0, "Searchable text")
         ));
         List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
 
-        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1"))
+        when(indexingAssetPort.loadAuthorizedIndexingSource(assetId))
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
@@ -95,7 +87,6 @@ class TranscriptIndexingServiceTest {
     @Test
     void explicitIndexingAlreadyIndexedSameFingerprintIsIdempotentSuccess() {
         UUID assetId = UUID.randomUUID();
-        ProcessingJobView processingJob = processingJob(assetId);
         IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture", List.of(
                 transcriptRow(0, "Searchable text")
         ));
@@ -104,8 +95,7 @@ class TranscriptIndexingServiceTest {
         indexingJob.markIndexing();
         indexingJob.markIndexed(Instant.now());
 
-        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1"))
+        when(indexingAssetPort.loadAuthorizedIndexingSource(assetId))
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
@@ -127,7 +117,6 @@ class TranscriptIndexingServiceTest {
     @Test
     void explicitIndexingFailureDoesNotRecordDurableJobFailureAndDoesNotMarkSearchable() {
         UUID assetId = UUID.randomUUID();
-        ProcessingJobView processingJob = processingJob(assetId);
         IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture", List.of(
                 transcriptRow(0, "Searchable text")
         ));
@@ -135,8 +124,7 @@ class TranscriptIndexingServiceTest {
         AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "fingerprint-1");
         SearchIndexOperationException failure = new SearchIndexOperationException("bulk failed");
 
-        when(processingRequestApplication.findByAssetId(assetId)).thenReturn(Optional.of(processingJob));
-        when(indexingAssetPort.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1"))
+        when(indexingAssetPort.loadAuthorizedIndexingSource(assetId))
                 .thenReturn(indexingSource);
         when(fingerprintService.fingerprint(transcriptRows)).thenReturn("fingerprint-1");
         when(searchIndexRequestService.createExplicitJob(assetId, "fingerprint-1")).thenReturn(indexingJob);
@@ -199,7 +187,6 @@ class TranscriptIndexingServiceTest {
 
     private TranscriptIndexingService transcriptIndexingService() {
         return new TranscriptIndexingService(
-                processingRequestApplication,
                 indexingAssetPort,
                 fingerprintService,
                 searchIndexRequestService,
@@ -240,17 +227,6 @@ class TranscriptIndexingServiceTest {
             List<IndexingTranscriptRow> transcriptRows
     ) {
         return new IndexingAssetSource(assetId, workspaceId, title, transcriptRows);
-    }
-
-    private ProcessingJobView processingJob(UUID assetId) {
-        return new ProcessingJobView(
-                UUID.randomUUID(),
-                assetId,
-                "task-1",
-                "video-1",
-                ProcessingJobStatus.SUCCEEDED,
-                "success"
-        );
     }
 
     private IndexingTranscriptRow transcriptRow(int segmentIndex, String text) {

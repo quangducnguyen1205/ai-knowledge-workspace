@@ -3,8 +3,6 @@ package com.aiknowledgeworkspace.workspacecore.processing.request;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,18 +16,15 @@ public class ProcessingRequestRelayScheduler {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingRequestRelayScheduler.class);
 
     private final ProcessingRequestRelayProperties properties;
-    private final ProcessingProperties processingProperties;
     private final WorkspaceKafkaProperties kafkaProperties;
     private final OutboxRelay outboxRelay;
 
     public ProcessingRequestRelayScheduler(
             ProcessingRequestRelayProperties properties,
-            ProcessingProperties processingProperties,
             WorkspaceKafkaProperties kafkaProperties,
             OutboxRelay outboxRelay
     ) {
         this.properties = properties;
-        this.processingProperties = processingProperties;
         this.kafkaProperties = kafkaProperties;
         this.outboxRelay = outboxRelay;
     }
@@ -43,9 +38,6 @@ public class ProcessingRequestRelayScheduler {
 
     public int relayDueRequestsOnce() {
         if (!properties.isEnabled()) {
-            return 0;
-        }
-        if (processingProperties.getTriggerMode() != ProcessingTriggerMode.KAFKA_REQUEST) {
             return 0;
         }
         if (!kafkaProperties.isEnabled()) {

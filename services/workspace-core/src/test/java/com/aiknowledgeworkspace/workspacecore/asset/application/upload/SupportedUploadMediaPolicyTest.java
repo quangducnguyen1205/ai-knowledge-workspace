@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.asset.application.upload;
 
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidUploadRequestException;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockMultipartFile;
+import java.io.ByteArrayInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -68,14 +68,16 @@ class SupportedUploadMediaPolicyTest {
         assertRejected(file(null, "video/mp4", mp4Signature()));
     }
 
-    private void assertRejected(MockMultipartFile file) {
+    private void assertRejected(AssetUploadCommand file) {
         assertThatThrownBy(() -> policy.validate(file))
                 .isInstanceOf(InvalidUploadRequestException.class)
                 .hasMessage("Only MP4, MOV, M4V, WebM, and AVI video files are supported");
     }
 
-    private MockMultipartFile file(String filename, String contentType, byte[] bytes) {
-        return new MockMultipartFile("file", filename, contentType, bytes);
+    private AssetUploadCommand file(String filename, String contentType, byte[] bytes) {
+        return new AssetUploadCommand(
+                null, filename, contentType, bytes.length, null, () -> new ByteArrayInputStream(bytes)
+        );
     }
 
     private byte[] mp4Signature() {

@@ -1,468 +1,114 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextQuery;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetWorkspaceUsageService;
-import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.context.request.RequestContextHolder;
 
 @ExtendWith(MockitoExtension.class)
 class AssistantContextServiceTest {
 
     @Mock
-    private SearchService searchService;
+    private AssistantSearchPort search;
 
     @Mock
-    private AssetTranscriptQueryService assetReadService;
+    private AssistantTranscriptContextPort transcripts;
 
-    private AssistantContextService assistantContextService;
+    private AssistantContextService service;
 
     @BeforeEach
     void setUp() {
-        assistantContextService = new AssistantContextService(searchPort(), transcriptPort());
-    }
-
-    @AfterEach
-    void tearDown() {
-        RequestContextHolder.resetRequestAttributes();
+        service = new AssistantContextService(search, transcripts);
     }
 
     @Test
-    void buildContextReturnsBoundedContextSourcesForSearchableAssets() {
+    void queryReauthorizesHitsThroughSearchableCanonicalContext() {
+        UUID workspaceId = UUID.randomUUID();
+        UUID approvedAsset = UUID.randomUUID();
+        UUID staleAsset = UUID.randomUUID();
+        when(search.search("query", workspaceId, null)).thenReturn(new AssistantSearchPage(
+                workspaceId,
+                List.of(hit(approvedAsset, "row-1", 1), hit(staleAsset, "row-2", 2))
+        ));
+        when(transcripts.findSearchableTranscriptContext(approvedAsset, workspaceId, "row-1", 1))
+                .thenReturn(Optional.of(context(approvedAsset, "row-1", 1, "canonical context")));
+        when(transcripts.findSearchableTranscriptContext(staleAsset, workspaceId, "row-2", 1))
+                .thenReturn(Optional.empty());
+
+        AssistantContextResult result = service.query(new AssistantContextQuery(
+                workspaceId, " query ", null, 5, 1
+        ));
+
+        assertThat(result.sources()).hasSize(1);
+        assertThat(result.sources().get(0).assetId()).isEqualTo(approvedAsset);
+        assertThat(result.sources().get(0).text()).isEqualTo("canonical context");
+    }
+
+    @Test
+    void missingStableRowIdIsDerivedFromSegmentIndex() {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        AssistantContextRequest request = new AssistantContextRequest(
-                workspaceId,
-                "  dynamic programming  ",
-                null,
-                5,
-                1
+        when(search.search("query", workspaceId, null)).thenReturn(new AssistantSearchPage(
+                workspaceId, List.of(hit(assetId, null, 7))
+        ));
+        when(transcripts.findSearchableTranscriptContext(assetId, workspaceId, "segment-7", 0))
+                .thenReturn(Optional.of(context(assetId, null, 7, "text")));
+
+        AssistantContextResult result = service.query(new AssistantContextQuery(
+                workspaceId, "query", null, 1, 0
+        ));
+
+        assertThat(result.sources().get(0).transcriptRowId()).isEqualTo("segment-7");
+    }
+
+    @Test
+    void invalidBoundsFailBeforeOutboundCalls() {
+        UUID workspaceId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.query(new AssistantContextQuery(
+                workspaceId, "query", null, 0, 1
+        ))).isInstanceOf(InvalidAssistantContextRequestException.class);
+        assertThatThrownBy(() -> service.query(new AssistantContextQuery(
+                workspaceId, "query", null, 1, AssistantContextService.MAX_CONTEXT_WINDOW + 1
+        ))).isInstanceOf(InvalidAssistantContextRequestException.class);
+
+        verifyNoInteractions(search, transcripts);
+    }
+
+    private AssistantSearchHit hit(UUID assetId, String rowId, Integer segmentIndex) {
+        return new AssistantSearchHit(
+                assetId, "Indexed title", rowId, segmentIndex, "indexed text", "2026-01-01T00:00:00Z", 2.0
         );
-        when(searchService.search("dynamic programming", workspaceId, null))
-                .thenReturn(searchResponse(workspaceId, result(assetId, "row-2", 2)));
-        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-2", 1))
-                .thenReturn(Optional.of(context(
-                        assetId,
-                        "Lecture 2",
-                        "row-2",
-                        2,
-                        1,
-                        row("row-1", 1, "first context row"),
-                        row("row-2", 2, "selected context row"),
-                        row("row-3", 3, "third context row")
-                )));
-
-        AssistantContextResponse response = assistantContextService.buildContext(request);
-
-        assertThat(response.workspaceId()).isEqualTo(workspaceId);
-        assertThat(response.query()).isEqualTo("dynamic programming");
-        assertThat(response.sources()).hasSize(1);
-        AssistantContextSourceResponse source = response.sources().get(0);
-        assertThat(source.assetId()).isEqualTo(assetId);
-        assertThat(source.assetTitle()).isEqualTo("Lecture 2");
-        assertThat(source.transcriptRowId()).isEqualTo("row-2");
-        assertThat(source.segmentIndex()).isEqualTo(2);
-        assertThat(source.createdAt()).isEqualTo("2026-06-25T00:00:02Z");
-        assertThat(source.text()).isEqualTo("first context row\nselected context row\nthird context row");
-        assertThat(source.citation()).isEqualTo(new AssistantCitationResponse(assetId, "row-2", 2));
-        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-2", 1);
     }
 
-    @Test
-    void emptyValidSearchReturnsEmptySources() {
-        UUID workspaceId = UUID.randomUUID();
-        when(searchService.search("missing", workspaceId, null))
-                .thenReturn(new SearchResponse("missing", workspaceId, null, 0, List.of()));
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "missing",
-                null,
-                null,
-                null
-        ));
-
-        assertThat(response.sources()).isEmpty();
-        verifyNoMoreInteractions(assetReadService);
-    }
-
-    @Test
-    void unknownOrNonOwnedWorkspacePropagatesExistingNotFoundConvention() {
-        UUID workspaceId = UUID.randomUUID();
-        when(searchService.search("query", workspaceId, null))
-                .thenThrow(new WorkspaceNotFoundException(workspaceId));
-
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "query",
-                null,
-                null,
-                null
-        ))).isInstanceOf(WorkspaceNotFoundException.class);
-    }
-
-    @Test
-    void assetFromAnotherWorkspacePropagatesExistingOwnershipSafeNotFoundConvention() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        when(searchService.search("query", workspaceId, assetId))
-                .thenThrow(new AssetNotFoundException());
-
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "query",
+    private AssistantTranscriptContext context(UUID assetId, String rowId, Integer segmentIndex, String text) {
+        return new AssistantTranscriptContext(
                 assetId,
-                null,
-                null
-        ))).isInstanceOf(AssetNotFoundException.class);
-    }
-
-    @Test
-    void staleSearchHitForNonSearchableAssetIsNotExposed() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        when(searchService.search("stale", workspaceId, null))
-                .thenReturn(searchResponse(workspaceId, result(assetId, "row-1", 1)));
-        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1))
-                .thenReturn(Optional.empty());
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "stale",
-                null,
-                null,
-                null
-        ));
-
-        assertThat(response.sources()).isEmpty();
-        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1);
-    }
-
-    @Test
-    void staleSearchHitFromAnotherWorkspaceIsNotExposed() {
-        UUID requestedWorkspaceId = UUID.randomUUID();
-        UUID otherWorkspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        when(searchService.search("stale", requestedWorkspaceId, null))
-                .thenReturn(searchResponse(requestedWorkspaceId, result(assetId, "row-1", 1)));
-        when(assetReadService.findSearchableTranscriptContext(assetId, requestedWorkspaceId, "row-1", 1))
-                .thenReturn(Optional.empty());
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                requestedWorkspaceId,
-                "stale",
-                null,
-                null,
-                null
-        ));
-
-        assertThat(response.sources()).isEmpty();
-        verify(assetReadService).findSearchableTranscriptContext(assetId, requestedWorkspaceId, "row-1", 1);
-    }
-
-    @Test
-    void maxSourcesIsHonoredInSearchRankingOrder() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID firstAssetId = UUID.randomUUID();
-        UUID secondAssetId = UUID.randomUUID();
-        when(searchService.search("ranked", workspaceId, null))
-                .thenReturn(new SearchResponse(
-                        "ranked",
-                        workspaceId,
-                        null,
-                        2,
-                        List.of(result(firstAssetId, "row-1", 1), result(secondAssetId, "row-2", 2))
-                ));
-        when(assetReadService.findSearchableTranscriptContext(firstAssetId, workspaceId, "row-1", 1))
-                .thenReturn(Optional.of(context(
-                        firstAssetId,
-                        "First",
-                        "row-1",
-                        1,
-                        1,
-                        row("row-1", 1, "first hit")
-                )));
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "ranked",
-                null,
+                "Canonical title",
+                rowId,
+                segmentIndex,
                 1,
-                1
-        ));
-
-        assertThat(response.sources()).extracting(AssistantContextSourceResponse::assetId)
-                .containsExactly(firstAssetId);
-        verify(assetReadService, never()).findSearchableTranscriptContext(eq(secondAssetId), any(), any(), anyInt());
-    }
-
-    @Test
-    void contextWindowZeroReturnsOnlyTheCanonicalHitRow() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        when(searchService.search("exact", workspaceId, assetId))
-                .thenReturn(new SearchResponse(
-                        "exact",
-                        workspaceId,
-                        assetId,
-                        1,
-                        List.of(result(assetId, "row-2", 2))
-                ));
-        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-2", 0))
-                .thenReturn(Optional.of(context(
-                        assetId,
-                        "Lecture",
-                        "row-2",
-                        2,
-                        0,
-                        row("row-2", 2, "hit only")
-                )));
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "exact",
-                assetId,
-                5,
-                0
-        ));
-
-        assertThat(response.sources()).hasSize(1);
-        assertThat(response.sources().get(0).text()).isEqualTo("hit only");
-        verify(assetReadService).findSearchableTranscriptContext(assetId, workspaceId, "row-2", 0);
-    }
-
-    @Test
-    void duplicateCitationsAreRemovedFromOneResponse() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        when(searchService.search("duplicate", workspaceId, null))
-                .thenReturn(new SearchResponse(
-                        "duplicate",
-                        workspaceId,
-                        null,
-                        2,
-                        List.of(result(assetId, "row-1", 1), result(assetId, "row-1", 1))
-                ));
-        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1))
-                .thenReturn(Optional.of(context(
-                        assetId,
-                        "Lecture",
-                        "row-1",
-                        1,
-                        1,
-                        row("row-1", 1, "same hit")
-                )));
-
-        AssistantContextResponse response = assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "duplicate",
-                null,
-                5,
-                1
-        ));
-
-        assertThat(response.sources()).hasSize(1);
-    }
-
-    @Test
-    void validationRejectsInvalidRequestValues() {
-        UUID workspaceId = UUID.randomUUID();
-
-        assertThatThrownBy(() -> assistantContextService.buildContext(null))
-                .isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("Request body is required");
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                null,
-                "query",
-                null,
-                null,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("workspaceId is required");
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "   ",
-                null,
-                null,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("query is required");
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "a".repeat(501),
-                null,
-                null,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("query must be at most 500 characters");
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "query",
-                null,
-                0,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("maxSources must be between 1 and 10");
-        assertThatThrownBy(() -> assistantContextService.buildContext(new AssistantContextRequest(
-                workspaceId,
-                "query",
-                null,
-                null,
-                -1
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("contextWindow must be between 0 and 5");
-    }
-
-    @Test
-    void unauthenticatedCallerUsesExistingCurrentUserFailurePath() {
-        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
-        currentUserProperties.setDevFallbackEnabled(false);
-        CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
-        WorkspaceRepository workspaceRepository = mock(WorkspaceRepository.class);
-        WorkspaceService workspaceService = new WorkspaceService(
-                workspaceRepository,
-                workspaceId -> false,
-                new WorkspaceProperties(),
-                currentUserService
-        );
-        WorkspaceQueryApplication workspaceQuery = requestedId ->
-                workspaceService.resolveWorkspaceOrDefault(requestedId).getId();
-        SearchService realSearchService = new SearchService(
-                workspaceQuery,
-                mock(SearchAssetQueryPort.class),
-                mock(TranscriptSearchIndexClient.class)
-        );
-        AssistantContextService realAssistantContextService = new AssistantContextService(
-                searchPort(realSearchService),
-                transcriptPort(mock(AssetTranscriptQueryService.class))
-        );
-
-        assertThatThrownBy(() -> realAssistantContextService.buildContext(new AssistantContextRequest(
-                UUID.randomUUID(),
-                "query",
-                null,
-                null,
-                null
-        ))).isInstanceOf(AuthenticationRequiredException.class);
-    }
-
-    private AssistantSearchPort searchPort() {
-        return searchPort(searchService);
-    }
-
-    private AssistantSearchPort searchPort(SearchService service) {
-        return (query, workspaceId, assetId) -> {
-            SearchResponse response = service.search(query, workspaceId, assetId);
-            return new AssistantSearchPage(
-                    response.workspaceIdFilter(),
-                    response.results().stream().map(result -> new AssistantSearchHit(
-                            result.assetId(), result.assetTitle(), result.transcriptRowId(), result.segmentIndex(),
-                            result.text(), result.createdAt(), result.score()
-                    )).toList()
-            );
-        };
-    }
-
-    private AssistantTranscriptContextPort transcriptPort() {
-        return transcriptPort(assetReadService);
-    }
-
-    private AssistantTranscriptContextPort transcriptPort(AssetTranscriptQueryService service) {
-        return (assetId, workspaceId, rowId, window) -> service.findSearchableTranscriptContext(
-                assetId, workspaceId, rowId, window
-        ).map(context -> new AssistantTranscriptContext(
-                context.assetId(), context.assetTitle(), context.transcriptRowId(), context.hitSegmentIndex(),
-                context.window(), context.rows().stream().map(row -> new AssistantTranscriptSegment(
-                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
-                )).toList()
-        ));
-    }
-
-    private SearchResponse searchResponse(UUID workspaceId, SearchResultResponse result) {
-        return new SearchResponse(result == null ? "" : "query", workspaceId, null, result == null ? 0 : 1, List.of(result));
-    }
-
-    private SearchResultResponse result(UUID assetId, String transcriptRowId, Integer segmentIndex) {
-        return new SearchResultResponse(
-                assetId,
-                "Indexed Lecture",
-                transcriptRowId,
-                segmentIndex,
-                "indexed text",
-                "2026-06-25T00:00:00Z",
-                2.5
-        );
-    }
-
-    private AssetTranscriptContext context(
-            UUID assetId,
-            String assetTitle,
-            String transcriptRowId,
-            Integer hitSegmentIndex,
-            int window,
-            AssetTranscriptRowView... rows
-    ) {
-        return new AssetTranscriptContext(
-                assetId,
-                assetTitle,
-                transcriptRowId,
-                hitSegmentIndex,
-                window,
-                List.of(rows)
-        );
-    }
-
-    private AssetTranscriptRowView row(String id, Integer segmentIndex, String text) {
-        return new AssetTranscriptRowView(
-                id,
-                "video-1",
-                segmentIndex,
-                text,
-                "2026-06-25T00:00:0" + segmentIndex + "Z"
+                List.of(new AssistantTranscriptSegment(
+                        rowId, "video-1", segmentIndex, text, "2026-01-01T00:00:00Z"
+                ))
         );
     }
 }

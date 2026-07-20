@@ -4,8 +4,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -14,29 +13,33 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AssetSearchabilityService {
 
-    private final AssetRepository assetRepository;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetStore assetStore;
 
     public AssetSearchabilityService(
-            AssetRepository assetRepository,
-            AssetPersistenceService assetPersistenceService
+            AssetStore assetStore
     ) {
-        this.assetRepository = assetRepository;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetStore = assetStore;
     }
 
     @Transactional
     public void markSearchable(UUID assetId) {
-        assetPersistenceService.updateAssetStatus(loadAsset(assetId), AssetStatus.SEARCHABLE);
+        updateStatus(loadAsset(assetId), AssetStatus.SEARCHABLE);
     }
 
     @Transactional
     public void markTranscriptReady(UUID assetId) {
-        assetPersistenceService.updateAssetStatus(loadAsset(assetId), AssetStatus.TRANSCRIPT_READY);
+        updateStatus(loadAsset(assetId), AssetStatus.TRANSCRIPT_READY);
     }
 
     private Asset loadAsset(UUID assetId) {
-        return assetRepository.findById(assetId)
+        return assetStore.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
+    }
+
+    private void updateStatus(Asset asset, AssetStatus status) {
+        if (asset.getStatus() != status) {
+            asset.setStatus(status);
+            assetStore.save(asset);
+        }
     }
 }

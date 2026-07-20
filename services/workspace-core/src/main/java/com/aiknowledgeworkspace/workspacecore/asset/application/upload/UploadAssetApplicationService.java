@@ -1,13 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.upload;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetUploadResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidUploadRequestException;
-
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingUploadResult;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetUploadUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
 import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
@@ -20,60 +14,46 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
-public class UploadAssetApplicationService {
+public class UploadAssetApplicationService implements AssetUploadUseCase {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UploadAssetApplicationService.class);
 
-    private final ProcessingRequestApplication processingRequestApplication;
-    private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetUploadTransaction assetUploadTransaction;
     private final WorkspaceAccessApplication workspaceQueryApplication;
     private final ObjectStorageApplication objectStorageApplication;
     private final SupportedUploadMediaPolicy supportedUploadMediaPolicy;
 
     public UploadAssetApplicationService(
-            ProcessingRequestApplication processingRequestApplication,
-            DirectProcessingCompatibilityAdapter compatibilityAdapter,
-            AssetPersistenceService assetPersistenceService,
+            AssetUploadTransaction assetUploadTransaction,
             WorkspaceAccessApplication workspaceQueryApplication,
             ObjectStorageApplication objectStorageApplication,
             SupportedUploadMediaPolicy supportedUploadMediaPolicy
     ) {
-        this.processingRequestApplication = processingRequestApplication;
-        this.compatibilityAdapter = compatibilityAdapter;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetUploadTransaction = assetUploadTransaction;
         this.workspaceQueryApplication = workspaceQueryApplication;
         this.objectStorageApplication = objectStorageApplication;
         this.supportedUploadMediaPolicy = supportedUploadMediaPolicy;
     }
 
-    public AssetUploadResponse uploadAsset(UUID workspaceId, MultipartFile file, String requestedTitle) {
-        if (file == null || file.isEmpty()) {
+    @Override
+    public AssetUploadResult upload(AssetUploadCommand command) {
+        if (command == null || command.content() == null || command.sizeBytes() <= 0) {
             throw new InvalidUploadRequestException("A non-empty file is required");
         }
 
-        WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
-        ValidatedUploadMedia uploadMedia = supportedUploadMediaPolicy.validate(file);
+        WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(command.workspaceId());
+        ValidatedUploadMedia uploadMedia = supportedUploadMediaPolicy.validate(command);
         String originalFilename = uploadMedia.originalFilename();
-        String title = resolveTitle(requestedTitle, originalFilename);
+        String title = resolveTitle(command.requestedTitle(), originalFilename);
         UUID assetId = UUID.randomUUID();
         StoredObjectReference storedObject = storeUploadedObject(
-                file, workspace.ownerId(), workspace.workspaceId(), assetId, uploadMedia
+                command, workspace.ownerId(), workspace.workspaceId(), assetId, uploadMedia
         );
 
         try {
-            if (!processingRequestApplication.usesKafkaRequestMode()) {
-                DirectProcessingUploadResult result = compatibilityAdapter.upload(
-                        file.getResource(), originalFilename, title
-                );
-                return assetPersistenceService.persistDirectUploadResult(
-                        assetId, originalFilename, title, workspace.workspaceId(), storedObject, result
-                );
-            }
-            return assetPersistenceService.persistKafkaRequestUpload(
+            return assetUploadTransaction.persist(
                     assetId, originalFilename, title, workspace.workspaceId(), workspace.ownerId(), storedObject
             );
         } catch (RuntimeException exception) {
@@ -83,16 +63,20 @@ public class UploadAssetApplicationService {
     }
 
     private StoredObjectReference storeUploadedObject(
-            MultipartFile file, String userId, UUID workspaceId, UUID assetId, ValidatedUploadMedia uploadMedia
+            AssetUploadCommand command,
+            String userId,
+            UUID workspaceId,
+            UUID assetId,
+            ValidatedUploadMedia uploadMedia
     ) {
-        try (InputStream inputStream = file.getInputStream()) {
+        try (InputStream inputStream = command.content().openStream()) {
             return objectStorageApplication.store(new StoreObjectCommand(
                     userId,
                     workspaceId,
                     assetId,
                     uploadMedia.originalFilename(),
                     inputStream,
-                    file.getSize(),
+                    command.sizeBytes(),
                     uploadMedia.contentType()
             ));
         } catch (IOException exception) {

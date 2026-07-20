@@ -1,9 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -27,10 +26,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AssetTranscriptSnapshotServiceTest {
 
     @Mock
-    private AssetRepository assetRepository;
+    private AssetStore assetStore;
 
     @Mock
-    private AssetPersistenceService assetPersistenceService;
+    private CanonicalTranscriptStore transcriptStore;
 
     @Mock
     private IndexingRequestApplication indexingRequestApplication;
@@ -39,12 +38,12 @@ class AssetTranscriptSnapshotServiceTest {
     void canonicalReplacementPersistsRowsAndRequestsAutomaticIndexing() {
         Asset asset = asset(UUID.randomUUID(), AssetStatus.PROCESSING);
         List<AssetTranscriptRowInput> rows = List.of(row("row-1", 0, "canonical"));
-        List<AssetTranscriptRowSnapshot> snapshots = List.of(snapshot(asset.getId(), "row-1", 0, "canonical"));
-        when(assetPersistenceService.replaceTranscriptSnapshot(asset, rows)).thenReturn(snapshots);
+        List<AssetTranscriptRowView> snapshots = List.of(snapshot("row-1", 0, "canonical"));
+        when(transcriptStore.replace(asset.getId(), rows)).thenReturn(snapshots);
 
         service().replaceCanonicalSnapshot(asset, rows);
 
-        verify(assetPersistenceService).replaceTranscriptSnapshot(asset, rows);
+        verify(transcriptStore).replace(asset.getId(), rows);
         verify(indexingRequestApplication).requestIndexingIfEnabled(
                 org.mockito.Mockito.eq(asset.getId()),
                 anyList()
@@ -55,13 +54,13 @@ class AssetTranscriptSnapshotServiceTest {
     void repeatedIdenticalReplacementPreservesReplaceAndIndexRequestBehavior() {
         Asset asset = asset(UUID.randomUUID(), AssetStatus.PROCESSING);
         List<AssetTranscriptRowInput> rows = List.of(row("row-1", 0, "canonical"));
-        when(assetPersistenceService.replaceTranscriptSnapshot(asset, rows))
-                .thenReturn(List.of(snapshot(asset.getId(), "row-1", 0, "canonical")));
+        when(transcriptStore.replace(asset.getId(), rows))
+                .thenReturn(List.of(snapshot("row-1", 0, "canonical")));
 
         service().replaceCanonicalSnapshot(asset, rows);
         service().replaceCanonicalSnapshot(asset, rows);
 
-        verify(assetPersistenceService, times(2)).replaceTranscriptSnapshot(asset, rows);
+        verify(transcriptStore, times(2)).replace(asset.getId(), rows);
         verify(indexingRequestApplication, times(2)).requestIndexingIfEnabled(
                 org.mockito.Mockito.eq(asset.getId()),
                 anyList()
@@ -77,8 +76,8 @@ class AssetTranscriptSnapshotServiceTest {
                 List.of(row("row-1", null, " "))
         )).isInstanceOf(TranscriptUnavailableException.class);
 
-        verify(assetPersistenceService, never()).replaceTranscriptSnapshot(
-                org.mockito.Mockito.eq(asset),
+        verify(transcriptStore, never()).replace(
+                org.mockito.Mockito.eq(asset.getId()),
                 anyList()
         );
         verify(indexingRequestApplication, never()).requestIndexingIfEnabled(
@@ -93,36 +92,36 @@ class AssetTranscriptSnapshotServiceTest {
 
         service().markTranscriptReady(asset);
 
-        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.SEARCHABLE);
+        verify(assetStore, never()).save(asset);
     }
 
     @Test
     void successfulProcessingResultDoesNotDowngradeAlreadySearchableAsset() {
         Asset asset = asset(UUID.randomUUID(), AssetStatus.SEARCHABLE);
         List<AssetTranscriptRowInput> rows = List.of(row("row-1", 0, "canonical"));
-        when(assetPersistenceService.replaceTranscriptSnapshot(asset, rows))
-                .thenReturn(List.of(snapshot(asset.getId(), "row-1", 0, "canonical")));
+        when(transcriptStore.replace(asset.getId(), rows))
+                .thenReturn(List.of(snapshot("row-1", 0, "canonical")));
 
         service().applySuccessfulProcessingResult(asset, rows);
 
-        verify(assetPersistenceService, never()).updateAssetStatus(asset, AssetStatus.TRANSCRIPT_READY);
+        verify(assetStore, never()).save(asset);
     }
 
     @Test
     void processingFailureUsesTheCanonicalAssetLifecycleOwner() {
         UUID assetId = UUID.randomUUID();
         Asset asset = asset(assetId, AssetStatus.PROCESSING);
-        when(assetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
 
         service().markProcessingFailed(assetId);
 
-        verify(assetPersistenceService).updateAssetStatus(asset, AssetStatus.FAILED);
+        verify(assetStore).save(asset);
     }
 
     private AssetTranscriptSnapshotService service() {
         return new AssetTranscriptSnapshotService(
-                assetRepository,
-                assetPersistenceService,
+                assetStore,
+                transcriptStore,
                 indexingRequestApplication
         );
     }
@@ -139,9 +138,9 @@ class AssetTranscriptSnapshotServiceTest {
         );
     }
 
-    private AssetTranscriptRowSnapshot snapshot(UUID assetId, String id, Integer segmentIndex, String text) {
-        return new AssetTranscriptRowSnapshot(
-                assetId, id, "video-1", segmentIndex, text, "2026-06-26T00:00:00Z"
+    private AssetTranscriptRowView snapshot(String id, Integer segmentIndex, String text) {
+        return new AssetTranscriptRowView(
+                id, "video-1", segmentIndex, text, "2026-06-26T00:00:00Z"
         );
     }
 }

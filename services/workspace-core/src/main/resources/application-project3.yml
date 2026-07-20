@@ -7,7 +7,6 @@ workspace:
   security:
     authentication-mode: legacy_session
   processing:
-    trigger-mode: kafka_request
     request-relay:
       enabled: true
   search:

@@ -1,7 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetWorkspaceUsageService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -17,29 +17,29 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AssetWorkspaceUsageServiceTest {
 
     @Mock
-    private AssetRepository assetRepository;
+    private AssetStore assetStore;
 
     @Test
     void workspaceHasAssetsReturnsFalseForEmptyWorkspace() {
         UUID workspaceId = UUID.randomUUID();
-        when(assetRepository.countByWorkspaceId(workspaceId)).thenReturn(0L);
+        when(assetStore.countByWorkspaceId(workspaceId)).thenReturn(0L);
 
         assertThat(service().workspaceHasAssets(workspaceId)).isFalse();
 
-        verify(assetRepository).countByWorkspaceId(workspaceId);
+        verify(assetStore).countByWorkspaceId(workspaceId);
     }
 
     @Test
     void workspaceHasAssetsReturnsTrueWhenAnyAssetBelongsToWorkspace() {
         UUID workspaceId = UUID.randomUUID();
-        when(assetRepository.countByWorkspaceId(workspaceId)).thenReturn(1L);
+        when(assetStore.countByWorkspaceId(workspaceId)).thenReturn(1L);
 
         assertThat(service().workspaceHasAssets(workspaceId)).isTrue();
 
-        verify(assetRepository).countByWorkspaceId(workspaceId);
+        verify(assetStore).countByWorkspaceId(workspaceId);
     }
 
     private AssetWorkspaceUsageService service() {
-        return new AssetWorkspaceUsageService(assetRepository);
+        return new AssetWorkspaceUsageService(assetStore);
     }
 }

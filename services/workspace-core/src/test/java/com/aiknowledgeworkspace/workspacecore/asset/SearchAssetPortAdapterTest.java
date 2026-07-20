@@ -1,19 +1,18 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.adapter.SearchAssetPortAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetSearchabilityService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.SearchAssetPortAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetSearchabilityService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -23,55 +22,50 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SearchAssetPortAdapterTest {
 
     @Mock
-    private AssetTranscriptQueryService transcriptQueryService;
+    private AssetTranscriptQueryService transcriptQueries;
 
     @Mock
-    private DirectProcessingCompatibilityAdapter compatibilityAdapter;
+    private AssetSearchabilityService searchability;
 
-    @Mock
-    private AssetSearchabilityService assetSearchabilityService;
+    private SearchAssetPortAdapter adapter;
+
+    @BeforeEach
+    void setUp() {
+        adapter = new SearchAssetPortAdapter(transcriptQueries, searchability);
+    }
 
     @Test
-    void currentIndexingSourceMapsOnlyAssetOwnedReadModels() {
+    void authorizedIndexingSourceUsesOnlyCanonicalTranscriptState() {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
-        when(transcriptQueryService.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(
-                new AssetIndexingSource(
-                        assetId,
-                        workspaceId,
-                        "Lecture",
-                        List.of(new AssetTranscriptRowView(
-                                "row-1", "video-1", 0, "canonical", "2026-06-26T00:00:00Z"
-                        ))
-                )
+        when(transcriptQueries.getAuthorizedAssetDetails(assetId)).thenReturn(
+                new AssetDetails(assetId, workspaceId, "Lecture", AssetStatus.TRANSCRIPT_READY)
+        );
+        when(transcriptQueries.loadUsableSnapshot(assetId)).thenReturn(List.of(
+                new AssetTranscriptRowView("row-1", "video-1", 1, "canonical", "2026-01-01T00:00:00Z")
         ));
 
-        Optional<IndexingAssetSource> result = adapter().findCurrentIndexingSource(assetId);
+        IndexingAssetSource source = adapter.loadAuthorizedIndexingSource(assetId);
 
-        assertThat(result).isPresent();
-        assertThat(result.orElseThrow().transcriptRows()).singleElement()
-                .extracting(row -> row.text()).isEqualTo("canonical");
+        assertThat(source.assetId()).isEqualTo(assetId);
+        assertThat(source.transcriptRows()).extracting(row -> row.text()).containsExactly("canonical");
     }
 
     @Test
-    void completedProcessingFallbackStaysInsideCompatibilityAdapter() {
+    void assetNotFoundIsTranslatedToSearchModuleBoundaryException() {
         UUID assetId = UUID.randomUUID();
-        UUID workspaceId = UUID.randomUUID();
-        when(compatibilityAdapter.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1"))
-                .thenReturn(new AssetIndexingSource(assetId, workspaceId, "Lecture", List.of()));
+        when(transcriptQueries.getAuthorizedAssetDetails(assetId)).thenThrow(new AssetNotFoundException());
 
-        IndexingAssetSource result = adapter()
-                .loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1");
-
-        assertThat(result.assetId()).isEqualTo(assetId);
-        verify(compatibilityAdapter).loadAuthorizedIndexingSourceForCompletedProcessing(assetId, "video-1");
+        assertThatThrownBy(() -> adapter.loadAuthorizedIndexingSource(assetId))
+                .isInstanceOf(SearchAssetUnavailableException.class);
     }
 
-    private SearchAssetPortAdapter adapter() {
-        return new SearchAssetPortAdapter(
-                transcriptQueryService,
-                compatibilityAdapter,
-                assetSearchabilityService
-        );
+    @Test
+    void lifecycleMutationDelegatesToAssetOwner() {
+        UUID assetId = UUID.randomUUID();
+
+        adapter.markSearchable(assetId);
+
+        verify(searchability).markSearchable(assetId);
     }
 }

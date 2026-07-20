@@ -2,7 +2,8 @@ package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
+import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +14,6 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 @SpringBootTest(properties = {
@@ -35,10 +35,10 @@ class OidcUserProvisioningServiceTest {
     private OidcUserProvisioningService provisioningService;
 
     @Autowired
-    private UserAccountRepository userAccountRepository;
+    private UserAccountStore userAccountRepository;
 
     @Autowired
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @Test
     void firstJwtProvisionsLocalUserAndDefaultWorkspace() {
@@ -49,7 +49,7 @@ class OidcUserProvisioningServiceTest {
         assertThat(user.getIdentityProvider()).isEqualTo(ISSUER);
         assertThat(user.getExternalSubject()).isEqualTo("subject-1");
         assertThat(user.getPasswordHash()).isEqualTo("{oidc-external}");
-        assertThat(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(user.getId().toString()))
+        assertThat(workspaceRepository.findOwnedDefaults(user.getId().toString()))
                 .hasSize(1);
     }
 
@@ -59,11 +59,10 @@ class OidcUserProvisioningServiceTest {
         UserAccount second = provisioningService.resolveUser(jwt("subject-2", "changed@example.com"));
 
         assertThat(second.getId()).isEqualTo(first.getId());
-        assertThat(userAccountRepository.findAll().stream()
-                .filter(user -> ISSUER.equals(user.getIdentityProvider()))
-                .filter(user -> "subject-2".equals(user.getExternalSubject())))
-                .hasSize(1);
-        assertThat(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(first.getId().toString()))
+        assertThat(userAccountRepository.findByExternalIdentity(ISSUER, "subject-2"))
+                .map(UserAccount::getId)
+                .contains(first.getId());
+        assertThat(workspaceRepository.findOwnedDefaults(first.getId().toString()))
                 .hasSize(1);
     }
 
@@ -90,11 +89,10 @@ class OidcUserProvisioningServiceTest {
             for (Future<UUID> future : futures) {
                 assertThat(future.get()).isEqualTo(resolvedId);
             }
-            assertThat(userAccountRepository.findAll().stream()
-                    .filter(user -> ISSUER.equals(user.getIdentityProvider()))
-                    .filter(user -> "subject-concurrent".equals(user.getExternalSubject())))
-                    .hasSize(1);
-            assertThat(workspaceRepository.findByOwnerId(resolvedId.toString(), Sort.unsorted()))
+            assertThat(userAccountRepository.findByExternalIdentity(ISSUER, "subject-concurrent"))
+                    .map(UserAccount::getId)
+                    .contains(resolvedId);
+            assertThat(workspaceRepository.findOwned(resolvedId.toString()))
                     .hasSize(1);
         } finally {
             executor.shutdownNow();

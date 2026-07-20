@@ -36,7 +36,7 @@ FastAPI is an internal execution subsystem behind Spring-owned or consumer-owned
 
 | Module | Owns | Intentional cross-module surface |
 |---|---|---|
-| `asset` | asset metadata/lifecycle, upload policy, canonical transcript snapshots, authorized asset reads | `asset::compatibility`, `asset::transcript`, and state-owning adapters for consumer-owned ports |
+| `asset` | asset metadata/lifecycle, upload policy, canonical transcript snapshots, authorized asset reads | asset input contracts, transcript API, and state-owning adapters for consumer-owned ports |
 | `assistant` | bounded context assembly, answer policy, citation validation | `assistant::port` provider and context capabilities |
 | `common` | identity/auth integration, shared web error shape, neutral bootstrapping concerns | `common::api`, `common::workspace-provisioning`, `common::web` |
 | `integration` | FastAPI HTTP configuration, wire DTOs, validation, transport-to-neutral mapping | no FastAPI wire package is a product module API |
@@ -136,14 +136,14 @@ empty layers, duplicate models, and cosmetic package moves are rejected.
    begin/write/finalize semantics retain their characterized transaction boundaries.
 7. Elasticsearch remains outside the database transactions where it is outside them today and
    remains rebuildable derived state.
-8. Compatibility and exact-ID/manual recovery paths remain explicit, secondary entrypoints and
-   reuse the normal application use cases.
+8. Exact-ID/manual recovery paths remain explicit, secondary entrypoints and reuse the normal
+   application use cases.
 
 ## Spring/FastAPI Boundary
 
-The normal processing path is Spring durable request intent, Kafka request, FastAPI execution and
-durable result intent, Kafka result, Spring result inbox, canonical transcript replacement, and
-automatic indexing. Direct-upload compatibility is retained but is not the default path.
+The processing path is Spring durable request intent, Kafka request, FastAPI execution and durable
+result intent, Kafka result, Spring result inbox, canonical transcript replacement, and automatic
+indexing. Obsolete direct Spring processing behavior has been removed.
 
 Product modules consume neutral asset/processing/assistant contracts. Only integration-internal
 adapters know FastAPI URL paths, snake-case/camel-case wire fields, response validation rules,
@@ -177,7 +177,7 @@ characterization:
 - schema/Flyway mappings or canonical transcript semantics;
 - outbox, inbox, retry, recovery, acknowledgement, or idempotency semantics;
 - processing-result transaction participation or indexing begin/write/finalize boundaries;
-- authentication/profile behavior or retained compatibility/recovery paths; or
+- authentication/profile behavior or retained recovery paths; or
 - a new infrastructure framework, service split, or speculative abstraction layer.
 
 The canonical validation command is:

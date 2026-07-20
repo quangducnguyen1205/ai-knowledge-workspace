@@ -1,9 +1,5 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,23 +8,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCommand;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantAnswerProviderPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResultResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,292 +31,119 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AssistantAnswerServiceTest {
 
     @Mock
-    private SearchService searchService;
+    private AssistantContextService contextService;
 
     @Mock
-    private AssetTranscriptQueryService assetReadService;
+    private AssistantAnswerProviderPort provider;
 
-    @Mock
-    private AssistantAnswerProviderPort assistantAnswerProviderPort;
-
-    private AssistantAnswerService assistantAnswerService;
+    private AssistantAnswerService service;
 
     @BeforeEach
     void setUp() {
-        assistantAnswerService = new AssistantAnswerService(
-                new AssistantContextService(searchPort(), transcriptPort()),
-                assistantAnswerProviderPort
-        );
-    }
-
-    private AssistantSearchPort searchPort() {
-        return (query, workspaceId, assetId) -> {
-            SearchResponse response = searchService.search(query, workspaceId, assetId);
-            return new AssistantSearchPage(response.workspaceIdFilter(), response.results().stream().map(result ->
-                    new AssistantSearchHit(result.assetId(), result.assetTitle(), result.transcriptRowId(),
-                            result.segmentIndex(), result.text(), result.createdAt(), result.score())
-            ).toList());
-        };
-    }
-
-    private AssistantTranscriptContextPort transcriptPort() {
-        return (assetId, workspaceId, rowId, window) -> assetReadService.findSearchableTranscriptContext(
-                assetId, workspaceId, rowId, window
-        ).map(context -> new AssistantTranscriptContext(
-                context.assetId(), context.assetTitle(), context.transcriptRowId(), context.hitSegmentIndex(),
-                context.window(), context.rows().stream().map(row -> new AssistantTranscriptSegment(
-                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
-                )).toList()
-        ));
+        service = new AssistantAnswerService(contextService, provider);
     }
 
     @Test
-    void answerBuildsInternalRequestFromBoundedAuthorizedSearchableContext() {
+    void answerUsesOnlyApplicationContextAndMapsApprovedCitation() {
         UUID workspaceId = UUID.randomUUID();
-        UUID approvedAssetId = UUID.randomUUID();
-        UUID staleAssetId = UUID.randomUUID();
-        when(searchService.search("dynamic programming", workspaceId, null))
-                .thenReturn(new SearchResponse(
-                        "dynamic programming",
-                        workspaceId,
-                        null,
-                        2,
-                        List.of(
-                                result(approvedAssetId, "row-1", 1),
-                                result(staleAssetId, "row-2", 2)
-                        )
-                ));
-        when(assetReadService.findSearchableTranscriptContext(approvedAssetId, workspaceId, "row-1", 1))
-                .thenReturn(Optional.of(context(
-                        approvedAssetId,
-                        "Lecture 1",
-                        "row-1",
-                        1,
-                        1,
-                        row("row-1", 1, "approved transcript context")
-                )));
-        when(assetReadService.findSearchableTranscriptContext(staleAssetId, workspaceId, "row-2", 1))
-                .thenReturn(Optional.empty());
-        when(assistantAnswerProviderPort.answer(any())).thenAnswer(invocation -> {
-            AssistantProviderRequest internalRequest = invocation.getArgument(0);
+        UUID assetId = UUID.randomUUID();
+        when(contextService.query(any())).thenReturn(context(workspaceId, assetId));
+        when(provider.answer(any())).thenAnswer(invocation -> {
+            AssistantProviderRequest request = invocation.getArgument(0);
             return new AssistantProviderResponse(
-                    "Use the approved context.",
-                    List.of(internalRequest.sources().get(0).sourceId()),
+                    "Grounded answer",
+                    List.of(request.sources().get(0).sourceId()),
                     false
             );
         });
 
-        AssistantAnswerResponse response = assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "  dynamic programming  ",
-                null,
-                2,
-                1
+        AssistantAnswerResult result = service.answer(new AssistantAnswerCommand(
+                workspaceId, "  dynamic programming  ", null, 2, 1
         ));
 
-        ArgumentCaptor<AssistantProviderRequest> requestCaptor =
-                ArgumentCaptor.forClass(AssistantProviderRequest.class);
-        verify(assistantAnswerProviderPort).answer(requestCaptor.capture());
-        AssistantProviderRequest internalRequest = requestCaptor.getValue();
-        assertThat(internalRequest.question()).isEqualTo("dynamic programming");
-        assertThat(internalRequest.sources()).hasSize(1);
-        assertThat(internalRequest.sources().get(0).assetId()).isEqualTo(approvedAssetId);
-        assertThat(internalRequest.sources().get(0).assetTitle()).isEqualTo("Lecture 1");
-        assertThat(internalRequest.sources().get(0).transcriptRowId()).isEqualTo("row-1");
-        assertThat(internalRequest.sources().get(0).text()).isEqualTo("approved transcript context");
-        assertThat(internalRequest.sources().get(0).sourceId()).startsWith("src-");
+        assertThat(result.answer()).isEqualTo("Grounded answer");
+        assertThat(result.insufficientContext()).isFalse();
+        assertThat(result.citations()).hasSize(1);
+        assertThat(result.citations().get(0).assetId()).isEqualTo(assetId);
+        ArgumentCaptor<AssistantProviderRequest> request = ArgumentCaptor.forClass(AssistantProviderRequest.class);
+        verify(provider).answer(request.capture());
+        assertThat(request.getValue().question()).isEqualTo("dynamic programming");
+        assertThat(request.getValue().sources().get(0).text()).isEqualTo("approved context");
+    }
 
-        assertThat(response.answer()).isEqualTo("Use the approved context.");
-        assertThat(response.insufficientContext()).isFalse();
-        assertThat(response.citations()).hasSize(1);
-        AssistantAnswerCitationResponse citation = response.citations().get(0);
-        assertThat(citation.sourceId()).isEqualTo(internalRequest.sources().get(0).sourceId());
-        assertThat(citation.assetId()).isEqualTo(approvedAssetId);
-        assertThat(citation.assetTitle()).isEqualTo("Lecture 1");
-        assertThat(citation.transcriptRowId()).isEqualTo("row-1");
-        verify(assetReadService).findSearchableTranscriptContext(approvedAssetId, workspaceId, "row-1", 1);
-        verify(assetReadService).findSearchableTranscriptContext(staleAssetId, workspaceId, "row-2", 1);
+    @Test
+    void unknownProviderCitationFailsClosed() {
+        UUID workspaceId = UUID.randomUUID();
+        when(contextService.query(any())).thenReturn(context(workspaceId, UUID.randomUUID()));
+        when(provider.answer(any())).thenReturn(new AssistantProviderResponse(
+                "Answer", List.of("src-not-supplied"), false
+        ));
+
+        assertThatThrownBy(() -> service.answer(command(workspaceId)))
+                .isInstanceOf(AssistantProviderUnavailableException.class)
+                .hasMessage("Assistant provider is unavailable");
+    }
+
+    @Test
+    void nonInsufficientAnswerRequiresACitation() {
+        UUID workspaceId = UUID.randomUUID();
+        when(contextService.query(any())).thenReturn(context(workspaceId, UUID.randomUUID()));
+        when(provider.answer(any())).thenReturn(new AssistantProviderResponse("Answer", List.of(), false));
+
+        assertThatThrownBy(() -> service.answer(command(workspaceId)))
+                .isInstanceOf(AssistantProviderUnavailableException.class);
     }
 
     @Test
     void insufficientContextDoesNotFabricateCitations() {
         UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        oneApprovedSource(workspaceId, assetId);
-        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
-                "I do not have enough context to answer.",
-                List.of(),
-                true
+        when(contextService.query(any())).thenReturn(context(workspaceId, UUID.randomUUID()));
+        when(provider.answer(any())).thenReturn(new AssistantProviderResponse(
+                "Insufficient context", List.of(), true
         ));
 
-        AssistantAnswerResponse response = assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "unknown detail",
-                null,
-                null,
-                null
-        ));
+        AssistantAnswerResult result = service.answer(command(workspaceId));
 
-        assertThat(response.insufficientContext()).isTrue();
-        assertThat(response.citations()).isEmpty();
-        assertThat(response.answer()).isEqualTo("I do not have enough context to answer.");
+        assertThat(result.insufficientContext()).isTrue();
+        assertThat(result.citations()).isEmpty();
     }
 
     @Test
-    void unknownCitedSourceIdFailsClosed() {
+    void providerFailureIsTranslatedAtTheOutboundBoundary() {
         UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        oneApprovedSource(workspaceId, assetId);
-        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
-                "A grounded answer.",
-                List.of("src-unknown"),
-                false
-        ));
+        when(contextService.query(any())).thenReturn(context(workspaceId, UUID.randomUUID()));
+        when(provider.answer(any())).thenThrow(new RuntimeException("FastAPI HTTP 503 secret"));
 
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "grounded question",
-                null,
-                null,
-                null
-        ))).isInstanceOf(AssistantProviderUnavailableException.class)
+        assertThatThrownBy(() -> service.answer(command(workspaceId)))
+                .isInstanceOf(AssistantProviderUnavailableException.class)
                 .hasMessage("Assistant provider is unavailable");
     }
 
     @Test
-    void nonInsufficientAnswerMustCiteAtLeastOneSuppliedSource() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        oneApprovedSource(workspaceId, assetId);
-        when(assistantAnswerProviderPort.answer(any())).thenReturn(new AssistantProviderResponse(
-                "A citation-free answer is not accepted.",
-                List.of(),
-                false
-        ));
-
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "grounded question",
-                null,
-                null,
-                null
-        ))).isInstanceOf(AssistantProviderUnavailableException.class);
-    }
-
-    @Test
-    void providerFailureBecomesAssistantProviderUnavailable() {
-        UUID workspaceId = UUID.randomUUID();
-        UUID assetId = UUID.randomUUID();
-        oneApprovedSource(workspaceId, assetId);
-        when(assistantAnswerProviderPort.answer(any()))
-                .thenThrow(new RuntimeException("FastAPI returned HTTP 503 while trying to generate"));
-
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "grounded question",
-                null,
-                null,
-                null
-        ))).isInstanceOf(AssistantProviderUnavailableException.class)
-                .hasMessage("Assistant provider is unavailable");
-    }
-
-    @Test
-    void invalidQuestionIsRejectedBeforeRetrievalOrProviderCall() {
-        UUID workspaceId = UUID.randomUUID();
-
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "   ",
-                null,
-                null,
-                null
+    void invalidQuestionStopsBeforeContextOrProviderCalls() {
+        assertThatThrownBy(() -> service.answer(new AssistantAnswerCommand(
+                UUID.randomUUID(), "   ", null, null, null
         ))).isInstanceOf(InvalidAssistantContextRequestException.class)
                 .hasMessage("question is required");
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "a".repeat(AssistantContextService.MAX_QUERY_LENGTH + 1),
-                null,
-                null,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class)
-                .hasMessage("question must be at most 500 characters");
 
-        verifyNoInteractions(searchService, assetReadService, assistantAnswerProviderPort);
+        verifyNoInteractions(contextService, provider);
+        verify(provider, never()).answer(any());
     }
 
-    @Test
-    void providerIsNotCalledWhenContextValidationFails() {
-        UUID workspaceId = UUID.randomUUID();
-
-        assertThatThrownBy(() -> assistantAnswerService.answer(new AssistantAnswerRequest(
-                workspaceId,
-                "question",
-                null,
-                0,
-                null
-        ))).isInstanceOf(InvalidAssistantContextRequestException.class);
-        verifyNoInteractions(searchService, assetReadService);
-        verify(assistantAnswerProviderPort, never()).answer(any());
+    private AssistantAnswerCommand command(UUID workspaceId) {
+        return new AssistantAnswerCommand(workspaceId, "question", null, null, null);
     }
 
-    private void oneApprovedSource(UUID workspaceId, UUID assetId) {
-        when(searchService.search(any(), any(), any()))
-                .thenReturn(new SearchResponse(
-                        "query",
-                        workspaceId,
-                        null,
-                        1,
-                        List.of(result(assetId, "row-1", 1))
-                ));
-        when(assetReadService.findSearchableTranscriptContext(assetId, workspaceId, "row-1", 1))
-                .thenReturn(Optional.of(context(
-                        assetId,
-                        "Lecture",
-                        "row-1",
-                        1,
-                        1,
-                        row("row-1", 1, "source text")
-                )));
-    }
-
-    private SearchResultResponse result(UUID assetId, String transcriptRowId, Integer segmentIndex) {
-        return new SearchResultResponse(
+    private AssistantContextResult context(UUID workspaceId, UUID assetId) {
+        AssistantContextSource source = new AssistantContextSource(
                 assetId,
-                "Indexed Lecture",
-                transcriptRowId,
-                segmentIndex,
-                "indexed text",
-                "2026-06-25T00:00:00Z",
-                2.5
+                "Lecture",
+                "row-1",
+                1,
+                "2026-01-01T00:00:00Z",
+                "approved context",
+                new AssistantCitation(assetId, "row-1", 1)
         );
-    }
-
-    private AssetTranscriptContext context(
-            UUID assetId,
-            String assetTitle,
-            String transcriptRowId,
-            Integer hitSegmentIndex,
-            int window,
-            AssetTranscriptRowView... rows
-    ) {
-        return new AssetTranscriptContext(
-                assetId,
-                assetTitle,
-                transcriptRowId,
-                hitSegmentIndex,
-                window,
-                List.of(rows)
-        );
-    }
-
-    private AssetTranscriptRowView row(String id, Integer segmentIndex, String text) {
-        return new AssetTranscriptRowView(
-                id,
-                "video-1",
-                segmentIndex,
-                text,
-                "2026-06-25T00:00:0" + segmentIndex + "Z"
-        );
+        return new AssistantContextResult(workspaceId, "dynamic programming", List.of(source));
     }
 }

@@ -6,7 +6,7 @@ import java.util.UUID;
 public interface IndexingAssetPort {
     Optional<IndexingAssetSource> findCurrentIndexingSource(UUID assetId);
 
-    IndexingAssetSource loadAuthorizedIndexingSourceForCompletedProcessing(UUID assetId, String videoId);
+    IndexingAssetSource loadAuthorizedIndexingSource(UUID assetId);
 
     void markTranscriptReady(UUID assetId);
 

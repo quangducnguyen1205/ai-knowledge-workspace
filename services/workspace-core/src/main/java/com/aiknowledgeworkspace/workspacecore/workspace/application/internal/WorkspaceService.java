@@ -8,7 +8,12 @@ import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceDeleteConflictE
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceUseCase;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceView;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.api.CurrentUserContext;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
@@ -18,17 +23,16 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
-public class WorkspaceService {
+public class WorkspaceService implements WorkspaceUseCase, WorkspaceAccessApplication, WorkspaceQueryApplication {
 
     private static final int MAX_WORKSPACE_NAME_LENGTH = 255;
 
-    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceStore workspaceStore;
     private final WorkspaceAssetUsagePort workspaceAssetUsagePort;
     private final WorkspaceProperties workspaceProperties;
     private final CurrentUserContext currentUserService;
@@ -37,14 +41,14 @@ public class WorkspaceService {
 
     @Autowired
     public WorkspaceService(
-            WorkspaceRepository workspaceRepository,
+            WorkspaceStore workspaceStore,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
             CurrentUserContext currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor,
             WorkspaceAccessPolicy workspaceAccessPolicy
     ) {
-        this.workspaceRepository = workspaceRepository;
+        this.workspaceStore = workspaceStore;
         this.workspaceAssetUsagePort = workspaceAssetUsagePort;
         this.workspaceProperties = workspaceProperties;
         this.currentUserService = currentUserService;
@@ -53,30 +57,30 @@ public class WorkspaceService {
     }
 
     public WorkspaceService(
-            WorkspaceRepository workspaceRepository,
+            WorkspaceStore workspaceStore,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
             CurrentUserContext currentUserService
     ) {
         this(
-                workspaceRepository,
+                workspaceStore,
                 workspaceAssetUsagePort,
                 workspaceProperties,
                 currentUserService,
-                workspaceRepository::save,
+                workspaceStore::save,
                 new WorkspaceAccessPolicy(currentUserService)
         );
     }
 
     public WorkspaceService(
-            WorkspaceRepository workspaceRepository,
+            WorkspaceStore workspaceStore,
             WorkspaceAssetUsagePort workspaceAssetUsagePort,
             WorkspaceProperties workspaceProperties,
             CurrentUserContext currentUserService,
             DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor
     ) {
         this(
-                workspaceRepository,
+                workspaceStore,
                 workspaceAssetUsagePort,
                 workspaceProperties,
                 currentUserService,
@@ -87,7 +91,7 @@ public class WorkspaceService {
 
     @Transactional
     public Workspace createWorkspace(String name) {
-        return workspaceRepository.save(new Workspace(
+        return workspaceStore.save(new Workspace(
                 null,
                 normalizeWorkspaceName(name),
                 currentUserService.getCurrentUserId(),
@@ -99,25 +103,25 @@ public class WorkspaceService {
     public List<Workspace> listWorkspaces() {
         String currentUserId = currentUserService.getCurrentUserId();
         ensureDefaultWorkspace(currentUserId);
-        return workspaceRepository.findByOwnerId(currentUserId, workspaceListSort());
+        return workspaceStore.findOwned(currentUserId);
     }
 
     @Transactional
     public Workspace getWorkspace(UUID workspaceId) {
-        return resolveWorkspaceOrDefault(workspaceId);
+        return resolveOwnedWorkspaceOrDefault(workspaceId);
     }
 
     @Transactional
     public Workspace updateWorkspace(UUID workspaceId, String name) {
         String normalizedName = normalizeWorkspaceName(name);
-        Workspace workspace = resolveWorkspaceOrDefault(workspaceId);
+        Workspace workspace = resolveOwnedWorkspaceOrDefault(workspaceId);
         workspace.setName(normalizedName);
-        return workspaceRepository.save(workspace);
+        return workspaceStore.save(workspace);
     }
 
     @Transactional
     public void deleteWorkspace(UUID workspaceId) {
-        Workspace workspace = resolveWorkspaceOrDefault(workspaceId);
+        Workspace workspace = resolveOwnedWorkspaceOrDefault(workspaceId);
 
         if (workspace.isDefaultWorkspace()) {
             throw new WorkspaceDeleteConflictException(
@@ -133,7 +137,7 @@ public class WorkspaceService {
             );
         }
 
-        workspaceRepository.delete(workspace);
+        workspaceStore.delete(workspace);
     }
 
     public boolean isDefaultWorkspace(Workspace workspace) {
@@ -149,22 +153,28 @@ public class WorkspaceService {
             return false;
         }
         String currentUserId = currentUserService.getCurrentUserId();
-        return workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId).isPresent();
+        return workspaceStore.findOwnedById(workspaceId, currentUserId).isPresent();
     }
 
     @Transactional
-    public Workspace resolveWorkspaceOrDefault(UUID workspaceId) {
+    public Workspace resolveOwnedWorkspaceOrDefault(UUID workspaceId) {
         String currentUserId = currentUserService.getCurrentUserId();
         if (workspaceId == null) {
             return ensureDefaultWorkspace(currentUserId);
         }
 
-        return workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)
+        return workspaceStore.findOwnedById(workspaceId, currentUserId)
                 .orElseThrow(() -> new WorkspaceNotFoundException(workspaceId));
     }
 
     public UUID resolveWorkspaceId(UUID requestedWorkspaceId) {
-        return resolveWorkspaceOrDefault(requestedWorkspaceId).getId();
+        return resolveOwnedWorkspaceOrDefault(requestedWorkspaceId).getId();
+    }
+
+    @Override
+    public WorkspaceAccess resolveWorkspaceOrDefault(UUID requestedWorkspaceId) {
+        Workspace workspace = resolveOwnedWorkspaceOrDefault(requestedWorkspaceId);
+        return new WorkspaceAccess(workspace.getId(), workspace.getOwnerId());
     }
 
     @Transactional
@@ -193,15 +203,8 @@ public class WorkspaceService {
         return normalizedName;
     }
 
-    private Sort workspaceListSort() {
-        return Sort.by(
-                Sort.Order.asc("createdAt"),
-                Sort.Order.asc("name")
-        );
-    }
-
     private Optional<Workspace> findOwnedDefaultWorkspace(String currentUserId) {
-        List<Workspace> defaultWorkspaces = workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
+        List<Workspace> defaultWorkspaces = workspaceStore.findOwnedDefaults(currentUserId);
         if (defaultWorkspaces.isEmpty()) {
             return Optional.empty();
         }
@@ -244,5 +247,30 @@ public class WorkspaceService {
                 "DEFAULT_WORKSPACE_ID_CONFLICT",
                 "Default workspace could not be created safely because the reserved workspace ID is already in use"
         );
+    }
+
+    @Override
+    public WorkspaceView create(String name) {
+        return WorkspaceView.from(createWorkspace(name));
+    }
+
+    @Override
+    public List<WorkspaceView> list() {
+        return listWorkspaces().stream().map(WorkspaceView::from).toList();
+    }
+
+    @Override
+    public WorkspaceView get(UUID workspaceId) {
+        return WorkspaceView.from(getWorkspace(workspaceId));
+    }
+
+    @Override
+    public WorkspaceView update(UUID workspaceId, String name) {
+        return WorkspaceView.from(updateWorkspace(workspaceId, name));
+    }
+
+    @Override
+    public void delete(UUID workspaceId) {
+        deleteWorkspace(workspaceId);
     }
 }

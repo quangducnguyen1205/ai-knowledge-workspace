@@ -1,9 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetDeletionService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetTitleUpdateService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetCommandUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetUploadUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetPage;
+import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetStatusView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadCommand;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadResult;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,23 +30,20 @@ import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexin
 @RequestMapping("/api/assets")
 public class AssetController {
 
-    private final AssetQueryApplicationService assetQueryApplicationService;
-    private final UploadAssetApplicationService uploadAssetApplicationService;
-    private final AssetDeletionService assetDeletionService;
-    private final AssetTitleUpdateService assetTitleUpdateService;
+    private final AssetQueryUseCase assetQueries;
+    private final AssetUploadUseCase assetUpload;
+    private final AssetCommandUseCase assetCommands;
     private final ExplicitIndexingApplication explicitIndexingApplication;
 
     public AssetController(
-            AssetQueryApplicationService assetQueryApplicationService,
-            UploadAssetApplicationService uploadAssetApplicationService,
-            AssetDeletionService assetDeletionService,
-            AssetTitleUpdateService assetTitleUpdateService,
+            AssetQueryUseCase assetQueries,
+            AssetUploadUseCase assetUpload,
+            AssetCommandUseCase assetCommands,
             ExplicitIndexingApplication explicitIndexingApplication
     ) {
-        this.assetQueryApplicationService = assetQueryApplicationService;
-        this.uploadAssetApplicationService = uploadAssetApplicationService;
-        this.assetDeletionService = assetDeletionService;
-        this.assetTitleUpdateService = assetTitleUpdateService;
+        this.assetQueries = assetQueries;
+        this.assetUpload = assetUpload;
+        this.assetCommands = assetCommands;
         this.explicitIndexingApplication = explicitIndexingApplication;
     }
 
@@ -54,36 +54,55 @@ public class AssetController {
             @RequestParam(value = "size", required = false) Integer size,
             @RequestParam(value = "assetStatus", required = false) AssetStatus assetStatus
     ) {
-        return assetQueryApplicationService.listAssets(workspaceId, page, size, assetStatus);
+        AssetPage result = assetQueries.listAssets(workspaceId, page, size, assetStatus);
+        return new AssetListResponse(
+                result.items().stream()
+                        .map(item -> new AssetSummaryResponse(
+                                item.id(), item.title(), item.status(), item.workspaceId(), item.createdAt()
+                        ))
+                        .toList(),
+                result.page(),
+                result.size(),
+                result.totalElements(),
+                result.totalPages(),
+                result.hasNext()
+        );
     }
 
     @GetMapping("/{assetId}")
-    public Asset getAsset(@PathVariable UUID assetId) {
-        return assetQueryApplicationService.getAsset(assetId);
+    public AssetResponse getAsset(@PathVariable UUID assetId) {
+        return AssetResponse.from(assetQueries.getAsset(assetId));
     }
 
     @PatchMapping("/{assetId}")
-    public Asset updateAssetTitle(
+    public AssetResponse updateAssetTitle(
             @PathVariable UUID assetId,
             @RequestBody(required = false) UpdateAssetTitleRequest request
     ) {
-        return assetTitleUpdateService.updateAssetTitle(assetId, request);
+        return AssetResponse.from(assetCommands.updateTitle(assetId, request == null ? null : request.title()));
     }
 
     @DeleteMapping("/{assetId}")
     public ResponseEntity<Void> deleteAsset(@PathVariable UUID assetId) {
-        assetDeletionService.deleteAsset(assetId);
+        assetCommands.delete(assetId);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
     @GetMapping("/{assetId}/status")
     public AssetStatusResponse getAssetStatus(@PathVariable UUID assetId) {
-        return assetQueryApplicationService.getAssetStatus(assetId);
+        AssetStatusView result = assetQueries.getAssetStatus(assetId);
+        return new AssetStatusResponse(
+                result.assetId(), result.processingJobId(), result.assetStatus(), result.processingStatus()
+        );
     }
 
     @GetMapping("/{assetId}/transcript")
     public List<AssetTranscriptRowResponse> getAssetTranscript(@PathVariable UUID assetId) {
-        return assetQueryApplicationService.getAssetTranscript(assetId);
+        return assetQueries.getAssetTranscript(assetId).stream()
+                .map(row -> new AssetTranscriptRowResponse(
+                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                ))
+                .toList();
     }
 
     @GetMapping("/{assetId}/transcript/context")
@@ -92,7 +111,18 @@ public class AssetController {
             @RequestParam("transcriptRowId") String transcriptRowId,
             @RequestParam(value = "window", required = false) Integer window
     ) {
-        return assetQueryApplicationService.getAssetTranscriptContext(assetId, transcriptRowId, window);
+        AssetTranscriptContext result = assetQueries.getAssetTranscriptContext(assetId, transcriptRowId, window);
+        return new AssetTranscriptContextResponse(
+                result.assetId(),
+                result.transcriptRowId(),
+                result.hitSegmentIndex(),
+                result.window(),
+                result.rows().stream()
+                        .map(row -> new AssetTranscriptRowResponse(
+                                row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                        ))
+                        .toList()
+        );
     }
 
     @PostMapping("/{assetId}/index")
@@ -107,7 +137,17 @@ public class AssetController {
             @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "title", required = false) String title
     ) {
-        AssetUploadResponse response = uploadAssetApplicationService.uploadAsset(workspaceId, file, title);
+        AssetUploadResult result = assetUpload.upload(new AssetUploadCommand(
+                workspaceId,
+                file == null ? null : file.getOriginalFilename(),
+                file == null ? null : file.getContentType(),
+                file == null ? 0L : file.getSize(),
+                title,
+                file == null ? null : file::getInputStream
+        ));
+        AssetUploadResponse response = new AssetUploadResponse(
+                result.assetId(), result.processingJobId(), result.status(), result.workspaceId()
+        );
         return ResponseEntity.accepted().body(response);
     }
 }

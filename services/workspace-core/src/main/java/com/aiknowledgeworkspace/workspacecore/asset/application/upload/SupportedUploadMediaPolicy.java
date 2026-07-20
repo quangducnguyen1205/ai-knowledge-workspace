@@ -7,7 +7,6 @@ import java.util.Locale;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
 @Component
 public class SupportedUploadMediaPolicy {
@@ -17,16 +16,16 @@ public class SupportedUploadMediaPolicy {
     private static final String SUPPORTED_FORMATS_MESSAGE =
             "Only MP4, MOV, M4V, WebM, and AVI video files are supported";
 
-    ValidatedUploadMedia validate(MultipartFile file) {
-        String originalFilename = normalizeOriginalFilename(file.getOriginalFilename());
+    ValidatedUploadMedia validate(AssetUploadCommand command) {
+        String originalFilename = normalizeOriginalFilename(command.originalFilename());
         MediaFamily mediaFamily = MediaFamily.fromFilename(originalFilename);
-        byte[] signature = readSignature(file);
+        byte[] signature = readSignature(command.content());
 
         if (!mediaFamily.matches(signature)) {
             throw unsupportedMedia();
         }
 
-        String contentType = normalizeContentType(file.getContentType());
+        String contentType = normalizeContentType(command.contentType());
         if (!isGenericContentType(contentType) && !mediaFamily.supportedContentTypes().contains(contentType)) {
             throw unsupportedMedia();
         }
@@ -56,8 +55,8 @@ public class SupportedUploadMediaPolicy {
         return cleanedFilename.substring(0, maxLength);
     }
 
-    private byte[] readSignature(MultipartFile file) {
-        try (InputStream inputStream = file.getInputStream()) {
+    private byte[] readSignature(AssetUploadContent content) {
+        try (InputStream inputStream = content.openStream()) {
             return inputStream.readNBytes(SIGNATURE_LENGTH);
         } catch (IOException exception) {
             throw new InvalidUploadRequestException("Uploaded file could not be read");

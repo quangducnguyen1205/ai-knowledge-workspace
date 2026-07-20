@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.provisioning.DefaultWorkspaceProvisioner;
 import java.nio.charset.StandardCharsets;
@@ -10,20 +10,20 @@ import org.springframework.stereotype.Component;
 @Component
 class DefaultWorkspaceProvisionerAdapter implements DefaultWorkspaceProvisioner {
 
-    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceStore workspaceStore;
     private final WorkspaceProperties workspaceProperties;
 
     DefaultWorkspaceProvisionerAdapter(
-            WorkspaceRepository workspaceRepository,
+            WorkspaceStore workspaceStore,
             WorkspaceProperties workspaceProperties
     ) {
-        this.workspaceRepository = workspaceRepository;
+        this.workspaceStore = workspaceStore;
         this.workspaceProperties = workspaceProperties;
     }
 
     @Override
     public void provisionFor(UUID userId) {
-        workspaceRepository.save(new Workspace(
+        workspaceStore.save(new Workspace(
                 defaultWorkspaceIdFor(userId),
                 workspaceProperties.getDefaultName(),
                 userId.toString(),

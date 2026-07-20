@@ -2,24 +2,25 @@ package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-search-index-jobs;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -29,42 +30,37 @@ import org.springframework.dao.DataIntegrityViolationException;
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.flyway.enabled=true"
 })
-class AssetSearchIndexJobRepositoryTest {
+@Transactional
+class SearchIndexJobStoreTest {
 
     @Autowired
-    private AssetSearchIndexJobRepository searchIndexJobRepository;
+    private SearchIndexJobStore searchIndexJobRepository;
 
     @Autowired
-    private AssetRepository assetRepository;
+    private AssetStore assetRepository;
 
     @Autowired
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @Autowired
     private EntityManager entityManager;
-
-    @BeforeEach
-    void setUp() {
-        searchIndexJobRepository.deleteAll();
-        assetRepository.deleteAll();
-        workspaceRepository.deleteAll();
-    }
 
     @Test
     void databaseRejectsDuplicateActiveJobsForSameAssetAndFingerprint() {
         Asset asset = assetRepository.save(asset(UUID.randomUUID()));
         String fingerprint = "same-fingerprint";
 
-        AssetSearchIndexJob firstJob = searchIndexJobRepository.saveAndFlush(new AssetSearchIndexJob(
+        AssetSearchIndexJob firstJob = searchIndexJobRepository.save(new AssetSearchIndexJob(
                 asset.getId(),
                 fingerprint
         ));
+        entityManager.flush();
 
         assertThat(firstJob.getActiveFingerprintKey()).isEqualTo(fingerprint);
-        assertThatThrownBy(() -> searchIndexJobRepository.saveAndFlush(new AssetSearchIndexJob(
-                asset.getId(),
-                fingerprint
-        ))).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> {
+            searchIndexJobRepository.save(new AssetSearchIndexJob(asset.getId(), fingerprint));
+            entityManager.flush();
+        }).isInstanceOfAny(DataIntegrityViolationException.class, ConstraintViolationException.class);
     }
 
     @Test
@@ -74,13 +70,15 @@ class AssetSearchIndexJobRepositoryTest {
         AssetSearchIndexJob indexedJob = new AssetSearchIndexJob(asset.getId(), fingerprint);
         indexedJob.markIndexing();
         indexedJob.markIndexed(Instant.now());
-        UUID indexedJobId = searchIndexJobRepository.saveAndFlush(indexedJob).getId();
+        UUID indexedJobId = searchIndexJobRepository.save(indexedJob).getId();
+        entityManager.flush();
         entityManager.clear();
 
-        AssetSearchIndexJob activeJob = searchIndexJobRepository.saveAndFlush(new AssetSearchIndexJob(
+        AssetSearchIndexJob activeJob = searchIndexJobRepository.save(new AssetSearchIndexJob(
                 asset.getId(),
                 fingerprint
         ));
+        entityManager.flush();
 
         AssetSearchIndexJob reloadedIndexedJob = searchIndexJobRepository.findById(indexedJobId).orElseThrow();
         assertThat(reloadedIndexedJob.getActiveFingerprintKey()).isNull();

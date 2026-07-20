@@ -5,7 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetS
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,7 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AssetSearchIndexRequestServiceTest {
 
     @Mock
-    private AssetSearchIndexJobRepository searchIndexJobRepository;
+    private SearchIndexJobStore searchIndexJobRepository;
 
     @Mock
     private OutboxWriter outboxWriter;
@@ -49,14 +49,13 @@ class AssetSearchIndexRequestServiceTest {
         properties = new SearchIndexingProperties();
         lenient().when(searchIndexJobRepository.save(any(AssetSearchIndexJob.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        lenient().when(searchIndexJobRepository.findByAssetIdAndStatusIn(any(), any()))
+        lenient().when(searchIndexJobRepository.findByAssetAndStatuses(any(), any()))
                 .thenReturn(List.of());
-        lenient().when(searchIndexJobRepository.findByAssetIdAndSnapshotFingerprintAndStatusIn(any(), anyString(), any()))
+        lenient().when(searchIndexJobRepository.findByAssetFingerprintAndStatuses(any(), anyString(), any()))
                 .thenReturn(List.of());
-        lenient().when(searchIndexJobRepository.findFirstByAssetIdAndSnapshotFingerprintAndStatusOrderByIndexedAtDesc(
+        lenient().when(searchIndexJobRepository.findLatestIndexed(
                 any(),
-                anyString(),
-                any()
+                anyString()
         )).thenReturn(Optional.empty());
     }
 
@@ -109,7 +108,7 @@ class AssetSearchIndexRequestServiceTest {
         String fingerprint = new TranscriptSnapshotFingerprintService().fingerprint(rows);
         AssetSearchIndexJob existingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
 
-        when(searchIndexJobRepository.findByAssetIdAndSnapshotFingerprintAndStatusIn(
+        when(searchIndexJobRepository.findByAssetFingerprintAndStatuses(
                 assetId,
                 fingerprint,
                 List.of(AssetSearchIndexJobStatus.PENDING, AssetSearchIndexJobStatus.INDEXING)
@@ -129,16 +128,15 @@ class AssetSearchIndexRequestServiceTest {
         indexedJob.markIndexing();
         indexedJob.markIndexed(java.time.Instant.now());
 
-        when(searchIndexJobRepository.findFirstByAssetIdAndSnapshotFingerprintAndStatusOrderByIndexedAtDesc(
+        when(searchIndexJobRepository.findLatestIndexed(
                 assetId,
-                fingerprint,
-                AssetSearchIndexJobStatus.INDEXED
+                fingerprint
         )).thenReturn(Optional.of(indexedJob));
 
         AssetSearchIndexJob result = service().createExplicitJob(assetId, fingerprint);
 
         assertThat(result).isSameAs(indexedJob);
-        verify(searchIndexJobRepository, never()).findByAssetIdAndStatusIn(any(), any());
+        verify(searchIndexJobRepository, never()).findByAssetAndStatuses(any(), any());
         verify(searchIndexJobRepository, never()).save(any(AssetSearchIndexJob.class));
         verify(outboxWriter, never()).enqueue(any());
     }
@@ -153,10 +151,9 @@ class AssetSearchIndexRequestServiceTest {
         indexedJob.markIndexing();
         indexedJob.markIndexed(java.time.Instant.now());
 
-        when(searchIndexJobRepository.findFirstByAssetIdAndSnapshotFingerprintAndStatusOrderByIndexedAtDesc(
+        when(searchIndexJobRepository.findLatestIndexed(
                 assetId,
-                fingerprint,
-                AssetSearchIndexJobStatus.INDEXED
+                fingerprint
         )).thenReturn(Optional.of(indexedJob));
 
         service().requestIndexingIfEnabled(assetId, rows);
@@ -171,7 +168,7 @@ class AssetSearchIndexRequestServiceTest {
         UUID assetId = UUID.randomUUID();
         AssetSearchIndexJob oldJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, "old-fingerprint");
 
-        when(searchIndexJobRepository.findByAssetIdAndStatusIn(
+        when(searchIndexJobRepository.findByAssetAndStatuses(
                 assetId,
                 List.of(AssetSearchIndexJobStatus.PENDING, AssetSearchIndexJobStatus.INDEXING)
         )).thenReturn(List.of(oldJob));

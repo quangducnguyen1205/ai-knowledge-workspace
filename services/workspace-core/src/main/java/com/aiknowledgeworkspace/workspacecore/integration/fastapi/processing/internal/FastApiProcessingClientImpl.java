@@ -5,13 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegra
 import java.util.List;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -24,39 +18,6 @@ class FastApiProcessingClientImpl implements FastApiProcessingClient {
 
     FastApiProcessingClientImpl(@Qualifier("fastApiRestClient") RestClient fastApiRestClient) {
         this.fastApiRestClient = fastApiRestClient;
-    }
-
-    @Override
-    public FastApiUploadResponse uploadVideo(Resource videoResource, String filename, String title) {
-        HttpHeaders fileHeaders = new HttpHeaders();
-        fileHeaders.setContentDispositionFormData("file", filename);
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new HttpEntity<>(videoResource, fileHeaders));
-        body.add("title", title);
-        return execute(
-                () -> fastApiRestClient.post().uri("/videos/upload")
-                        .contentType(MediaType.MULTIPART_FORM_DATA).body(body).retrieve().body(FastApiUploadResponse.class),
-                "upload video"
-        );
-    }
-
-    @Override
-    public FastApiTaskStatusResponse getTaskStatus(String taskId) {
-        return execute(
-                () -> fastApiRestClient.get().uri("/videos/tasks/{taskId}", taskId)
-                        .retrieve().body(FastApiTaskStatusResponse.class),
-                "read task status"
-        );
-    }
-
-    @Override
-    public List<FastApiTranscriptRowResponse> getTranscript(String videoId) {
-        FastApiTranscriptRowResponse[] rows = execute(
-                () -> fastApiRestClient.get().uri("/videos/{videoId}/transcript", videoId)
-                        .retrieve().body(FastApiTranscriptRowResponse[].class),
-                "read transcript"
-        );
-        return rows == null ? List.of() : List.of(rows);
     }
 
     @Override

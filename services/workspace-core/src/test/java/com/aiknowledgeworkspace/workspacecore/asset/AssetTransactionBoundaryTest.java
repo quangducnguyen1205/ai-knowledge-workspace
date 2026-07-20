@@ -1,66 +1,59 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
-
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetCommandApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadCommand;
+import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
 import java.lang.reflect.Method;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 class AssetTransactionBoundaryTest {
 
     @Test
-    void uploadOrchestrationRemainsOutsideThePersistenceTransaction() throws Exception {
-        Method upload = UploadAssetApplicationService.class.getMethod(
-                "uploadAsset", UUID.class, MultipartFile.class, String.class
-        );
-        Method persistKafka = AssetPersistenceService.class.getMethod(
-                "persistKafkaRequestUpload",
-                UUID.class,
-                String.class,
-                String.class,
-                UUID.class,
-                String.class,
-                StoredObjectReference.class
-        );
+    void externalUploadAndDeleteOrchestrationRemainOutsideDatabaseTransactions() throws Exception {
+        Method upload = UploadAssetApplicationService.class.getMethod("upload", AssetUploadCommand.class);
+        Method delete = AssetCommandApplicationService.class.getMethod("delete", java.util.UUID.class);
 
         assertThat(transactional(upload)).isNull();
-        assertThat(transactional(persistKafka)).isNotNull();
+        assertThat(transactional(delete)).isNull();
     }
 
     @Test
-    void controllerTranscriptFallbackRemainsOutsideAnEnclosingTransaction() throws Exception {
-        Method read = AssetQueryApplicationService.class.getMethod("getAssetTranscript", UUID.class);
-        Method compatibilityFallback = DirectProcessingCompatibilityAdapter.class.getDeclaredMethod(
-                "loadOrCaptureTranscript", Asset.class, ProcessingJobView.class
+    void uploadProductTruthAndOutboxIntentShareOneTransaction() throws Exception {
+        Class<?> transactionClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadTransaction"
+        );
+        Method persist = transactionClass.getDeclaredMethod(
+                "persist",
+                java.util.UUID.class,
+                String.class,
+                String.class,
+                java.util.UUID.class,
+                String.class,
+                com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference.class
         );
 
-        assertThat(transactional(read)).isNull();
-        assertThat(transactional(compatibilityFallback)).isNull();
+        assertThat(transactional(persist)).isNotNull();
     }
 
     @Test
-    void indexingFallbackAndCanonicalReplacementRemainTransactional() throws Exception {
-        Method indexingFallback = DirectProcessingCompatibilityAdapter.class.getMethod(
-                "loadAuthorizedIndexingSourceForCompletedProcessing", UUID.class, String.class
-        );
+    void canonicalReplacementAndDatabaseMutationsAreExplicitTransactions() throws Exception {
         Method replace = AssetTranscriptSnapshotService.class.getMethod(
                 "replaceCanonicalSnapshot", Asset.class, java.util.List.class
         );
+        Class<?> mutationClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetMutationTransaction"
+        );
+        Method updateTitle = mutationClass.getDeclaredMethod("updateTitle", Asset.class, String.class);
+        Method delete = mutationClass.getDeclaredMethod("delete", Asset.class);
 
-        assertThat(transactional(indexingFallback)).isNotNull();
         assertThat(transactional(replace)).isNotNull();
+        assertThat(transactional(updateTitle)).isNotNull();
+        assertThat(transactional(delete)).isNotNull();
     }
 
     private Transactional transactional(Method method) {

@@ -9,7 +9,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearch
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingAttempt;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.IndexingFailureDiagnostic;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
@@ -28,18 +28,18 @@ public class IndexingAttemptTransactionService {
 
     private static final int MAX_ERROR_DETAIL_LENGTH = 1024;
 
-    private final AssetSearchIndexJobRepository searchIndexJobRepository;
+    private final SearchIndexJobStore searchIndexJobStore;
     private final IndexingAssetPort indexingAssetPort;
     private final TranscriptSnapshotFingerprintService fingerprintService;
     private final TransactionTemplate transactionTemplate;
 
     public IndexingAttemptTransactionService(
-            AssetSearchIndexJobRepository searchIndexJobRepository,
+            SearchIndexJobStore searchIndexJobStore,
             IndexingAssetPort indexingAssetPort,
             TranscriptSnapshotFingerprintService fingerprintService,
             PlatformTransactionManager transactionManager
     ) {
-        this.searchIndexJobRepository = searchIndexJobRepository;
+        this.searchIndexJobStore = searchIndexJobStore;
         this.indexingAssetPort = indexingAssetPort;
         this.fingerprintService = fingerprintService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -54,19 +54,19 @@ public class IndexingAttemptTransactionService {
     }
 
     public void markJobFailed(UUID indexingJobId, RuntimeException exception) {
-        transactionTemplate.executeWithoutResult(status -> searchIndexJobRepository.findById(indexingJobId)
+        transactionTemplate.executeWithoutResult(status -> searchIndexJobStore.findById(indexingJobId)
                 .ifPresent(indexingJob -> {
                     indexingJob.markFailed(safeErrorDetail(exception));
-                    searchIndexJobRepository.save(indexingJob);
+                    searchIndexJobStore.save(indexingJob);
                 }));
     }
 
     public void persistBestEffortDiagnostic(UUID indexingJobId, String diagnostic) {
         try {
-            transactionTemplate.executeWithoutResult(status -> searchIndexJobRepository.findById(indexingJobId)
+            transactionTemplate.executeWithoutResult(status -> searchIndexJobStore.findById(indexingJobId)
                     .ifPresent(indexingJob -> {
                         indexingJob.recordLastError(diagnostic);
-                        searchIndexJobRepository.save(indexingJob);
+                        searchIndexJobStore.save(indexingJob);
                     }));
         } catch (RuntimeException diagnosticPersistenceFailure) {
             // Preserve the original indexing failure; diagnostics are best-effort.
@@ -74,7 +74,7 @@ public class IndexingAttemptTransactionService {
     }
 
     private IndexingAttempt beginIndexingAttempt(UUID indexingJobId) {
-        AssetSearchIndexJob indexingJob = searchIndexJobRepository.findById(indexingJobId)
+        AssetSearchIndexJob indexingJob = searchIndexJobStore.findById(indexingJobId)
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset search index job was not found: " + indexingJobId
                 ));
@@ -92,24 +92,24 @@ public class IndexingAttemptTransactionService {
             indexingJob.markFailed(IndexingFailureDiagnostic.from(
                     List.of(), Category.INDEXING_SOURCE_INVALID, FailureStage.BEFORE_BULK, null
             ));
-            searchIndexJobRepository.save(indexingJob);
+            searchIndexJobStore.save(indexingJob);
             return completed(indexingJob);
         }
 
         String currentSnapshotFingerprint = fingerprintService.fingerprint(transcriptRows);
         if (!indexingJob.getSnapshotFingerprint().equals(currentSnapshotFingerprint)) {
             indexingJob.markSuperseded();
-            searchIndexJobRepository.save(indexingJob);
+            searchIndexJobStore.save(indexingJob);
             return completed(indexingJob);
         }
 
         indexingJob.markIndexing();
-        searchIndexJobRepository.save(indexingJob);
+        searchIndexJobStore.save(indexingJob);
         return IndexingAttempt.started(indexingJob.getId(), indexingSource);
     }
 
     private AssetSearchIndexExecutionResult finalizeAttempt(UUID indexingJobId) {
-        AssetSearchIndexJob indexingJob = searchIndexJobRepository.findById(indexingJobId)
+        AssetSearchIndexJob indexingJob = searchIndexJobStore.findById(indexingJobId)
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset search index job was not found after indexing: " + indexingJobId
                 ));
@@ -129,12 +129,12 @@ public class IndexingAttemptTransactionService {
         if (transcriptRows.isEmpty()
                 || !indexingJob.getSnapshotFingerprint().equals(fingerprintService.fingerprint(transcriptRows))) {
             indexingJob.markSuperseded();
-            searchIndexJobRepository.save(indexingJob);
+            searchIndexJobStore.save(indexingJob);
             return result(indexingJob, 0);
         }
 
         indexingJob.markIndexed(java.time.Instant.now());
-        searchIndexJobRepository.save(indexingJob);
+        searchIndexJobStore.save(indexingJob);
         try {
             indexingAssetPort.markSearchable(indexingSource.assetId());
         } catch (SearchAssetUnavailableException exception) {

@@ -2,82 +2,65 @@ package com.aiknowledgeworkspace.workspacecore.asset.application.query;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetListRequestException;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetListResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatusResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetSummaryResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContextResponse;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowResponse;
 import com.aiknowledgeworkspace.workspacecore.asset.InvalidTranscriptContextWindowException;
 import com.aiknowledgeworkspace.workspacecore.asset.ProcessingJobNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.asset.TranscriptRowNotFoundException;
-
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.TranscriptUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
+import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingTaskState;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 @Service
-public class AssetQueryApplicationService {
+public class AssetQueryApplicationService implements AssetQueryUseCase {
 
     private static final int DEFAULT_ASSET_LIST_PAGE = 0;
     private static final int DEFAULT_ASSET_LIST_SIZE = 20;
     private static final int MAX_ASSET_LIST_SIZE = 100;
-    private static final Sort ASSET_LIST_SORT = Sort.by(
-            Sort.Order.desc("createdAt"),
-            Sort.Order.desc("id")
-    );
     private static final Comparator<Asset> ASSET_LIST_COMPARATOR = Comparator
             .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
             .thenComparing(Asset::getId, Comparator.reverseOrder());
     private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
     private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
 
-    private final AssetRepository assetRepository;
+    private final AssetStore assetStore;
     private final ProcessingRequestApplication processingRequestApplication;
-    private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetTranscriptQueryService transcriptQueryService;
     private final WorkspaceAccessApplication workspaceQueryApplication;
 
     public AssetQueryApplicationService(
-            AssetRepository assetRepository,
+            AssetStore assetStore,
             ProcessingRequestApplication processingRequestApplication,
-            DirectProcessingCompatibilityAdapter compatibilityAdapter,
-            AssetPersistenceService assetPersistenceService,
+            AssetTranscriptQueryService transcriptQueryService,
             WorkspaceAccessApplication workspaceQueryApplication
     ) {
-        this.assetRepository = assetRepository;
+        this.assetStore = assetStore;
         this.processingRequestApplication = processingRequestApplication;
-        this.compatibilityAdapter = compatibilityAdapter;
-        this.assetPersistenceService = assetPersistenceService;
+        this.transcriptQueryService = transcriptQueryService;
         this.workspaceQueryApplication = workspaceQueryApplication;
     }
 
-    public Asset getAsset(UUID assetId) {
-        Asset asset = assetRepository.findById(assetId)
-                .orElseThrow(AssetNotFoundException::new);
-        if (!workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId())) {
-            throw new AssetNotFoundException();
-        }
-        return asset;
+    @Override
+    public AssetView getAsset(UUID assetId) {
+        return AssetView.from(loadAuthorizedAsset(assetId));
     }
 
-    public AssetListResponse listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
+    @Override
+    public AssetPage listAssets(UUID workspaceId, Integer page, Integer size, AssetStatus assetStatus) {
         int resolvedPage = resolvePage(page);
         int resolvedSize = resolveSize(size);
         WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
@@ -88,10 +71,10 @@ public class AssetQueryApplicationService {
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / resolvedSize);
         int startIndex = (int) Math.min((long) resolvedPage * resolvedSize, totalElements);
         int endIndex = Math.min(startIndex + resolvedSize, totalElements);
-        List<AssetSummaryResponse> items = filteredAssets.subList(startIndex, endIndex).stream()
+        List<AssetSummary> items = filteredAssets.subList(startIndex, endIndex).stream()
                 .map(this::toSummary)
                 .toList();
-        return new AssetListResponse(
+        return new AssetPage(
                 items,
                 resolvedPage,
                 resolvedSize,
@@ -101,53 +84,58 @@ public class AssetQueryApplicationService {
         );
     }
 
-    public AssetStatusResponse getAssetStatus(UUID assetId) {
-        Asset asset = getAsset(assetId);
+    @Override
+    public AssetStatusView getAssetStatus(UUID assetId) {
+        Asset asset = loadAuthorizedAsset(assetId);
         ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
                 .orElseThrow(ProcessingJobNotFoundException::new);
-        if (isTerminal(processingJob.status()) || !StringUtils.hasText(processingJob.fastapiTaskId())) {
-            return statusResponse(asset, processingJob);
+        return statusView(asset, processingJob);
+    }
+
+    @Override
+    public List<AssetTranscriptRowView> getAssetTranscript(UUID assetId) {
+        loadAuthorizedAsset(assetId);
+        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
+                .orElseThrow(ProcessingJobNotFoundException::new);
+        if (processingJob.status() != ProcessingJobStatus.SUCCEEDED) {
+            throw new TranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_READY",
+                    "Transcript is not ready until processing reaches terminal success"
+            );
         }
-
-        DirectProcessingTaskState taskState = compatibilityAdapter.taskState(processingJob.fastapiTaskId());
-        return assetPersistenceService.refreshAssetStatus(
-                asset,
-                processingJob,
-                taskState.rawStatus(),
-                taskState.processingStatus(),
-                taskState.assetStatus()
-        );
+        List<AssetTranscriptRowView> rows = transcriptQueryService.loadUsableSnapshot(assetId);
+        if (rows.isEmpty()) {
+            throw new TranscriptUnavailableException(
+                    "TRANSCRIPT_NOT_AVAILABLE",
+                    "Canonical transcript is unavailable for this asset"
+            );
+        }
+        return rows;
     }
 
-    public List<AssetTranscriptRowResponse> getAssetTranscript(UUID assetId) {
-        Asset asset = getAsset(assetId);
-        ProcessingJobView processingJob = processingRequestApplication.findByAssetId(assetId)
-                .orElseThrow(ProcessingJobNotFoundException::new);
-        return compatibilityAdapter.loadOrCaptureTranscript(asset, processingJob).stream()
-                .map(this::toTranscriptResponse)
-                .toList();
-    }
-
-    public AssetTranscriptContextResponse getAssetTranscriptContext(
+    @Override
+    public AssetTranscriptContext getAssetTranscriptContext(
             UUID assetId,
             String transcriptRowId,
             Integer window
     ) {
         int resolvedWindow = resolveTranscriptContextWindow(window);
-        List<AssetTranscriptRowResponse> sortedRows = new ArrayList<>(getAssetTranscript(assetId));
+        Asset asset = loadAuthorizedAsset(assetId);
+        List<AssetTranscriptRowView> sortedRows = new ArrayList<>(getAssetTranscript(assetId));
         sortedRows.sort(Comparator.comparing(
-                AssetTranscriptRowResponse::segmentIndex,
+                AssetTranscriptRowView::segmentIndex,
                 Comparator.nullsLast(Integer::compareTo)
         ));
         int hitRowIndex = findTranscriptRowIndex(sortedRows, transcriptRowId);
         if (hitRowIndex < 0) {
             throw new TranscriptRowNotFoundException(assetId, transcriptRowId);
         }
-        AssetTranscriptRowResponse hitRow = sortedRows.get(hitRowIndex);
+        AssetTranscriptRowView hitRow = sortedRows.get(hitRowIndex);
         int startIndex = Math.max(0, hitRowIndex - resolvedWindow);
         int endIndex = Math.min(sortedRows.size(), hitRowIndex + resolvedWindow + 1);
-        return new AssetTranscriptContextResponse(
+        return new AssetTranscriptContext(
                 assetId,
+                asset.getTitle(),
                 transcriptRowId,
                 hitRow.segmentIndex(),
                 resolvedWindow,
@@ -155,14 +143,18 @@ public class AssetQueryApplicationService {
         );
     }
 
-    private AssetStatusResponse statusResponse(Asset asset, ProcessingJobView processingJob) {
-        return new AssetStatusResponse(
-                asset.getId(), processingJob.id(), asset.getStatus(), processingJob.status()
-        );
+    public Asset loadAuthorizedAsset(UUID assetId) {
+        Asset asset = assetStore.findById(assetId).orElseThrow(AssetNotFoundException::new);
+        if (!workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId())) {
+            throw new AssetNotFoundException();
+        }
+        return asset;
     }
 
-    private boolean isTerminal(ProcessingJobStatus status) {
-        return status == ProcessingJobStatus.SUCCEEDED || status == ProcessingJobStatus.FAILED;
+    private AssetStatusView statusView(Asset asset, ProcessingJobView processingJob) {
+        return new AssetStatusView(
+                asset.getId(), processingJob.id(), asset.getStatus(), processingJob.status()
+        );
     }
 
     private int resolveTranscriptContextWindow(Integer window) {
@@ -180,11 +172,11 @@ public class AssetQueryApplicationService {
         return window;
     }
 
-    private int findTranscriptRowIndex(List<AssetTranscriptRowResponse> rows, String transcriptRowId) {
+    private int findTranscriptRowIndex(List<AssetTranscriptRowView> rows, String transcriptRowId) {
         for (int index = 0; index < rows.size(); index++) {
-            AssetTranscriptRowResponse row = rows.get(index);
-            if ((StringUtils.hasText(row.id()) && row.id().equals(transcriptRowId))
-                    || (!StringUtils.hasText(row.id())
+            AssetTranscriptRowView row = rows.get(index);
+            if ((org.springframework.util.StringUtils.hasText(row.id()) && row.id().equals(transcriptRowId))
+                    || (!org.springframework.util.StringUtils.hasText(row.id())
                     && row.segmentIndex() != null
                     && ("segment-" + row.segmentIndex()).equals(transcriptRowId))) {
                 return index;
@@ -221,21 +213,16 @@ public class AssetQueryApplicationService {
 
     private List<Asset> loadAssetsForWorkspace(WorkspaceAccess workspace) {
         List<Asset> assets = new ArrayList<>(
-                assetRepository.findByWorkspaceId(workspace.workspaceId(), ASSET_LIST_SORT)
+                assetStore.findByWorkspaceId(workspace.workspaceId())
         );
         assets.sort(ASSET_LIST_COMPARATOR);
         return assets;
     }
 
-    private AssetSummaryResponse toSummary(Asset asset) {
-        return new AssetSummaryResponse(
+    private AssetSummary toSummary(Asset asset) {
+        return new AssetSummary(
                 asset.getId(), asset.getTitle(), asset.getStatus(), asset.getWorkspaceId(), asset.getCreatedAt()
         );
     }
 
-    private AssetTranscriptRowResponse toTranscriptResponse(AssetTranscriptRowSnapshot row) {
-        return new AssetTranscriptRowResponse(
-                row.getTranscriptRowId(), row.getVideoId(), row.getSegmentIndex(), row.getText(), row.getCreatedAt()
-        );
-    }
 }

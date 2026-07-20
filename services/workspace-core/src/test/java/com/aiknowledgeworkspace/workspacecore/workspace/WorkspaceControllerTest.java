@@ -1,7 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
 
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceUseCase;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceView;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
@@ -29,13 +30,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class WorkspaceControllerTest {
 
-    private WorkspaceService workspaceService;
+    private WorkspaceUseCase workspaceUseCase;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        workspaceService = mock(WorkspaceService.class);
-        WorkspaceController workspaceController = new WorkspaceController(workspaceService);
+        workspaceUseCase = mock(WorkspaceUseCase.class);
+        WorkspaceController workspaceController = new WorkspaceController(workspaceUseCase);
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -49,8 +50,8 @@ class WorkspaceControllerTest {
     @Test
     void createWorkspaceReturnsCreatedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        Workspace workspace = workspace(workspaceId, "Algorithms", Instant.parse("2026-04-03T08:00:00Z"));
-        when(workspaceService.createWorkspace("Algorithms")).thenReturn(workspace);
+        WorkspaceView workspace = workspace(workspaceId, "Algorithms", Instant.parse("2026-04-03T08:00:00Z"));
+        when(workspaceUseCase.create("Algorithms")).thenReturn(workspace);
 
         mockMvc.perform(post("/api/workspaces")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,7 +68,7 @@ class WorkspaceControllerTest {
 
     @Test
     void createWorkspaceRejectsBlankName() throws Exception {
-        when(workspaceService.createWorkspace("   "))
+        when(workspaceUseCase.create("   "))
                 .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
 
         mockMvc.perform(post("/api/workspaces")
@@ -85,7 +86,7 @@ class WorkspaceControllerTest {
     @Test
     void createWorkspaceRejectsTooLongName() throws Exception {
         String tooLongName = "a".repeat(256);
-        when(workspaceService.createWorkspace(tooLongName))
+        when(workspaceUseCase.create(tooLongName))
                 .thenThrow(new InvalidWorkspaceNameException("Workspace name must be at most 255 characters"));
 
         mockMvc.perform(post("/api/workspaces")
@@ -102,7 +103,7 @@ class WorkspaceControllerTest {
 
     @Test
     void createWorkspaceRejectsMissingBody() throws Exception {
-        when(workspaceService.createWorkspace(null))
+        when(workspaceUseCase.create(null))
                 .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
 
         mockMvc.perform(post("/api/workspaces")
@@ -114,24 +115,24 @@ class WorkspaceControllerTest {
 
     @Test
     void listWorkspacesReturnsWorkspaceSummaries() throws Exception {
-        Workspace defaultWorkspace = workspace(
+        WorkspaceView defaultWorkspace = workspace(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 "Default Workspace",
                 Instant.parse("2026-04-03T08:00:00Z")
         );
-        Workspace courseWorkspace = workspace(
+        WorkspaceView courseWorkspace = workspace(
                 UUID.randomUUID(),
                 "Distributed Systems",
                 Instant.parse("2026-04-03T09:00:00Z")
         );
-        when(workspaceService.listWorkspaces()).thenReturn(List.of(defaultWorkspace, courseWorkspace));
+        when(workspaceUseCase.list()).thenReturn(List.of(defaultWorkspace, courseWorkspace));
 
         mockMvc.perform(get("/api/workspaces"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(defaultWorkspace.getId().toString()))
+                .andExpect(jsonPath("$[0].id").value(defaultWorkspace.id().toString()))
                 .andExpect(jsonPath("$[0].name").value("Default Workspace"))
                 .andExpect(jsonPath("$[0].createdAt").value("2026-04-03T08:00:00Z"))
-                .andExpect(jsonPath("$[1].id").value(courseWorkspace.getId().toString()))
+                .andExpect(jsonPath("$[1].id").value(courseWorkspace.id().toString()))
                 .andExpect(jsonPath("$[1].name").value("Distributed Systems"))
                 .andExpect(jsonPath("$[1].createdAt").value("2026-04-03T09:00:00Z"));
     }
@@ -139,8 +140,8 @@ class WorkspaceControllerTest {
     @Test
     void getWorkspaceReturnsWorkspaceDetails() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        Workspace workspace = workspace(workspaceId, "Operating Systems", Instant.parse("2026-04-03T10:00:00Z"));
-        when(workspaceService.getWorkspace(workspaceId)).thenReturn(workspace);
+        WorkspaceView workspace = workspace(workspaceId, "Operating Systems", Instant.parse("2026-04-03T10:00:00Z"));
+        when(workspaceUseCase.get(workspaceId)).thenReturn(workspace);
 
         mockMvc.perform(get("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isOk())
@@ -160,7 +161,7 @@ class WorkspaceControllerTest {
     @Test
     void getWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.getWorkspace(workspaceId))
+        when(workspaceUseCase.get(workspaceId))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(get("/api/workspaces/{workspaceId}", workspaceId))
@@ -172,8 +173,8 @@ class WorkspaceControllerTest {
     @Test
     void updateWorkspaceReturnsUpdatedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        Workspace workspace = workspace(workspaceId, "Renamed Workspace", Instant.parse("2026-04-03T10:00:00Z"));
-        when(workspaceService.updateWorkspace(workspaceId, "Renamed Workspace")).thenReturn(workspace);
+        WorkspaceView workspace = workspace(workspaceId, "Renamed Workspace", Instant.parse("2026-04-03T10:00:00Z"));
+        when(workspaceUseCase.update(workspaceId, "Renamed Workspace")).thenReturn(workspace);
 
         mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -191,7 +192,7 @@ class WorkspaceControllerTest {
     @Test
     void updateWorkspaceRejectsMissingBody() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.updateWorkspace(workspaceId, null))
+        when(workspaceUseCase.update(workspaceId, null))
                 .thenThrow(new InvalidWorkspaceNameException("Workspace name is required"));
 
         mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
@@ -204,7 +205,7 @@ class WorkspaceControllerTest {
     @Test
     void updateWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(workspaceService.updateWorkspace(workspaceId, "Renamed Workspace"))
+        when(workspaceUseCase.update(workspaceId, "Renamed Workspace"))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(patch("/api/workspaces/{workspaceId}", workspaceId)
@@ -231,7 +232,7 @@ class WorkspaceControllerTest {
     void deleteWorkspaceReturnsStructuredNotFoundForUnknownOrNonOwnedWorkspace() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         doThrow(new WorkspaceNotFoundException(workspaceId))
-                .when(workspaceService).deleteWorkspace(workspaceId);
+                .when(workspaceUseCase).delete(workspaceId);
 
         mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isNotFound())
@@ -245,7 +246,7 @@ class WorkspaceControllerTest {
         doThrow(new WorkspaceDeleteConflictException(
                 "DEFAULT_WORKSPACE_DELETE_FORBIDDEN",
                 "Default workspace cannot be deleted"
-        )).when(workspaceService).deleteWorkspace(workspaceId);
+        )).when(workspaceUseCase).delete(workspaceId);
 
         mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isConflict())
@@ -259,7 +260,7 @@ class WorkspaceControllerTest {
         doThrow(new WorkspaceDeleteConflictException(
                 "WORKSPACE_NOT_EMPTY",
                 "Workspace cannot be deleted while it still contains assets"
-        )).when(workspaceService).deleteWorkspace(workspaceId);
+        )).when(workspaceUseCase).delete(workspaceId);
 
         mockMvc.perform(delete("/api/workspaces/{workspaceId}", workspaceId))
                 .andExpect(status().isConflict())
@@ -267,9 +268,7 @@ class WorkspaceControllerTest {
                 .andExpect(jsonPath("$.message").value("Workspace cannot be deleted while it still contains assets"));
     }
 
-    private Workspace workspace(UUID id, String name, Instant createdAt) {
-        Workspace workspace = new Workspace(id, name);
-        org.springframework.test.util.ReflectionTestUtils.setField(workspace, "createdAt", createdAt);
-        return workspace;
+    private WorkspaceView workspace(UUID id, String name, Instant createdAt) {
+        return new WorkspaceView(id, name, createdAt);
     }
 }

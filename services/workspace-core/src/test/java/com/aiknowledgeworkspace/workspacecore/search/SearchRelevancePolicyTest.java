@@ -10,7 +10,8 @@ import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQuer
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.ArrayList;
@@ -81,14 +82,14 @@ class SearchRelevancePolicyTest {
         when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(eligibleAssetIds);
         when(transcriptSearchQueryPort.search(any())).thenReturn(candidates);
 
-        SearchResponse response = searchService.search("what is codex", workspaceId, null);
+        SearchResult response = searchService.search(new SearchQuery("what is codex", workspaceId, null));
 
-        assertThat(response.results()).hasSize(12);
-        assertThat(response.resultCount()).isEqualTo(12);
-        assertThat(response.results())
+        assertThat(response.hits()).hasSize(12);
+        assertThat(response.hits().size()).isEqualTo(12);
+        assertThat(response.hits())
                 .allSatisfy(result -> assertThat(result.text()).containsIgnoringCase("codex"))
                 .noneSatisfy(result -> assertThat(result.assetId()).isEqualTo(ieltsAssetId));
-        assertThat(response.results().stream()
+        assertThat(response.hits().stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         result -> result.assetId(),
                         java.util.stream.Collectors.counting()
@@ -117,9 +118,9 @@ class SearchRelevancePolicyTest {
                 hit(firstAssetId, "Codex", "row-c", 1, "Codex details", 4.0)
         ));
 
-        SearchResponse response = searchService.search("codex", workspaceId, null);
+        SearchResult response = searchService.search(new SearchQuery("codex", workspaceId, null));
 
-        assertThat(response.results())
+        assertThat(response.hits())
                 .extracting(result -> result.assetId() + ":" + result.transcriptRowId())
                 .containsExactly(
                         firstAssetId + ":row-c",
@@ -135,10 +136,10 @@ class SearchRelevancePolicyTest {
         when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
         when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(assetId));
 
-        SearchResponse response = searchService.search("what is this", workspaceId, null);
+        SearchResult response = searchService.search(new SearchQuery("what is this", workspaceId, null));
 
-        assertThat(response.resultCount()).isZero();
-        assertThat(response.results()).isEmpty();
+        assertThat(response.hits().size()).isZero();
+        assertThat(response.hits()).isEmpty();
         verify(transcriptSearchQueryPort, never()).search(any());
     }
 

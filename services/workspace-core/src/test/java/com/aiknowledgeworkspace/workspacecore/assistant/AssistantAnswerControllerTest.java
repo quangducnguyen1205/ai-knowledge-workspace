@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantAnswerCommandUseCase;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerResult;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -25,12 +27,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AssistantAnswerControllerTest {
 
-    private AssistantAnswerService assistantAnswerService;
+    private AssistantAnswerCommandUseCase assistantAnswerService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        assistantAnswerService = mock(AssistantAnswerService.class);
+        assistantAnswerService = mock(AssistantAnswerCommandUseCase.class);
         AssistantAnswerController assistantAnswerController = new AssistantAnswerController(assistantAnswerService);
         ObjectMapper objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders.standaloneSetup(assistantAnswerController)
@@ -43,9 +45,9 @@ class AssistantAnswerControllerTest {
     void answerEndpointReturnsStructuredGroundedAnswer() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(assistantAnswerService.answer(any())).thenReturn(new AssistantAnswerResponse(
+        when(assistantAnswerService.answer(any())).thenReturn(new AssistantAnswerResult(
                 "Use memoization for overlapping subproblems.",
-                List.of(new AssistantAnswerCitationResponse(
+                List.of(new AssistantAnswerCitation(
                         "src-abc123",
                         assetId,
                         "Lecture",

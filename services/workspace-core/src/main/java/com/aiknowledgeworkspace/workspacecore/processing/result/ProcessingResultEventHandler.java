@@ -1,15 +1,12 @@
 package com.aiknowledgeworkspace.workspacecore.processing.result;
 
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProcessingResultEventHandler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingResultEventHandler.class);
     private static final int MAX_RECOVERABLE_EVENT_JSON_LENGTH = 8192;
 
     private final ProcessingResultEventParser eventParser;
@@ -57,11 +54,6 @@ public class ProcessingResultEventHandler {
     }
 
     private ProcessingResultEventEnvelope parseEvent(String rawEventJson) {
-        try {
-            return eventParser.parse(rawEventJson);
-        } catch (ProcessingResultEventRejectedException exception) {
-            LOGGER.warn("Rejected processing result event: {}", exception.getMessage());
-            throw exception;
-        }
+        return eventParser.parse(rawEventJson);
     }
 }

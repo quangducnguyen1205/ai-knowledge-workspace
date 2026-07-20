@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryService;
 
@@ -17,7 +17,7 @@ class OutboxRecoveryDisabledTest {
 
     @Test
     void disabledRecoveryDoesNotQueryOrMutateOutboxRows() {
-        OutboxEventRepository repository = mock(OutboxEventRepository.class);
+        OutboxEventStore repository = mock(OutboxEventStore.class);
         TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
         OutboxRecoveryProperties properties = new OutboxRecoveryProperties();
         OutboxRecoveryService service = new OutboxRecoveryService(

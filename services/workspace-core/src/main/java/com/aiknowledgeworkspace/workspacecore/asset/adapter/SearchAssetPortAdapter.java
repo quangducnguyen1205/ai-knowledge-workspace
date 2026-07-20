@@ -4,7 +4,6 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetDetails;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetIndexingSource;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetNotFoundException;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.internal.DirectProcessingCompatibilityAdapter;
 import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetSearchabilityService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
 
@@ -23,16 +22,13 @@ import org.springframework.stereotype.Component;
 public class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQueryPort {
 
     private final AssetTranscriptQueryService transcriptQueryService;
-    private final DirectProcessingCompatibilityAdapter compatibilityAdapter;
     private final AssetSearchabilityService assetSearchabilityService;
 
     public SearchAssetPortAdapter(
             AssetTranscriptQueryService transcriptQueryService,
-            DirectProcessingCompatibilityAdapter compatibilityAdapter,
             AssetSearchabilityService assetSearchabilityService
     ) {
         this.transcriptQueryService = transcriptQueryService;
-        this.compatibilityAdapter = compatibilityAdapter;
         this.assetSearchabilityService = assetSearchabilityService;
     }
 
@@ -42,9 +38,15 @@ public class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQue
     }
 
     @Override
-    public IndexingAssetSource loadAuthorizedIndexingSourceForCompletedProcessing(UUID assetId, String videoId) {
+    public IndexingAssetSource loadAuthorizedIndexingSource(UUID assetId) {
         try {
-            return toSource(compatibilityAdapter.loadAuthorizedIndexingSourceForCompletedProcessing(assetId, videoId));
+            AssetDetails details = transcriptQueryService.getAuthorizedAssetDetails(assetId);
+            return toSource(new AssetIndexingSource(
+                    details.assetId(),
+                    details.workspaceId(),
+                    details.title(),
+                    transcriptQueryService.loadUsableSnapshot(assetId)
+            ));
         } catch (AssetNotFoundException exception) {
             throw new SearchAssetUnavailableException(exception);
         }

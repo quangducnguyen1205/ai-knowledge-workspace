@@ -1,8 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantContextQueryUseCase;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -27,12 +28,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AssistantContextControllerTest {
 
-    private AssistantContextService assistantContextService;
+    private AssistantContextQueryUseCase assistantContextService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        assistantContextService = mock(AssistantContextService.class);
+        assistantContextService = mock(AssistantContextQueryUseCase.class);
         AssistantContextController assistantContextController = new AssistantContextController(assistantContextService);
         ObjectMapper objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders.standaloneSetup(assistantContextController)
@@ -49,17 +50,17 @@ class AssistantContextControllerTest {
     void contextEndpointReturnsRetrievalPackWithoutAnswerField() throws Exception {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        when(assistantContextService.buildContext(any())).thenReturn(new AssistantContextResponse(
+        when(assistantContextService.query(any())).thenReturn(new AssistantContextResult(
                 workspaceId,
                 "dynamic programming",
-                List.of(new AssistantContextSourceResponse(
+                List.of(new AssistantContextSource(
                         assetId,
                         "Lecture",
                         "row-1",
                         1,
                         "2026-06-25T00:00:01Z",
                         "bounded transcript context",
-                        new AssistantCitationResponse(assetId, "row-1", 1)
+                        new AssistantCitation(assetId, "row-1", 1)
                 ))
         ));
 
@@ -89,7 +90,7 @@ class AssistantContextControllerTest {
 
     @Test
     void invalidAssistantContextRequestReturnsStructuredBadRequest() throws Exception {
-        when(assistantContextService.buildContext(any()))
+        when(assistantContextService.query(any()))
                 .thenThrow(new InvalidAssistantContextRequestException(
                         "INVALID_ASSISTANT_QUERY",
                         "query is required"
@@ -110,7 +111,7 @@ class AssistantContextControllerTest {
 
     @Test
     void unauthenticatedCallerReturnsExistingUnauthorizedShape() throws Exception {
-        when(assistantContextService.buildContext(any()))
+        when(assistantContextService.query(any()))
                 .thenThrow(new AuthenticationRequiredException("Authentication is required"));
 
         mockMvc.perform(post("/api/assistant/context")
@@ -129,7 +130,7 @@ class AssistantContextControllerTest {
     @Test
     void nonOwnedWorkspaceReturnsExistingNotFoundShape() throws Exception {
         UUID workspaceId = UUID.randomUUID();
-        when(assistantContextService.buildContext(any()))
+        when(assistantContextService.query(any()))
                 .thenThrow(new WorkspaceNotFoundException(workspaceId));
 
         mockMvc.perform(post("/api/assistant/context")

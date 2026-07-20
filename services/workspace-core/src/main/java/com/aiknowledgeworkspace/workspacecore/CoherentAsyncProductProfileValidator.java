@@ -8,8 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 
 @Component
+@Profile("project3")
 public class CoherentAsyncProductProfileValidator implements InitializingBean {
 
     private final ProcessingAsyncConfiguration processingConfiguration;
@@ -31,10 +33,6 @@ public class CoherentAsyncProductProfileValidator implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        if (!processingConfiguration.isKafkaRequestMode()) {
-            return;
-        }
-
         List<String> missingControls = new ArrayList<>();
         require(
                 processingConfiguration.isRequestRelayEnabled(),
@@ -66,7 +64,7 @@ public class CoherentAsyncProductProfileValidator implements InitializingBean {
 
         if (!missingControls.isEmpty()) {
             throw new IllegalStateException(
-                    "Incomplete kafka_request configuration; enable the coherent asynchronous controls: "
+                    "Incomplete project3 asynchronous configuration; enable the coherent controls: "
                             + String.join(", ", missingControls)
             );
         }

@@ -1,60 +1,33 @@
-# Deprecation Registry
+# Removed and Retained Surfaces
 
-## Purpose
+Status: current compatibility decision registry.
 
-The integrated `project3` path is the only normal/default local product path:
+## Removed from Spring
 
-```text
-Spring upload
--> kafka_request
--> durable outbox and Kafka processing
--> automatic result handling
--> automatic indexing
--> SEARCHABLE
-```
+| Surface | Decision | Replacement |
+|---|---|---|
+| direct FastAPI upload/status processing | Removed before timestamp-aware transcript work | transactional asset/job/outbox request plus Kafka |
+| `compatibility` Spring profile | Removed | coherent `project3` profile |
+| direct-upload trigger-mode flag | Removed | one normal Kafka/outbox path |
+| old compatibility Make targets | Removed | `make run` or `make run-project3` |
+| GET status refresh with upstream polling | Removed | side-effect-free PostgreSQL status query |
+| transcript load-or-capture fallback | Removed | canonical snapshot applied by processing-result command |
+| direct-upload task/video columns | Removed from the clean baseline | processing request event correlation |
 
-Start the processing topology with `make project3-up` in the FastAPI repository and Spring with `make run`. New Project3 integrations must use this asynchronous path.
+These paths duplicated the verified Project3 normal path and caused mixed orchestration,
+persistence and transport responsibility. The FastAPI repository was not modified; any standalone
+endpoint there is outside the Spring product contract.
 
-Deprecation in this registry is non-blocking. The listed compatibility paths remain executable for rollback during the deprecation period. No removal date has been assigned, and removal requires a separate implementation decision.
+## Retained
 
-## Registry
+| Surface | Status | Reason |
+|---|---|---|
+| legacy-session authentication | Supported local/default option | authentication cutover is separate |
+| explicit indexing endpoint | Supported recovery | rebuild one authorized asset's derived index |
+| exact-ID result recovery | Supported operator control | reapply one durable known failed envelope |
+| exact-ID stale outbox requeue | Supported operator control | bounded recovery without a broad scan |
+| scoped one-shot relay/smoke commands | Supported validation/recovery | reuse the normal event state machine |
+| typed bounded outbox reconciliation | Supported in `project3` | retry classified transient exhausted failures |
 
-| Capability | Status | Replacement | Still supported for | Removal prerequisites | Removal date |
-| --- | --- | --- | --- | --- | --- |
-| Spring `direct_upload` | Deprecated, functional | `kafka_request` | Rollback and recovery | Completed deprecation window, caller and documentation audit, replacement observation evidence, rollback plan, and separate removal decision | Not scheduled |
-| Spring `compatibility` profile / `make run-compatibility` | Deprecated, functional | `project3` / `make run` | Rollback drills and local recovery | Completed deprecation window, operator workflow audit, replacement observation evidence, rollback plan, and separate removal decision | Not scheduled |
-| `make run-standalone` | Deprecated alias | `make run-compatibility` | Existing local callers during migration | Caller and script audit; the alias may be removed before the underlying compatibility profile only through a separate decision | Not scheduled |
-| FastAPI direct processing endpoint | Deprecated, functional | Project3 Kafka consumer path | Spring rollback mode and generic standalone FastAPI use | Completed deprecation window, caller audit, replacement observation evidence, standalone-use audit, rollback plan, and separate removal decision | Not scheduled |
-
-## Explicitly not deprecated
-
-- explicit indexing endpoint and `Index transcript` recovery UI;
-- manual and one-shot relay operations;
-- exact-ID recovery;
-- legacy session authentication;
-- development identity fallback;
-- canonical citation contracts;
-- generic standalone FastAPI use outside Project3 integration.
-
-## Compatibility behavior
-
-The deprecated paths are not deleted, disabled, renamed, newly gated, or scheduled for removal. `direct_upload` still performs the same synchronous Spring-to-FastAPI handoff, the `compatibility` profile still disables the asynchronous chain, and the FastAPI direct processing endpoint retains its request, response, status, storage, and Celery behavior. Startup and invocation warnings contain no request data or credentials.
-
-The explicit indexing endpoint remains the supported recovery action when automatic indexing does not advance an asset from `TRANSCRIPT_READY`. Manual relay and exact-ID recovery remain supported operational controls. Legacy session authentication is an independent compatibility decision.
-
-## Kafka operational risk carried forward
-
-Classification: `KAFKA_HARDENING_RECOMMENDED_NOT_DEPRECATION_BLOCKER`.
-
-One prior local Kafka container OOM event was observed. The controlled observation campaign completed without an OOM recurrence, but this does not prove production-scale stability. P3-S4.B1 provides a bounded local Kafka heap and container memory budget plus automatic `unless-stopped` restart behavior while preserving the KRaft volume and broker semantics. P3-S4.B2 adds bounded automatic reconciliation for typed transient publication failures after normal attempts are exhausted. Historical, unknown, permanent, and recovery-exhausted failures still require explicit operator review or recovery; manual and exact-ID recovery remain supported and are not deprecated. Compatibility removal is still not scheduled.
-
-## Removal gates
-
-No deprecated capability is safe to delete in this phase. A future removal proposal must provide all of the following:
-
-1. a completed and communicated deprecation window;
-2. an audit showing no required caller, standalone workflow, script, documentation, or rollback drill depends on the candidate;
-3. continued default-path evidence, categorized failure observations, and no unresolved duplicate/stuck outcomes;
-4. a tested rollback strategy that does not require the candidate;
-5. local-development usability evidence;
-6. a separate, explicit removal decision with focused tests and documentation updates.
+Unknown, permanent, historical-unclassified and recovery-exhausted outbox failures remain manual.
+There is no retry-topic framework or Kafka DLQ in this baseline.

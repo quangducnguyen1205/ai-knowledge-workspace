@@ -1,13 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.assistant.application;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerCitationResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerRequest;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantAnswerResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextRequest;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextSourceResponse;
 import com.aiknowledgeworkspace.workspacecore.assistant.AssistantProviderUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCommand;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextQuery;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantAnswerCommandUseCase;
 
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantAnswerProviderPort;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
-public class AssistantAnswerService {
+public class AssistantAnswerService implements AssistantAnswerCommandUseCase {
 
     private static final String PROVIDER_UNAVAILABLE_MESSAGE = "Assistant provider is unavailable";
 
@@ -42,9 +43,10 @@ public class AssistantAnswerService {
         this.assistantAnswerProviderPort = assistantAnswerProviderPort;
     }
 
-    public AssistantAnswerResponse answer(AssistantAnswerRequest request) {
-        NormalizedAnswerRequest normalizedRequest = normalize(request);
-        AssistantContextResponse context = assistantContextService.buildContext(new AssistantContextRequest(
+    @Override
+    public AssistantAnswerResult answer(AssistantAnswerCommand command) {
+        NormalizedAnswerRequest normalizedRequest = normalize(command);
+        AssistantContextResult context = assistantContextService.query(new AssistantContextQuery(
                 normalizedRequest.workspaceId(),
                 normalizedRequest.question(),
                 normalizedRequest.assetId(),
@@ -52,9 +54,9 @@ public class AssistantAnswerService {
                 normalizedRequest.contextWindow()
         ));
 
-        Map<String, AssistantContextSourceResponse> sourcesById = new LinkedHashMap<>();
+        Map<String, AssistantContextSource> sourcesById = new LinkedHashMap<>();
         List<AssistantProviderSource> internalSources = new ArrayList<>();
-        for (AssistantContextSourceResponse source : context.sources()) {
+        for (AssistantContextSource source : context.sources()) {
             String sourceId = sourceIdFor(source);
             sourcesById.put(sourceId, source);
             internalSources.add(new AssistantProviderSource(
@@ -78,12 +80,12 @@ public class AssistantAnswerService {
             throw new AssistantProviderUnavailableException(PROVIDER_UNAVAILABLE_MESSAGE, exception);
         }
 
-        return toPublicResponse(providerResponse, sourcesById);
+        return toResult(providerResponse, sourcesById);
     }
 
-    private AssistantAnswerResponse toPublicResponse(
+    private AssistantAnswerResult toResult(
             AssistantProviderResponse providerResponse,
-            Map<String, AssistantContextSourceResponse> sourcesById
+            Map<String, AssistantContextSource> sourcesById
     ) {
         if (providerResponse == null
                 || !StringUtils.hasText(providerResponse.answer())
@@ -104,19 +106,19 @@ public class AssistantAnswerService {
             throw new AssistantProviderUnavailableException(PROVIDER_UNAVAILABLE_MESSAGE);
         }
 
-        List<AssistantAnswerCitationResponse> citations = citedSourceIds.stream()
+        List<AssistantAnswerCitation> citations = citedSourceIds.stream()
                 .map(sourceId -> toCitation(sourceId, sourcesById.get(sourceId)))
                 .toList();
 
-        return new AssistantAnswerResponse(
+        return new AssistantAnswerResult(
                 providerResponse.answer().trim(),
                 citations,
                 providerResponse.insufficientContext()
         );
     }
 
-    private AssistantAnswerCitationResponse toCitation(String sourceId, AssistantContextSourceResponse source) {
-        return new AssistantAnswerCitationResponse(
+    private AssistantAnswerCitation toCitation(String sourceId, AssistantContextSource source) {
+        return new AssistantAnswerCitation(
                 sourceId,
                 source.assetId(),
                 source.assetTitle(),
@@ -126,7 +128,7 @@ public class AssistantAnswerService {
         );
     }
 
-    private String sourceIdFor(AssistantContextSourceResponse source) {
+    private String sourceIdFor(AssistantContextSource source) {
         String rawSourceId = "%s|%s|%s".formatted(
                 source.assetId(),
                 source.transcriptRowId(),
@@ -141,27 +143,27 @@ public class AssistantAnswerService {
         }
     }
 
-    private NormalizedAnswerRequest normalize(AssistantAnswerRequest request) {
-        if (request == null) {
+    private NormalizedAnswerRequest normalize(AssistantAnswerCommand command) {
+        if (command == null) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_ANSWER_REQUEST",
                     "Request body is required"
             );
         }
-        if (request.workspaceId() == null) {
+        if (command.workspaceId() == null) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_WORKSPACE_ID",
                     "workspaceId is required"
             );
         }
-        if (!StringUtils.hasText(request.question())) {
+        if (!StringUtils.hasText(command.question())) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_QUESTION",
                     "question is required"
             );
         }
 
-        String question = request.question().trim();
+        String question = command.question().trim();
         if (question.length() > AssistantContextService.MAX_QUERY_LENGTH) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_QUESTION",
@@ -170,11 +172,11 @@ public class AssistantAnswerService {
         }
 
         return new NormalizedAnswerRequest(
-                request.workspaceId(),
+                command.workspaceId(),
                 question,
-                request.assetId(),
-                request.maxSources(),
-                request.contextWindow()
+                command.assetId(),
+                command.maxSources(),
+                command.contextWindow()
         );
     }
 

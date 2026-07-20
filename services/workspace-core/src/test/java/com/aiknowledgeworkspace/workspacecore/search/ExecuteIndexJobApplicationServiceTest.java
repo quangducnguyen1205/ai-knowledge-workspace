@@ -7,7 +7,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.application.Transc
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexDocument;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
@@ -54,7 +54,7 @@ import org.springframework.web.client.RestClient;
 class ExecuteIndexJobApplicationServiceTest {
 
     @Mock
-    private AssetSearchIndexJobRepository searchIndexJobRepository;
+    private SearchIndexJobStore searchIndexJobRepository;
 
     @Mock
     private IndexingAssetPort indexingAssetPort;

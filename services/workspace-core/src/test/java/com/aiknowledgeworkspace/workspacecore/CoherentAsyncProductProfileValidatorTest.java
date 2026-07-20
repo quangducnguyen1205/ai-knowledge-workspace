@@ -6,9 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration.
 import com.aiknowledgeworkspace.workspacecore.common.identity.WorkspaceSecurityProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingProperties;
 import com.aiknowledgeworkspace.workspacecore.processing.ProcessingAsyncConfiguration;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingTriggerMode;
 import com.aiknowledgeworkspace.workspacecore.processing.request.ProcessingRequestRelayProperties;
 import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchIndexingProperties;
 import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchAsyncConfiguration;
@@ -37,7 +35,6 @@ class CoherentAsyncProductProfileValidatorTest {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
 
-                    ProcessingProperties processing = context.getBean(ProcessingProperties.class);
                     ProcessingRequestRelayProperties processingRelay = context.getBean(
                             ProcessingRequestRelayProperties.class
                     );
@@ -48,7 +45,6 @@ class CoherentAsyncProductProfileValidatorTest {
                     FastApiProperties fastApi = context.getBean(FastApiProperties.class);
                     OutboxRecoveryProperties recovery = context.getBean(OutboxRecoveryProperties.class);
 
-                    assertThat(processing.getTriggerMode()).isEqualTo(ProcessingTriggerMode.KAFKA_REQUEST);
                     assertThat(processingRelay.isEnabled()).isTrue();
                     assertThat(indexing.isAutoRequestEnabled()).isTrue();
                     assertThat(indexingRelay.isEnabled()).isTrue();
@@ -63,55 +59,22 @@ class CoherentAsyncProductProfileValidatorTest {
     }
 
     @Test
-    void compatibilityProfileKeepsDirectUploadAndAsynchronousControlsDisabled() {
-        contextRunner
-                .withPropertyValues("spring.profiles.active=compatibility")
-                .run(context -> {
-                    assertThat(context).hasNotFailed();
-
-                    ProcessingProperties processing = context.getBean(ProcessingProperties.class);
-                    ProcessingRequestRelayProperties processingRelay = context.getBean(
-                            ProcessingRequestRelayProperties.class
-                    );
-                    SearchIndexingProperties indexing = context.getBean(SearchIndexingProperties.class);
-                    IndexingRequestRelayProperties indexingRelay = context.getBean(IndexingRequestRelayProperties.class);
-                    WorkspaceKafkaProperties kafka = context.getBean(WorkspaceKafkaProperties.class);
-                    WorkspaceSecurityProperties security = context.getBean(WorkspaceSecurityProperties.class);
-                    OutboxRecoveryProperties recovery = context.getBean(OutboxRecoveryProperties.class);
-
-                    assertThat(processing.getTriggerMode()).isEqualTo(ProcessingTriggerMode.DIRECT_UPLOAD);
-                    assertThat(processingRelay.isEnabled()).isFalse();
-                    assertThat(indexing.isAutoRequestEnabled()).isFalse();
-                    assertThat(indexingRelay.isEnabled()).isFalse();
-                    assertThat(kafka.isEnabled()).isFalse();
-                    assertThat(kafka.isProcessingResultListenerEnabled()).isFalse();
-                    assertThat(kafka.isIndexingListenerEnabled()).isFalse();
-                    assertThat(security.isLegacySessionMode()).isTrue();
-                    assertThat(recovery.isEnabled()).isFalse();
-                });
-    }
-
-    @Test
     void incompleteKafkaRequestConfigurationFailsFastWithSafePropertyNames() {
         contextRunner
-                .withPropertyValues("workspace.processing.trigger-mode=kafka_request")
+                .withPropertyValues(
+                        "spring.profiles.active=project3",
+                        "workspace.kafka.processing-result-listener-enabled=false"
+                )
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
-                            .hasStackTraceContaining("Incomplete kafka_request configuration")
-                            .hasStackTraceContaining("workspace.processing.request-relay.enabled")
-                            .hasStackTraceContaining("workspace.kafka.enabled")
-                            .hasStackTraceContaining("workspace.kafka.processing-result-listener-enabled")
-                            .hasStackTraceContaining("workspace.search.indexing.auto-request-enabled")
-                            .hasStackTraceContaining("workspace.search.indexing-relay.enabled")
-                            .hasStackTraceContaining("workspace.kafka.indexing-listener-enabled")
-                            .hasStackTraceContaining("outbox.recovery.enabled");
+                            .hasStackTraceContaining("Incomplete project3 asynchronous configuration")
+                            .hasStackTraceContaining("workspace.kafka.processing-result-listener-enabled");
                 });
     }
 
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
-            ProcessingProperties.class,
             ProcessingRequestRelayProperties.class,
             SearchIndexingProperties.class,
             IndexingRequestRelayProperties.class,

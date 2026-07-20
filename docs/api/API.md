@@ -355,18 +355,15 @@ Current behavior:
 - Spring resolves the requested `workspaceId`, or falls back to the current user's default workspace when omitted.
 - Spring stores the uploaded raw media bytes in MinIO/S3-compatible object storage.
 - Spring persists asset metadata, including the object-storage bucket/key reference, in PostgreSQL.
-- Normal `project3`/`kafka_request` mode skips FastAPI direct upload and persists one
-  `asset.processing.requested` outbox event with `event_version = 1`; the created
-  `ProcessingJob.processingRequestEventId` equals that outbox event ID and FastAPI direct-upload
-  IDs remain null.
-- The explicit `compatibility`/`direct_upload` mode remains a deprecated rollback path: Spring
-  forwards `file` and `title` to the FastAPI direct endpoint, validates the upstream response
-  before persisting local state, stores FastAPI task/video IDs internally, does not create a
-  Kafka request outbox event, and leaves `ProcessingJob.processingRequestEventId` null.
-- The two request paths are mutually exclusive for a single upload to prevent duplicate processing before cutover.
+- Spring atomically persists the asset, processing job and one
+  `asset.processing.requested` outbox event with `event_version = 1` after object storage succeeds.
+  `ProcessingJob.processingRequestEventId` equals that outbox event ID.
+- The `project3` profile relays this normal request through Kafka. Spring has no alternate direct
+  processing/upload path.
 - Spring associates the created asset with one workspace in PostgreSQL product state.
-- If object storage succeeds but FastAPI upload or database persistence fails, Spring attempts best-effort object cleanup and does not intentionally leave an asset row behind.
-- Raw FastAPI IDs are stored internally but not returned to the client.
+- If object storage succeeds but database persistence fails, Spring attempts best-effort object
+  cleanup and does not intentionally leave an asset row behind.
+- Internal processing correlation is not returned to the client beyond `processingJobId`.
 
 Common failure cases:
 
@@ -472,9 +469,9 @@ Response:
 
 Current behavior:
 
-- Status is asset-centric.
-- If the local processing job is already terminal, Spring returns stored state.
-- If the local processing job is non-terminal, Spring polls FastAPI on demand and updates local state.
+- Status is asset-centric and read from PostgreSQL product state.
+- The query is side-effect free for terminal and non-terminal jobs. Result listeners, not GET
+  requests, apply processing state changes.
 
 Common failure cases:
 
@@ -497,8 +494,9 @@ Response:
 
 Current behavior:
 
-- Spring serves transcript rows from a local product-owned transcript snapshot in the normal path.
-- If no local snapshot exists yet but processing has already succeeded, Spring fetches transcript rows from FastAPI using stored `fastapiVideoId`, filters for usable transcript rows, persists that local snapshot, then returns it.
+- Spring serves transcript rows only from the local product-owned canonical snapshot.
+- This GET is side-effect free. A missing canonical snapshot is not captured from an upstream
+  service during the request.
 - Only the currently verified transcript fields are exposed.
 - Transcript fetch is rejected until `processingJobStatus = SUCCEEDED`.
 - Empty or unusable transcript is treated as not usable.
@@ -508,6 +506,8 @@ Common failure cases:
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 - HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
 - HTTP `409` with `code = "TRANSCRIPT_NOT_READY"` if processing has not reached terminal success yet
+- HTTP `409` with `code = "TRANSCRIPT_NOT_AVAILABLE"` if processing succeeded but no usable
+  canonical snapshot exists
 - HTTP `409` with `code = "TRANSCRIPT_NOT_USABLE"` if transcript rows are empty or unusable
 
 ### `GET /api/assets/{assetId}/transcript/context?transcriptRowId=...&window=...`

@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.identity;
 
+import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,7 +29,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 class AuthServiceTest {
 
     @Mock
-    private UserAccountRepository userAccountRepository;
+    private UserAccountStore userAccountRepository;
 
     private CurrentUserService currentUserService;
     private AuthService authService;

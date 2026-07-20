@@ -7,7 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
+import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,10 +41,10 @@ class KeycloakJwtSecurityIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private UserAccountRepository userAccountRepository;
+    private UserAccountStore userAccountRepository;
 
     @Autowired
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @Test
     void validJwtCanReadCurrentProductUserAndProvisionLocalIdentity() throws Exception {
@@ -57,7 +58,7 @@ class KeycloakJwtSecurityIntegrationTest {
 
         assertThat(user.getIdentityProvider()).isEqualTo(ISSUER);
         assertThat(user.getExternalSubject()).isEqualTo("subject-1");
-        assertThat(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(userId)).hasSize(1);
+        assertThat(workspaceRepository.findOwnedDefaults(userId)).hasSize(1);
     }
 
     @Test

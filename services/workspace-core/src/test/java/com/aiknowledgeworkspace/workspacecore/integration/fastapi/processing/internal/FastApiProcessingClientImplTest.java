@@ -12,7 +12,6 @@ import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegra
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,30 +28,6 @@ class FastApiProcessingClientImplTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8000");
         mockServer = MockRestServiceServer.bindTo(builder).build();
         client = new FastApiProcessingClientImpl(builder.build());
-    }
-
-    @Test
-    void deserializesFastApiSnakeCaseDirectUploadResponse() {
-        mockServer.expect(once(), requestTo("http://localhost:8000/videos/upload"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("""
-                        {
-                          "task_id": "task-a",
-                          "status": "processing",
-                          "video_id": 42
-                        }
-                        """, MediaType.APPLICATION_JSON));
-
-        var response = client.uploadVideo(
-                new ByteArrayResource(new byte[] {0, 1, 2}),
-                "sanitized-video.mp4",
-                "Sanitized video"
-        );
-
-        assertThat(response.taskId()).isEqualTo("task-a");
-        assertThat(response.status()).isEqualTo("processing");
-        assertThat(response.videoId()).isEqualTo("42");
-        mockServer.verify();
     }
 
     @Test

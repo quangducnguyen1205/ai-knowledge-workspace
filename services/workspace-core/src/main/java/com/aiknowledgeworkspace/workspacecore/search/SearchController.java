@@ -1,7 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQueryUseCase;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
 
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,10 +14,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/search")
 public class SearchController {
 
-    private final SearchService searchService;
+    private final SearchQueryUseCase searchQueries;
 
-    public SearchController(SearchService searchService) {
-        this.searchService = searchService;
+    public SearchController(SearchQueryUseCase searchQueries) {
+        this.searchQueries = searchQueries;
     }
 
     @GetMapping
@@ -25,6 +26,23 @@ public class SearchController {
             @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "assetId", required = false) UUID assetId
     ) {
-        return searchService.search(query, workspaceId, assetId);
+        SearchResult result = searchQueries.search(new SearchQuery(query, workspaceId, assetId));
+        return new SearchResponse(
+                result.query(),
+                result.workspaceIdFilter(),
+                result.assetIdFilter(),
+                result.hits().size(),
+                result.hits().stream()
+                        .map(hit -> new SearchResultResponse(
+                                hit.assetId(),
+                                hit.assetTitle(),
+                                hit.transcriptRowId(),
+                                hit.segmentIndex(),
+                                hit.text(),
+                                hit.createdAt(),
+                                hit.score()
+                        ))
+                        .toList()
+        );
     }
 }

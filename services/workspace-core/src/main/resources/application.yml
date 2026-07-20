@@ -35,7 +35,6 @@ workspace:
       jwk-set-uri: ${WORKSPACE_CORE_SECURITY_OIDC_JWK_SET_URI:}
       audience: ${WORKSPACE_CORE_SECURITY_OIDC_AUDIENCE:}
   processing:
-    trigger-mode: ${WORKSPACE_CORE_PROCESSING_TRIGGER_MODE:direct_upload}
     request-relay:
       enabled: ${WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED:false}
       fixed-delay: ${WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_FIXED_DELAY:10s}

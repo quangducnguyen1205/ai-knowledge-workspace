@@ -3,7 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.search.indexing.application;
 import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchIndexingProperties;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
@@ -27,20 +27,20 @@ public class AssetSearchIndexRequestService implements IndexingRequestApplicatio
 
     private final SearchIndexingProperties searchIndexingProperties;
     private final TranscriptSnapshotFingerprintService fingerprintService;
-    private final AssetSearchIndexJobRepository searchIndexJobRepository;
+    private final SearchIndexJobStore searchIndexJobStore;
     private final IndexingRequestedEventCodec indexingRequestedEventCodec;
     private final OutboxWriter outboxWriter;
 
     public AssetSearchIndexRequestService(
             SearchIndexingProperties searchIndexingProperties,
             TranscriptSnapshotFingerprintService fingerprintService,
-            AssetSearchIndexJobRepository searchIndexJobRepository,
+            SearchIndexJobStore searchIndexJobStore,
             IndexingRequestedEventCodec indexingRequestedEventCodec,
             OutboxWriter outboxWriter
     ) {
         this.searchIndexingProperties = searchIndexingProperties;
         this.fingerprintService = fingerprintService;
-        this.searchIndexJobRepository = searchIndexJobRepository;
+        this.searchIndexJobStore = searchIndexJobStore;
         this.indexingRequestedEventCodec = indexingRequestedEventCodec;
         this.outboxWriter = outboxWriter;
     }
@@ -66,13 +66,13 @@ public class AssetSearchIndexRequestService implements IndexingRequestApplicatio
         }
 
         supersedeActiveJobsForOlderFingerprints(assetId, snapshotFingerprint);
-        List<AssetSearchIndexJob> activeSameFingerprint = searchIndexJobRepository
-                .findByAssetIdAndSnapshotFingerprintAndStatusIn(assetId, snapshotFingerprint, ACTIVE_STATUSES);
+        List<AssetSearchIndexJob> activeSameFingerprint = searchIndexJobStore
+                .findByAssetFingerprintAndStatuses(assetId, snapshotFingerprint, ACTIVE_STATUSES);
         if (!activeSameFingerprint.isEmpty()) {
             return activeSameFingerprint.get(0);
         }
 
-        return searchIndexJobRepository.save(new AssetSearchIndexJob(assetId, snapshotFingerprint));
+        return searchIndexJobStore.save(new AssetSearchIndexJob(assetId, snapshotFingerprint));
     }
 
     private AssetSearchIndexJob createAutomaticRequest(UUID assetId, String snapshotFingerprint) {
@@ -83,8 +83,8 @@ public class AssetSearchIndexRequestService implements IndexingRequestApplicatio
 
         supersedeActiveJobsForOlderFingerprints(assetId, snapshotFingerprint);
 
-        List<AssetSearchIndexJob> activeSameFingerprint = searchIndexJobRepository
-                .findByAssetIdAndSnapshotFingerprintAndStatusIn(assetId, snapshotFingerprint, ACTIVE_STATUSES);
+        List<AssetSearchIndexJob> activeSameFingerprint = searchIndexJobStore
+                .findByAssetFingerprintAndStatuses(assetId, snapshotFingerprint, ACTIVE_STATUSES);
         if (!activeSameFingerprint.isEmpty()) {
             return activeSameFingerprint.get(0);
         }
@@ -97,29 +97,25 @@ public class AssetSearchIndexRequestService implements IndexingRequestApplicatio
         ));
         searchIndexJob.attachRequestOutboxEvent(outboxEvent.eventId());
 
-        searchIndexJob = searchIndexJobRepository.save(searchIndexJob);
+        searchIndexJob = searchIndexJobStore.save(searchIndexJob);
         outboxWriter.enqueue(outboxEvent);
         return searchIndexJob;
     }
 
     private void supersedeActiveJobsForOlderFingerprints(UUID assetId, String currentSnapshotFingerprint) {
-        List<AssetSearchIndexJob> activeJobs = searchIndexJobRepository.findByAssetIdAndStatusIn(
+        List<AssetSearchIndexJob> activeJobs = searchIndexJobStore.findByAssetAndStatuses(
                 assetId,
                 ACTIVE_STATUSES
         );
         for (AssetSearchIndexJob activeJob : activeJobs) {
             if (!currentSnapshotFingerprint.equals(activeJob.getSnapshotFingerprint())) {
                 activeJob.markSuperseded();
-                searchIndexJobRepository.save(activeJob);
+                searchIndexJobStore.save(activeJob);
             }
         }
     }
 
     private Optional<AssetSearchIndexJob> findIndexedJob(UUID assetId, String snapshotFingerprint) {
-        return searchIndexJobRepository.findFirstByAssetIdAndSnapshotFingerprintAndStatusOrderByIndexedAtDesc(
-                assetId,
-                snapshotFingerprint,
-                AssetSearchIndexJobStatus.INDEXED
-        );
+        return searchIndexJobStore.findLatestIndexed(assetId, snapshotFingerprint);
     }
 }

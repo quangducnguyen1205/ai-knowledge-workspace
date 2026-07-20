@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.FailingOutboxMessagePublisher;
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.LoggingOutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxMessagePublisher;
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublishException;
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublisherConfiguration;
 

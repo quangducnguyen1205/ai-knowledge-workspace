@@ -21,7 +21,7 @@ venv/
 # Java
 target/
 build/
-out/
+/out/
 *.class
 
 # Node

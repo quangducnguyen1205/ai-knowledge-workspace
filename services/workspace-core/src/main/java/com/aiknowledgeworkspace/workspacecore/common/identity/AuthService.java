@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import jakarta.servlet.http.HttpSession;
+import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,43 +17,43 @@ public class AuthService {
     private static final int MAX_PASSWORD_LENGTH = 255;
     private static final int MIN_PASSWORD_LENGTH = 8;
 
-    private final UserAccountRepository userAccountRepository;
+    private final UserAccountStore userAccountStore;
     private final CurrentUserService currentUserService;
     private final PasswordEncoder passwordEncoder;
     private final WorkspaceSecurityProperties securityProperties;
 
     @Autowired
     public AuthService(
-            UserAccountRepository userAccountRepository,
+            UserAccountStore userAccountStore,
             CurrentUserService currentUserService,
             PasswordEncoder passwordEncoder,
             WorkspaceSecurityProperties securityProperties
     ) {
-        this.userAccountRepository = userAccountRepository;
+        this.userAccountStore = userAccountStore;
         this.currentUserService = currentUserService;
         this.passwordEncoder = passwordEncoder;
         this.securityProperties = securityProperties;
     }
 
     public AuthService(
-            UserAccountRepository userAccountRepository,
+            UserAccountStore userAccountStore,
             CurrentUserService currentUserService,
             PasswordEncoder passwordEncoder
     ) {
-        this(userAccountRepository, currentUserService, passwordEncoder, new WorkspaceSecurityProperties());
+        this(userAccountStore, currentUserService, passwordEncoder, new WorkspaceSecurityProperties());
     }
 
     public AuthenticatedUserResponse register(RegisterRequest request, HttpSession session) {
         requireLegacySessionMode();
         Credentials credentials = normalizeCredentials(request == null ? null : request.email(), request == null ? null : request.password());
 
-        if (userAccountRepository.findByEmail(credentials.email()).isPresent()) {
+        if (userAccountStore.findByEmail(credentials.email()).isPresent()) {
             throw new EmailAlreadyRegisteredException("Email is already registered");
         }
 
         UserAccount userAccount;
         try {
-            userAccount = userAccountRepository.save(new UserAccount(
+            userAccount = userAccountStore.save(new UserAccount(
                     credentials.email(),
                     passwordEncoder.encode(credentials.password())
             ));
@@ -68,7 +69,7 @@ public class AuthService {
         requireLegacySessionMode();
         Credentials credentials = normalizeCredentials(request == null ? null : request.email(), request == null ? null : request.password());
 
-        UserAccount userAccount = userAccountRepository.findByEmail(credentials.email())
+        UserAccount userAccount = userAccountStore.findByEmail(credentials.email())
                 .filter(user -> passwordEncoder.matches(credentials.password(), user.getPasswordHash()))
                 .orElseThrow(() -> new InvalidCredentialsException("Email or password is incorrect"));
 
@@ -98,7 +99,7 @@ public class AuthService {
             throw new AuthenticationRequiredException("Authentication is required");
         }
 
-        UserAccount userAccount = userAccountRepository.findById(userId)
+        UserAccount userAccount = userAccountStore.findById(userId)
                 .orElseThrow(() -> new AuthenticationRequiredException("Authentication is required"));
 
         return toResponse(userAccount);

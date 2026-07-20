@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -15,7 +15,7 @@ class DefaultWorkspaceProvisionerAdapterTest {
 
     @Test
     void preservesDeterministicDefaultWorkspaceIdentityAndOwnership() {
-        WorkspaceRepository repository = mock(WorkspaceRepository.class);
+        WorkspaceStore repository = mock(WorkspaceStore.class);
         WorkspaceProperties properties = new WorkspaceProperties();
         properties.setDefaultName("Default Workspace");
         UUID userId = UUID.fromString("11111111-1111-1111-1111-111111111111");

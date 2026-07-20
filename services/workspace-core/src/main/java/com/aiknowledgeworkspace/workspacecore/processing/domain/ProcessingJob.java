@@ -25,12 +25,6 @@ public class ProcessingJob {
     @Column(nullable = false)
     private UUID assetId;
 
-    @Column(length = 128)
-    private String fastapiTaskId;
-
-    @Column(length = 128)
-    private String fastapiVideoId;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private ProcessingJobStatus processingJobStatus;
@@ -38,7 +32,7 @@ public class ProcessingJob {
     @Column(length = 64)
     private String rawUpstreamTaskState;
 
-    @Column
+    @Column(nullable = false)
     private UUID processingRequestEventId;
 
     @Column(nullable = false, updatable = false)
@@ -52,14 +46,10 @@ public class ProcessingJob {
 
     public ProcessingJob(
             UUID assetId,
-            String fastapiTaskId,
-            String fastapiVideoId,
             ProcessingJobStatus processingJobStatus,
             String rawUpstreamTaskState
     ) {
         this.assetId = assetId;
-        this.fastapiTaskId = fastapiTaskId;
-        this.fastapiVideoId = fastapiVideoId;
         this.processingJobStatus = processingJobStatus;
         this.rawUpstreamTaskState = rawUpstreamTaskState;
     }
@@ -86,22 +76,6 @@ public class ProcessingJob {
 
     public void setAssetId(UUID assetId) {
         this.assetId = assetId;
-    }
-
-    public String getFastapiTaskId() {
-        return fastapiTaskId;
-    }
-
-    public void setFastapiTaskId(String fastapiTaskId) {
-        this.fastapiTaskId = fastapiTaskId;
-    }
-
-    public String getFastapiVideoId() {
-        return fastapiVideoId;
-    }
-
-    public void setFastapiVideoId(String fastapiVideoId) {
-        this.fastapiVideoId = fastapiVideoId;
     }
 
     public ProcessingJobStatus getProcessingJobStatus() {

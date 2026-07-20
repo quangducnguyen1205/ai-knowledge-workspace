@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.common.identity;
 
 import java.nio.charset.StandardCharsets;
+import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -16,16 +17,16 @@ public class OidcUserProvisioningService {
     private static final String OIDC_PASSWORD_MARKER = "{oidc-external}";
     private static final String LOCAL_EMAIL_DOMAIN = "external.local";
 
-    private final UserAccountRepository userAccountRepository;
+    private final UserAccountStore userAccountStore;
     private final OidcJwtIdentityMapper identityMapper;
     private final OidcUserCreationExecutor creationExecutor;
 
     public OidcUserProvisioningService(
-            UserAccountRepository userAccountRepository,
+            UserAccountStore userAccountStore,
             OidcJwtIdentityMapper identityMapper,
             OidcUserCreationExecutor creationExecutor
     ) {
-        this.userAccountRepository = userAccountRepository;
+        this.userAccountStore = userAccountStore;
         this.identityMapper = identityMapper;
         this.creationExecutor = creationExecutor;
     }
@@ -33,8 +34,8 @@ public class OidcUserProvisioningService {
     @Transactional(readOnly = true)
     public UserAccount resolveUser(Jwt jwt) {
         OidcJwtIdentity identity = identityMapper.toIdentity(jwt);
-        return userAccountRepository
-                .findByIdentityProviderAndExternalSubject(identity.identityProvider(), identity.externalSubject())
+        return userAccountStore
+                .findByExternalIdentity(identity.identityProvider(), identity.externalSubject())
                 .orElseGet(() -> createOrFindUser(identity));
     }
 
@@ -47,14 +48,14 @@ public class OidcUserProvisioningService {
                     identity.externalSubject()
             ));
         } catch (DataIntegrityViolationException exception) {
-            return userAccountRepository
-                    .findByIdentityProviderAndExternalSubject(identity.identityProvider(), identity.externalSubject())
+            return userAccountStore
+                    .findByExternalIdentity(identity.identityProvider(), identity.externalSubject())
                     .orElseThrow(() -> exception);
         }
     }
 
     private String chooseProductEmail(OidcJwtIdentity identity) {
-        if (StringUtils.hasText(identity.email()) && !userAccountRepository.existsByEmail(identity.email())) {
+        if (StringUtils.hasText(identity.email()) && !userAccountStore.emailExists(identity.email())) {
             return identity.email();
         }
 

@@ -2,20 +2,21 @@ package com.aiknowledgeworkspace.workspacecore.processing.result;
 
 import java.util.Optional;
 import java.util.UUID;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingResultEventStore;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
 class ProcessingResultInbox {
 
-    private final ConsumedProcessingResultEventRepository consumedEventRepository;
+    private final ProcessingResultEventStore consumedEventStore;
 
-    ProcessingResultInbox(ConsumedProcessingResultEventRepository consumedEventRepository) {
-        this.consumedEventRepository = consumedEventRepository;
+    ProcessingResultInbox(ProcessingResultEventStore consumedEventStore) {
+        this.consumedEventStore = consumedEventStore;
     }
 
     ConsumedProcessingResultEvent loadOrCreate(ProcessingResultEventEnvelope event) {
-        return consumedEventRepository.findById(event.eventId())
+        return consumedEventStore.findEventById(event.eventId())
                 .orElseGet(() -> new ConsumedProcessingResultEvent(
                         event.eventId(),
                         event.eventType(),
@@ -44,12 +45,12 @@ class ProcessingResultInbox {
 
     void markReceivedForApplication(ConsumedProcessingResultEvent consumedEvent) {
         consumedEvent.markReceivedForRetry();
-        consumedEventRepository.save(consumedEvent);
+        consumedEventStore.save(consumedEvent);
     }
 
     void markApplied(ConsumedProcessingResultEvent consumedEvent) {
         consumedEvent.markApplied();
-        consumedEventRepository.save(consumedEvent);
+        consumedEventStore.save(consumedEvent);
     }
 
     void markFailed(
@@ -58,11 +59,11 @@ class ProcessingResultInbox {
             String recoverableEventJson
     ) {
         consumedEvent.markFailed(safeErrorDetail, recoverableEventJson);
-        consumedEventRepository.save(consumedEvent);
+        consumedEventStore.save(consumedEvent);
     }
 
     String requireRecoverableFailedEventJson(UUID eventId) {
-        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId)
+        ConsumedProcessingResultEvent consumedEvent = consumedEventStore.findEventById(eventId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Consumed processing result event was not found: " + eventId
                 ));

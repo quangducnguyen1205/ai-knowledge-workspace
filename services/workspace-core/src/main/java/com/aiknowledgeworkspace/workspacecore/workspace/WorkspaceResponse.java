@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceView;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -9,11 +10,11 @@ public record WorkspaceResponse(
         Instant createdAt
 ) {
 
-    public static WorkspaceResponse from(Workspace workspace) {
+    public static WorkspaceResponse from(WorkspaceView workspace) {
         return new WorkspaceResponse(
-                workspace.getId(),
-                workspace.getName(),
-                workspace.getCreatedAt()
+                workspace.id(),
+                workspace.name(),
+                workspace.createdAt()
         );
     }
 }

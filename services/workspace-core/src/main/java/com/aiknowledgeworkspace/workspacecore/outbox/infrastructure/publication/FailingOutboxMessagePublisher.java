@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxMessagePublisher;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 
 /**

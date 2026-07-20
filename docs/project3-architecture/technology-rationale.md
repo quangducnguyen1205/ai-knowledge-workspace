@@ -86,14 +86,14 @@ Project3 should improve the backend with clearer module boundaries, Flyway migra
 
 Do not split Spring Boot into many services just to look modern. The stronger design is one well-structured product core with real platform infrastructure around it.
 
-P3-D2 `[ĐÃ SMOKE THỰC TẾ]` validates that split of responsibility for processing: Spring stayed the product owner, persisted the upload/job/request outbox, automatically relayed the request only in opt-in `kafka_request` mode, consumed the FastAPI result through the Spring listener, and stored the final transcript snapshot and product state. FastAPI/Celery performed the internal media work from MinIO. Elasticsearch/search indexing was intentionally not part of that smoke.
+P3-D2 `[ĐÃ SMOKE THỰC TẾ]` validates that split of responsibility for processing: Spring stayed the product owner, persisted the upload/job/request outbox, automatically relayed the request, consumed the FastAPI result through the Spring listener, and stored the final transcript snapshot and product state. FastAPI/Celery performed the internal media work from MinIO. Elasticsearch/search indexing was intentionally not part of that smoke.
 
 P3-D4 `[ĐÃ SMOKE THỰC TẾ]` validates the historical fully automatic result-publication
 variant of the same split: Spring automatic request relay, FastAPI consumer/Celery, FastAPI
 automatic result-relay, and Spring automatic result listener completed one MinIO-backed upload
 without manual request relay, manual result relay, result-file handling, recovery command, or
-fabricated Kafka injection. At that time `direct_upload` remained the default product mode and
-search/indexing stayed disabled; the final v1 profile now uses the integrated async path.
+fabricated Kafka injection. The run preceded the final integrated profile; the current backend
+uses only the durable Kafka/outbox path.
 
 ## AI Assistant API / Context Orchestrator
 
@@ -185,13 +185,9 @@ The Spring adapter uses the AWS SDK v2 S3 client against MinIO's S3-compatible A
 
 For processing, Spring publishes the object key in the Kafka request event. FastAPI/Celery reads the media object from MinIO using internal service credentials. This avoids streaming large media bytes through Spring Boot into FastAPI for the normal processing path.
 
-Historical implementation note: Phase 2 stores uploaded raw media in MinIO and persists the
-object reference in PostgreSQL. Phase 3A adds the PostgreSQL outbox foundation for
-`asset.processing.requested` with `event_version = 1`. Phase 3B adds an internal outbox relay
-state-machine foundation. Phase 3C adds local Kafka infrastructure and a Spring Kafka publisher
-adapter. Phase 3D-F made the request trigger explicit: `direct_upload` was the then-current
-generic default, while `kafka_request` created the request outbox row and skipped direct FastAPI
-upload. The v1 `project3` profile now selects `kafka_request` as the normal path.
+Historical implementation note: Phase 2 stored uploaded media in MinIO; Phase 3A-C added the
+version-1 processing request outbox, relay and Kafka publisher. An interim dual-path transition
+was later removed. The current `project3` profile enables the single durable request/result path.
 
 Do not expose MinIO directly to the browser until a presigned URL model and authorization story are designed.
 
@@ -217,13 +213,13 @@ Spring transaction
 -> cross-service consumer handles async work
 ```
 
-Current implementation note: Phase 3I keeps the Phase 3C Kafka publisher foundation and the Phase 3D-H disabled-by-default Spring Kafka listener for FastAPI result events. Kafka publishing is selected only when `WORKSPACE_CORE_KAFKA_ENABLED=true`; the request relay remains disabled by default. P3-D1 adds a narrow opt-in scheduler for processing request events only: `WORKSPACE_CORE_PROCESSING_REQUEST_RELAY_ENABLED=true` relays bounded batches of due `asset.processing.requested` rows only when the product trigger is `kafka_request`. P3-E1 adds the same narrow pattern for derived search indexing: `WORKSPACE_CORE_SEARCH_INDEXING_RELAY_ENABLED=true` relays bounded batches of due `asset.indexing.requested` rows only, without creating indexing jobs or starting the indexing listener. The publisher sends JSON event envelopes with event metadata plus the existing payload JSON. Spring can parse and validate `asset.processing.result.v1` envelopes for `transcript.ready` v1 and `asset.processing.failed` v1, persist consumed-event idempotency by `eventId`, and apply product state only after validation. The result listener is selected only with `WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED=true`, defaults to consumer group `workspace-processing-result-v1`, and defaults to `latest` offset reset. Phase 3I adds exact-ID manual operator recovery for one durable `FAILED` consumed result event or one stale `PUBLISHING` request outbox event, but it does not add FastAPI repository changes, a generic all-event scheduler, broad recovery scans, dead-letter routing, retry topics, Kafka transactions, Schema Registry, Avro, or Protobuf.
-
-The final v1 `project3` profile selects `WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=kafka_request`
-and keeps automatic request/result/indexing relays enabled. The
-`WORKSPACE_CORE_PROCESSING_TRIGGER_MODE=direct_upload` setting remains a deprecated,
-functional compatibility option for rollback and recovery; manual request relays remain scoped
-to `kafka_request` uploads.
+Current implementation note: Kafka publication is selected with
+`WORKSPACE_CORE_KAFKA_ENABLED=true`. The scoped processing scheduler relays bounded due
+`asset.processing.requested` rows; the indexing scheduler does the same for
+`asset.indexing.requested`. The `project3` profile coherently enables request/result/indexing
+relays/listeners and bounded recovery. Exact-ID manual recovery remains available, but there is no
+generic all-event scheduler, broad recovery scan, dead-letter routing, retry topic, Kafka
+transaction, Schema Registry, Avro or Protobuf.
 
 Producer configuration uses string key/value serialization, `acks=all`, idempotent producer mode, and an explicit send timeout as a practical local foundation. This is not end-to-end exactly-once delivery. The system remains at-least-once because a relay can publish to Kafka and fail before recording `PUBLISHED` in PostgreSQL. Future FastAPI/Spring consumers must therefore be idempotent.
 
@@ -261,7 +257,14 @@ Kafka and Celery are not interchangeable:
 
 Spring owns final product transcript snapshots and assistant authorization. FastAPI owns processing and prompt-execution mechanics.
 
-For `transcript.ready`, the result payload is intentionally metadata-only. `processingRequestId` and `causationEventId` both refer to the original Spring `asset.processing.requested` event ID, which Spring stores as `ProcessingJob.processingRequestEventId`. `ProcessingJob.fastapiTaskId` remains the transitional direct-upload/FastAPI task identifier and is not used for Kafka result correlation. Spring retrieves transcript artifact rows from FastAPI by `processingRequestId`, validates order, uniqueness, text usability, and bounded field sizes, then replaces the product transcript snapshot atomically. The listener uses `MANUAL_IMMEDIATE` acknowledgements and commits offsets for `APPLIED`, duplicate already-applied, durable `FAILED`, and known malformed/unsupported records on the consumer thread. Durable consumed-result `FAILED` rows retain only bounded, allow-listed, metadata-only result envelope data for explicit operator retry by event ID. Unexpected runtime or infrastructure failures are rethrown and left unacknowledged for redelivery; retry topics, a Kafka DLQ, broad consumed-result scans, and automated recovery of handler failures remain future work. Bounded reconciliation is limited to typed transient outbox publication failures. The system remains at-least-once overall.
+For `transcript.ready`, the payload is metadata-only. `processingRequestId` and
+`causationEventId` refer to the original request event stored as
+`ProcessingJob.processingRequestEventId`. Spring retrieves artifact rows by that ID, validates
+order, uniqueness, text usability and bounded sizes, then atomically replaces the canonical
+snapshot. `MANUAL_IMMEDIATE` commits offsets for applied/duplicate/durable-known failures and
+known rejected records; unexpected failures remain unacknowledged for redelivery. Durable failed
+rows retain only bounded allow-listed envelope data for exact-ID recovery. Delivery remains
+at-least-once.
 
 Do not make FastAPI the public product backend, auth service, workspace owner, product database writer, assistant API owner, or search API.
 
@@ -336,7 +339,7 @@ Phase P3-B1 implements this as a PostgreSQL-owned indexing job and outbox founda
 A controlled P3-B2 local smoke has verified the indexing transport path without running FastAPI media processing: Spring created one indexing job and one metadata-only indexing outbox event from a stable Spring-owned snapshot, relayed exactly that selected event, consumed it with the disabled-by-default indexing listener, wrote two derived Elasticsearch documents, and then proved stale-document protection by changing the asset back to non-searchable in PostgreSQL while the Elasticsearch documents still existed.
 
 P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete automatic processing-to-search composition.
-One normal Spring upload in `kafka_request` mode flowed through the automatic processing
+One normal Spring upload flowed through the automatic processing
 request relay, FastAPI consumer/Celery/MinIO processing, FastAPI automatic result relay,
 Spring result listener, transcript snapshot replacement, automatic indexing request creation,
 automatic indexing request relay, and indexing listener. Elasticsearch received the derived

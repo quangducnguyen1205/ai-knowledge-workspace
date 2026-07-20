@@ -1,5 +1,5 @@
 .PHONY: help test test-core test-workspace-core compile smoke smoke-workspace \
-        infra-up infra-down infra-logs kafka-config-check run run-project3 run-compatibility run-standalone require-media-file
+        infra-up infra-down infra-logs kafka-config-check run run-project3 require-media-file
 
 WORKSPACE_CORE_MODULE ?= services/workspace-core
 WORKSPACE_CORE_POM ?= $(WORKSPACE_CORE_MODULE)/pom.xml
@@ -28,9 +28,7 @@ help:
 		'  make infra-logs          Show Repo B infrastructure logs' \
 		'  make kafka-config-check  Statically validate rendered local Kafka resource/restart settings' \
 		'  make run                 Run workspace-core with the coherent project3 profile' \
-		'  make run-project3        Compatibility alias for the normal integrated run target' \
-		'  make run-compatibility   Deprecated but functional direct_upload rollback path' \
-		'  make run-standalone      Deprecated alias for run-compatibility' \
+		'  make run-project3        Alias for the normal integrated run target' \
 		'  make test                Run workspace-core tests' \
 		'  make test-core           Run workspace-core tests' \
 		'  make test-workspace-core Run workspace-core tests' \
@@ -69,14 +67,6 @@ run:
 
 run-project3:
 	$(MAKE) run SPRING_PROFILE=project3
-
-run-compatibility:
-	@printf '%s\n' 'DEPRECATION: direct_upload is retained temporarily for rollback and recovery; use make run for normal Project3 operation. No removal date is assigned.'
-	$(MAKE) run SPRING_PROFILE=compatibility
-
-run-standalone:
-	@printf '%s\n' 'DEPRECATION: make run-standalone is a deprecated alias; use make run-compatibility for rollback and make run for normal operation.'
-	$(MAKE) run-compatibility
 
 test:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" test

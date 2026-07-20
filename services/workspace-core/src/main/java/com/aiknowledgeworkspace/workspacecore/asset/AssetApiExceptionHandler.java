@@ -2,8 +2,6 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.ApiErrorResponse;
 import com.aiknowledgeworkspace.workspacecore.common.web.PublicApiErrorResponses;
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingConnectivityException;
-import com.aiknowledgeworkspace.workspacecore.asset.application.compatibility.DirectProcessingIntegrationException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -71,13 +69,4 @@ public class AssetApiExceptionHandler {
         );
     }
 
-    @ExceptionHandler(DirectProcessingConnectivityException.class)
-    ResponseEntity<ApiErrorResponse> handleDirectProcessingConnectivity(DirectProcessingConnectivityException exception) {
-        return PublicApiErrorResponses.serviceUnavailable("PROCESSING_SERVICE_UNAVAILABLE", exception);
-    }
-
-    @ExceptionHandler(DirectProcessingIntegrationException.class)
-    ResponseEntity<ApiErrorResponse> handleDirectProcessingIntegration(DirectProcessingIntegrationException exception) {
-        return PublicApiErrorResponses.serviceUnavailable("PROCESSING_SERVICE_UNAVAILABLE", exception);
-    }
 }

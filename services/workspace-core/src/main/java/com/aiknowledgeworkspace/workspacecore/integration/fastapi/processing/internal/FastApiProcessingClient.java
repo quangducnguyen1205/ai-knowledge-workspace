@@ -1,15 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
 
 import java.util.List;
-import org.springframework.core.io.Resource;
 
 interface FastApiProcessingClient {
-
-    FastApiUploadResponse uploadVideo(Resource videoResource, String filename, String title);
-
-    FastApiTaskStatusResponse getTaskStatus(String taskId);
-
-    List<FastApiTranscriptRowResponse> getTranscript(String videoId);
 
     List<FastApiTranscriptRowResponse> getTranscriptArtifactRows(String processingRequestId);
 }

@@ -55,12 +55,14 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role
 - `architecture/04-integration-assumptions.md`: current assumptions about the separate FastAPI repository and deferred questions
 - `architecture/05-end-to-end-diagram-pack.md`: reviewer-friendly current-state diagram pack for topology, flow, writes, search, and state transitions
-- `architecture/deprecations.md`: tracked compatibility deprecations, replacements, retained recovery paths, and removal gates
+- `architecture/deprecations.md`: removed Spring surfaces and retained recovery decisions
+- `architecture/pre-phase1-architecture-overhaul.md`: verified overhaul decisions, boundaries,
+  transaction rules, migration strategy and validation evidence
 - `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
 
 ## Submission Documents
 
-- `submission/project3-final-baseline.md`: final repository manifest, ownership model, integrated flow, retained compatibility, known debt, and code-reading order
+- `submission/project3-final-baseline.md`: current ownership, integrated flow, architecture result and known debt
 - `submission/project3-validation-matrix.md`: exact static/runtime/browser classifications and cross-repository contract evidence
 
 ## API And Data Documents

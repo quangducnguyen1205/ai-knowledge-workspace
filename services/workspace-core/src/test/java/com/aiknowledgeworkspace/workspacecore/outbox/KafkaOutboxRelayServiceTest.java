@@ -2,9 +2,9 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxMessagePublisher;
 import com.aiknowledgeworkspace.workspacecore.outbox.relay.OutboxRelayService;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-kafka-outbox-relay;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -38,10 +39,11 @@ import org.springframework.boot.test.mock.mockito.MockBean;
         "workspace.kafka.processing-requested-topic=asset.processing.requested.v1",
         "workspace.kafka.send-timeout=1s"
 })
+@Transactional
 class KafkaOutboxRelayServiceTest {
 
     @Autowired
-    private OutboxEventRepository outboxEventRepository;
+    private OutboxEventStore outboxEventRepository;
 
     @Autowired
     private OutboxRelayService outboxRelayService;
@@ -54,7 +56,6 @@ class KafkaOutboxRelayServiceTest {
 
     @BeforeEach
     void setUp() {
-        outboxEventRepository.deleteAll();
         reset(kafkaSender);
     }
 
@@ -67,7 +68,7 @@ class KafkaOutboxRelayServiceTest {
     void acknowledgedKafkaSendAllowsRelayToMarkPublished() {
         when(kafkaSender.send(anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(null));
-        OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent event = outboxEventRepository.save(newOutboxEvent());
 
         int processedCount = outboxRelayService.relay(RelayRequest.scheduledAll(20)).processedCount();
 
@@ -85,7 +86,7 @@ class KafkaOutboxRelayServiceTest {
     void failedKafkaSendRecordsRetryMetadata() {
         when(kafkaSender.send(anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")));
-        OutboxEvent event = outboxEventRepository.saveAndFlush(newOutboxEvent());
+        OutboxEvent event = outboxEventRepository.save(newOutboxEvent());
 
         int processedCount = outboxRelayService.relay(RelayRequest.scheduledAll(20)).processedCount();
 

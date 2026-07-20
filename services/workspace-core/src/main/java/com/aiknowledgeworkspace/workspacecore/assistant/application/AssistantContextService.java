@@ -1,10 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.assistant.application;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantCitationResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextRequest;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.AssistantContextSourceResponse;
 import com.aiknowledgeworkspace.workspacecore.assistant.InvalidAssistantContextRequestException;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextQuery;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantContextQueryUseCase;
 
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
-public class AssistantContextService {
+public class AssistantContextService implements AssistantContextQueryUseCase {
 
     public static final int DEFAULT_MAX_SOURCES = 5;
     public static final int MAX_SOURCES = 10;
@@ -42,22 +43,23 @@ public class AssistantContextService {
         this.transcriptContextPort = transcriptContextPort;
     }
 
-    public AssistantContextResponse buildContext(AssistantContextRequest request) {
-        NormalizedRequest normalizedRequest = normalize(request);
+    @Override
+    public AssistantContextResult query(AssistantContextQuery query) {
+        NormalizedRequest normalizedRequest = normalize(query);
         AssistantSearchPage searchResponse = searchPort.search(
                 normalizedRequest.query(),
                 normalizedRequest.workspaceId(),
                 normalizedRequest.assetId()
         );
 
-        List<AssistantContextSourceResponse> sources = new ArrayList<>();
+        List<AssistantContextSource> sources = new ArrayList<>();
         Set<CitationKey> seenCitations = new LinkedHashSet<>();
         for (AssistantSearchHit result : searchResponse.results()) {
             if (sources.size() >= normalizedRequest.maxSources()) {
                 break;
             }
 
-            Optional<AssistantContextSourceResponse> source = toContextSource(
+            Optional<AssistantContextSource> source = toContextSource(
                     result,
                     searchResponse.workspaceIdFilter(),
                     normalizedRequest.contextWindow()
@@ -74,14 +76,14 @@ public class AssistantContextService {
             });
         }
 
-        return new AssistantContextResponse(
+        return new AssistantContextResult(
                 searchResponse.workspaceIdFilter(),
                 normalizedRequest.query(),
                 List.copyOf(sources)
         );
     }
 
-    private Optional<AssistantContextSourceResponse> toContextSource(
+    private Optional<AssistantContextSource> toContextSource(
             AssistantSearchHit result,
             UUID workspaceId,
             int contextWindow
@@ -110,14 +112,14 @@ public class AssistantContextService {
             return Optional.empty();
         }
 
-        return Optional.of(new AssistantContextSourceResponse(
+        return Optional.of(new AssistantContextSource(
                 contextValue.assetId(),
                 contextValue.assetTitle(),
                 stableTranscriptRowId,
                 hitRow.segmentIndex(),
                 hitRow.createdAt(),
                 boundText(joinContextText(contextRows)),
-                new AssistantCitationResponse(contextValue.assetId(), stableTranscriptRowId, hitRow.segmentIndex())
+                new AssistantCitation(contextValue.assetId(), stableTranscriptRowId, hitRow.segmentIndex())
         ));
     }
 
@@ -166,35 +168,35 @@ public class AssistantContextService {
         return null;
     }
 
-    private NormalizedRequest normalize(AssistantContextRequest request) {
-        if (request == null) {
+    private NormalizedRequest normalize(AssistantContextQuery query) {
+        if (query == null) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_CONTEXT_REQUEST",
                     "Request body is required"
             );
         }
-        if (request.workspaceId() == null) {
+        if (query.workspaceId() == null) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_WORKSPACE_ID",
                     "workspaceId is required"
             );
         }
-        if (!StringUtils.hasText(request.query())) {
+        if (!StringUtils.hasText(query.query())) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_QUERY",
                     "query is required"
             );
         }
 
-        String query = request.query().trim();
-        if (query.length() > MAX_QUERY_LENGTH) {
+        String normalizedQuery = query.query().trim();
+        if (normalizedQuery.length() > MAX_QUERY_LENGTH) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_QUERY",
                     "query must be at most " + MAX_QUERY_LENGTH + " characters"
             );
         }
 
-        int maxSources = request.maxSources() == null ? DEFAULT_MAX_SOURCES : request.maxSources();
+        int maxSources = query.maxSources() == null ? DEFAULT_MAX_SOURCES : query.maxSources();
         if (maxSources < 1 || maxSources > MAX_SOURCES) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_MAX_SOURCES",
@@ -202,7 +204,7 @@ public class AssistantContextService {
             );
         }
 
-        int contextWindow = request.contextWindow() == null ? DEFAULT_CONTEXT_WINDOW : request.contextWindow();
+        int contextWindow = query.contextWindow() == null ? DEFAULT_CONTEXT_WINDOW : query.contextWindow();
         if (contextWindow < 0 || contextWindow > MAX_CONTEXT_WINDOW) {
             throw new InvalidAssistantContextRequestException(
                     "INVALID_ASSISTANT_CONTEXT_WINDOW",
@@ -211,9 +213,9 @@ public class AssistantContextService {
         }
 
         return new NormalizedRequest(
-                request.workspaceId(),
-                query,
-                request.assetId(),
+                query.workspaceId(),
+                normalizedQuery,
+                query.assetId(),
                 maxSources,
                 contextWindow
         );

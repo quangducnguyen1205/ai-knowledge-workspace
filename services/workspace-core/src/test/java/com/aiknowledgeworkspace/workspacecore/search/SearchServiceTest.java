@@ -1,124 +1,79 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResponse;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceProperties;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
 import java.util.List;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpSession;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 @ExtendWith(MockitoExtension.class)
 class SearchServiceTest {
 
     @Mock
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceQueryApplication workspaces;
 
     @Mock
-    private WorkspaceAssetUsagePort workspaceAssetUsagePort;
+    private SearchAssetQueryPort assets;
 
     @Mock
-    private SearchAssetQueryPort searchAssetQueryPort;
+    private TranscriptSearchQueryPort searchIndex;
 
-    private MockRestServiceServer mockServer;
-    private CurrentUserService currentUserService;
-    private SearchService searchService;
+    private SearchService service;
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = RestClient.builder()
-                .baseUrl("http://localhost:9201");
-        mockServer = MockRestServiceServer.bindTo(builder).build();
-
-        CurrentUserProperties currentUserProperties = new CurrentUserProperties();
-        currentUserService = new CurrentUserService(currentUserProperties);
-        WorkspaceService workspaceService = new WorkspaceService(
-                workspaceRepository,
-                workspaceAssetUsagePort,
-                new WorkspaceProperties(),
-                currentUserService
-        );
-
-        ElasticsearchProperties properties = new ElasticsearchProperties();
-        properties.setBaseUrl("http://localhost:9201");
-        properties.setTranscriptIndexName("asset-transcript-rows");
-
-        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
-                builder.build(),
-                properties,
-                new ObjectMapper()
-        );
-        WorkspaceQueryApplication workspaceQueryApplication = requestedWorkspaceId ->
-                workspaceService.resolveWorkspaceOrDefault(requestedWorkspaceId).getId();
-        searchService = new SearchService(workspaceQueryApplication, searchAssetQueryPort, searchIndexClient);
-    }
-
-    @AfterEach
-    void tearDown() {
-        RequestContextHolder.resetRequestAttributes();
+        service = new SearchService(workspaces, assets, searchIndex);
     }
 
     @Test
-    void searchUsesCurrentUserFromSessionAuthEntryForDefaultWorkspaceScope() {
-        String currentUserId = "session-user";
-        Workspace defaultWorkspace = new Workspace(java.util.UUID.randomUUID(), "Default Workspace", currentUserId, true);
-
-        bindSessionCurrentUser(currentUserId);
-        org.mockito.Mockito.when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
-                .thenReturn(java.util.List.of(defaultWorkspace));
+    void workspaceSearchUsesOnlyAuthorizedSearchableAssetIds() {
+        UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        org.mockito.Mockito.when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(defaultWorkspace.getId()))
-                .thenReturn(List.of(assetId));
-        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("\"workspaceId.keyword\":\"" + defaultWorkspace.getId() + "\"")))
-                .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\":[\"" + assetId + "\"]")))
-                .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
+        when(workspaces.resolveWorkspaceId(null)).thenReturn(workspaceId);
+        when(assets.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(assetId));
+        when(searchIndex.search(any())).thenReturn(List.of(new TranscriptSearchHit(
+                assetId, "Lecture", "row-1", 1, "dynamic programming", "2026-01-01T00:00:00Z", 2.0
+        )));
 
-        SearchResponse response = searchService.search("dynamic programming", null, null);
+        SearchResult result = service.search(new SearchQuery(" dynamic programming ", null, null));
 
-        assertThat(response.workspaceIdFilter()).isEqualTo(defaultWorkspace.getId());
-        assertThat(response.resultCount()).isZero();
-        mockServer.verify();
+        assertThat(result.workspaceIdFilter()).isEqualTo(workspaceId);
+        assertThat(result.hits()).hasSize(1);
+        ArgumentCaptor<TranscriptSearchQuery> query = ArgumentCaptor.forClass(TranscriptSearchQuery.class);
+        verify(searchIndex).search(query.capture());
+        assertThat(query.getValue().eligibleAssetIds()).containsExactly(assetId);
     }
 
-    private void bindSessionCurrentUser(String currentUserId) {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpSession session = new MockHttpSession();
-        currentUserService.establishCurrentUser(session, currentUserId);
-        request.setSession(session);
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    @Test
+    void assetOutsideResolvedWorkspaceIsHiddenAsNotFound() {
+        UUID selectedWorkspace = UUID.randomUUID();
+        UUID otherWorkspace = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        when(workspaces.resolveWorkspaceId(selectedWorkspace)).thenReturn(selectedWorkspace);
+        when(assets.getAuthorizedAssetDetails(assetId))
+                .thenReturn(new SearchAssetDetails(assetId, otherWorkspace, true));
+
+        assertThatThrownBy(() -> service.search(new SearchQuery("query", selectedWorkspace, assetId)))
+                .isInstanceOf(SearchAssetNotFoundException.class);
+        verifyNoInteractions(searchIndex);
     }
 }

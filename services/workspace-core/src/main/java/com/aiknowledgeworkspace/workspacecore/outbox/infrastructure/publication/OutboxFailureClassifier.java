@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxPublicationFailureClassifier;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
 
@@ -21,10 +22,11 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component
-public class OutboxFailureClassifier {
+public class OutboxFailureClassifier implements OutboxPublicationFailureClassifier {
 
     private static final int MAX_CAUSE_DEPTH = 32;
 
+    @Override
     public OutboxFailureClassification classify(@Nullable Throwable throwable) {
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         Throwable current = throwable;

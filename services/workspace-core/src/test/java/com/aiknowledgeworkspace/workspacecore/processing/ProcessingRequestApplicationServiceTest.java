@@ -1,10 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.processing;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-
 import com.aiknowledgeworkspace.workspacecore.processing.application.internal.ProcessingRequestApplicationService;
 import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingJobStore;
 
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,7 +14,6 @@ import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
-import com.aiknowledgeworkspace.workspacecore.processing.application.DirectProcessingJobCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.KafkaProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventCodec;
@@ -27,31 +24,11 @@ import org.mockito.ArgumentCaptor;
 
 class ProcessingRequestApplicationServiceTest {
 
-    private final ProcessingJobRepository repository = mock(ProcessingJobRepository.class);
-    private final ProcessingProperties properties = new ProcessingProperties();
+    private final ProcessingJobStore repository = mock(ProcessingJobStore.class);
     private final ProcessingRequestedEventCodec codec = mock(ProcessingRequestedEventCodec.class);
     private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
     private final ProcessingRequestApplicationService service =
-            new ProcessingRequestApplicationService(repository, properties, codec, outboxWriter);
-
-    @Test
-    void createsDirectJobWithUnchangedProviderCorrelation() {
-        UUID assetId = UUID.randomUUID();
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        ProcessingJobView result = service.createDirectJob(new DirectProcessingJobCommand(
-                assetId, "task-1", "video-1", ProcessingJobStatus.PENDING, "pending"
-        ));
-
-        ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(repository).save(job.capture());
-        assertThat(job.getValue().getAssetId()).isEqualTo(assetId);
-        assertThat(job.getValue().getFastapiTaskId()).isEqualTo("task-1");
-        assertThat(job.getValue().getFastapiVideoId()).isEqualTo("video-1");
-        assertThat(job.getValue().getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
-        assertThat(job.getValue().getProcessingRequestEventId()).isNull();
-        assertThat(result.assetId()).isEqualTo(assetId);
-    }
+            new ProcessingRequestApplicationService(repository, codec, outboxWriter);
 
     @Test
     void createsKafkaJobBeforeEnqueueUsingCodecOwnedEventIdentity() {
@@ -80,13 +57,6 @@ class ProcessingRequestApplicationServiceTest {
         ordered.verify(outboxWriter).enqueue(draft);
         assertThat(job.getValue().getProcessingRequestEventId()).isEqualTo(eventId);
         assertThat(job.getValue().getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
-        assertThat(job.getValue().getRawUpstreamTaskState()).isEqualTo("kafka_request_pending");
-    }
-
-    @Test
-    void reportsConfiguredTriggerModeWithoutExposingProperties() {
-        assertThat(service.usesKafkaRequestMode()).isFalse();
-        properties.setTriggerMode(ProcessingTriggerMode.KAFKA_REQUEST);
-        assertThat(service.usesKafkaRequestMode()).isTrue();
+        assertThat(job.getValue().getRawUpstreamTaskState()).isEqualTo("processing_request_pending");
     }
 }

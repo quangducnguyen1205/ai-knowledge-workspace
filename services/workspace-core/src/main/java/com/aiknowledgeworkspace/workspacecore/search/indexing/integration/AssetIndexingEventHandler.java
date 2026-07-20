@@ -3,7 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.search.indexing.integration;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 
 import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
 import org.springframework.stereotype.Service;
@@ -12,23 +12,23 @@ import org.springframework.stereotype.Service;
 public class AssetIndexingEventHandler {
 
     private final AssetIndexingEventParser indexingEventParser;
-    private final AssetSearchIndexJobRepository searchIndexJobRepository;
+    private final SearchIndexJobStore searchIndexJobStore;
     private final ExecuteIndexJobApplicationService executeIndexJobApplicationService;
 
     public AssetIndexingEventHandler(
             AssetIndexingEventParser indexingEventParser,
-            AssetSearchIndexJobRepository searchIndexJobRepository,
+            SearchIndexJobStore searchIndexJobStore,
             ExecuteIndexJobApplicationService executeIndexJobApplicationService
     ) {
         this.indexingEventParser = indexingEventParser;
-        this.searchIndexJobRepository = searchIndexJobRepository;
+        this.searchIndexJobStore = searchIndexJobStore;
         this.executeIndexJobApplicationService = executeIndexJobApplicationService;
     }
 
     public AssetIndexingHandleResult handle(String rawEventJson) {
         AssetIndexingEventEnvelope event = indexingEventParser.parse(rawEventJson);
         IndexingRequestedPayload payload = event.payload();
-        AssetSearchIndexJob indexingJob = searchIndexJobRepository.findById(payload.indexingJobId())
+        AssetSearchIndexJob indexingJob = searchIndexJobStore.findById(payload.indexingJobId())
                 .orElseThrow(() -> new AssetIndexingEventRejectedException(
                         "Asset search index job was not found: " + payload.indexingJobId()
                 ));

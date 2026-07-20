@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.outbox.operator;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.persistence.OutboxEventRepository;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxManualRecovery;
@@ -15,15 +15,15 @@ import org.springframework.stereotype.Service;
 @Service
 class OutboxManualRecoveryService implements OutboxManualRecovery {
 
-    private final OutboxEventRepository repository;
+    private final OutboxEventStore repository;
     private final Clock clock;
 
     @Autowired
-    OutboxManualRecoveryService(OutboxEventRepository repository) {
+    OutboxManualRecoveryService(OutboxEventStore repository) {
         this(repository, Clock.systemUTC());
     }
 
-    OutboxManualRecoveryService(OutboxEventRepository repository, Clock clock) {
+    OutboxManualRecoveryService(OutboxEventStore repository, Clock clock) {
         this.repository = repository;
         this.clock = clock;
     }

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
-public class SearchService {
+public class SearchService implements SearchQueryUseCase {
 
     private static final int MAX_SEARCHABLE_ASSET_TERMS = 1_000;
 
@@ -33,14 +33,15 @@ public class SearchService {
         this.transcriptSearchQueryPort = transcriptSearchQueryPort;
     }
 
-    public SearchResponse search(String query, UUID workspaceId, UUID assetId) {
-        String normalizedQuery = normalizeQuery(query);
-        UUID resolvedWorkspaceId = workspaceQueryApplication.resolveWorkspaceId(workspaceId);
-        UUID validatedAssetId = validateAssetScope(assetId, resolvedWorkspaceId);
+    @Override
+    public SearchResult search(SearchQuery query) {
+        String normalizedQuery = normalizeQuery(query == null ? null : query.text());
+        UUID resolvedWorkspaceId = workspaceQueryApplication.resolveWorkspaceId(query == null ? null : query.workspaceId());
+        UUID validatedAssetId = validateAssetScope(query == null ? null : query.assetId(), resolvedWorkspaceId);
         List<UUID> eligibleAssetIds = resolveEligibleAssetIds(resolvedWorkspaceId, validatedAssetId);
         List<String> meaningfulTerms = SearchRelevancePolicy.meaningfulTerms(normalizedQuery);
         if (eligibleAssetIds.isEmpty() || meaningfulTerms.isEmpty()) {
-            return new SearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, 0, List.of());
+            return new SearchResult(normalizedQuery, resolvedWorkspaceId, validatedAssetId, List.of());
         }
         List<TranscriptSearchHit> hits = transcriptSearchQueryPort.search(new TranscriptSearchQuery(
                 normalizedQuery, resolvedWorkspaceId, validatedAssetId, eligibleAssetIds, meaningfulTerms
@@ -49,7 +50,7 @@ public class SearchService {
         List<TranscriptSearchHit> focusedHits = SearchRelevancePolicy.select(
                 hits, meaningfulTerms, validatedAssetId == null
         );
-        return toSearchResponse(normalizedQuery, resolvedWorkspaceId, validatedAssetId, focusedHits);
+        return toSearchResult(normalizedQuery, resolvedWorkspaceId, validatedAssetId, focusedHits);
     }
 
     private String normalizeQuery(String query) {
@@ -96,15 +97,15 @@ public class SearchService {
         }
     }
 
-    private SearchResponse toSearchResponse(
+    private SearchResult toSearchResult(
             String query, UUID workspaceId, UUID assetId, List<TranscriptSearchHit> hits
     ) {
-        List<SearchResultResponse> results = hits.stream()
-                .map(hit -> new SearchResultResponse(
+        List<SearchHit> results = hits.stream()
+                .map(hit -> new SearchHit(
                         hit.assetId(), hit.assetTitle(), hit.transcriptRowId(), hit.segmentIndex(),
                         hit.text(), hit.createdAt(), hit.score()
                 ))
                 .toList();
-        return new SearchResponse(query, workspaceId, assetId, results.size(), results);
+        return new SearchResult(query, workspaceId, assetId, results);
     }
 }

@@ -8,9 +8,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
 
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetPersistenceService;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 
 import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
 import java.util.ArrayList;
@@ -18,7 +17,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -26,17 +24,17 @@ import org.springframework.util.StringUtils;
 @Service
 public class AssetTranscriptQueryService {
 
-    private final AssetRepository assetRepository;
-    private final AssetPersistenceService assetPersistenceService;
+    private final AssetStore assetStore;
+    private final CanonicalTranscriptStore transcriptStore;
     private final WorkspaceAccessApplication workspaceQueryApplication;
 
     public AssetTranscriptQueryService(
-            AssetRepository assetRepository,
-            AssetPersistenceService assetPersistenceService,
+            AssetStore assetStore,
+            CanonicalTranscriptStore transcriptStore,
             WorkspaceAccessApplication workspaceQueryApplication
     ) {
-        this.assetRepository = assetRepository;
-        this.assetPersistenceService = assetPersistenceService;
+        this.assetStore = assetStore;
+        this.transcriptStore = transcriptStore;
         this.workspaceQueryApplication = workspaceQueryApplication;
     }
 
@@ -47,15 +45,16 @@ public class AssetTranscriptQueryService {
 
     @Transactional(readOnly = true)
     public List<UUID> findSearchableAssetIdsInWorkspace(UUID workspaceId) {
-        return assetRepository.findByWorkspaceIdAndStatus(workspaceId, AssetStatus.SEARCHABLE, Sort.unsorted())
+        return assetStore.findByWorkspaceId(workspaceId)
                 .stream()
+                .filter(asset -> asset.getStatus() == AssetStatus.SEARCHABLE)
                 .map(Asset::getId)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public Optional<AssetIndexingSource> findCurrentIndexingSource(UUID assetId) {
-        return assetRepository.findById(assetId)
+        return assetStore.findById(assetId)
                 .map(asset -> createIndexingSource(asset, loadUsableTranscriptRows(asset.getId())));
     }
 
@@ -66,18 +65,18 @@ public class AssetTranscriptQueryService {
             String transcriptRowId,
             int window
     ) {
-        return assetRepository.findById(assetId)
+        return assetStore.findById(assetId)
                 .filter(asset -> workspaceId.equals(asset.getWorkspaceId()))
                 .filter(asset -> asset.getStatus() == AssetStatus.SEARCHABLE)
                 .flatMap(asset -> toTranscriptContext(asset, transcriptRowId, window));
     }
 
     @Transactional(readOnly = true)
-    public List<AssetTranscriptRowSnapshot> loadUsableSnapshot(UUID assetId) {
-        return assetPersistenceService.loadTranscriptSnapshot(assetId).stream()
+    public List<AssetTranscriptRowView> loadUsableSnapshot(UUID assetId) {
+        return transcriptStore.load(assetId).stream()
                 .filter(this::isUsable)
                 .sorted(Comparator.comparing(
-                        AssetTranscriptRowSnapshot::getSegmentIndex,
+                        AssetTranscriptRowView::segmentIndex,
                         Comparator.nullsLast(Integer::compareTo)
                 ))
                 .toList();
@@ -85,7 +84,7 @@ public class AssetTranscriptQueryService {
 
     @Transactional(readOnly = true)
     public Asset loadAuthorizedAsset(UUID assetId) {
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetStore.findById(assetId)
                 .orElseThrow(AssetNotFoundException::new);
         if (!workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId())) {
             throw new AssetNotFoundException();
@@ -93,8 +92,8 @@ public class AssetTranscriptQueryService {
         return asset;
     }
 
-    public AssetIndexingSource toIndexingSource(Asset asset, List<AssetTranscriptRowSnapshot> snapshots) {
-        return createIndexingSource(asset, snapshots.stream().map(this::toView).toList());
+    public AssetIndexingSource toIndexingSource(Asset asset, List<AssetTranscriptRowView> rows) {
+        return createIndexingSource(asset, rows);
     }
 
     private Optional<AssetTranscriptContext> toTranscriptContext(Asset asset, String transcriptRowId, int window) {
@@ -124,7 +123,7 @@ public class AssetTranscriptQueryService {
     }
 
     private List<AssetTranscriptRowView> loadUsableTranscriptRows(UUID assetId) {
-        return loadUsableSnapshot(assetId).stream().map(this::toView).toList();
+        return loadUsableSnapshot(assetId);
     }
 
     private AssetIndexingSource createIndexingSource(Asset asset, List<AssetTranscriptRowView> transcriptRows) {
@@ -133,12 +132,6 @@ public class AssetTranscriptQueryService {
 
     private AssetDetails toDetails(Asset asset) {
         return new AssetDetails(asset.getId(), asset.getWorkspaceId(), asset.getTitle(), asset.getStatus());
-    }
-
-    private AssetTranscriptRowView toView(AssetTranscriptRowSnapshot row) {
-        return new AssetTranscriptRowView(
-                row.getTranscriptRowId(), row.getVideoId(), row.getSegmentIndex(), row.getText(), row.getCreatedAt()
-        );
     }
 
     private int findTranscriptRowIndex(List<AssetTranscriptRowView> rows, String transcriptRowId) {
@@ -157,7 +150,7 @@ public class AssetTranscriptQueryService {
         return row.segmentIndex() != null && ("segment-" + row.segmentIndex()).equals(transcriptRowId);
     }
 
-    private boolean isUsable(AssetTranscriptRowSnapshot row) {
-        return row.getSegmentIndex() != null && StringUtils.hasText(row.getText());
+    private boolean isUsable(AssetTranscriptRowView row) {
+        return row.segmentIndex() != null && StringUtils.hasText(row.text());
     }
 }

@@ -10,18 +10,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshot;
-import com.aiknowledgeworkspace.workspacecore.asset.infrastructure.persistence.AssetTranscriptRowSnapshotRepository;
+import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
 import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactGateway;
 import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
-import com.aiknowledgeworkspace.workspacecore.processing.infrastructure.persistence.ProcessingJobRepository;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingJobStore;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingResultEventStore;
 import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-processing-result;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -39,38 +42,32 @@ import org.springframework.boot.test.mock.mockito.MockBean;
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.flyway.enabled=true"
 })
+@Transactional
 class ProcessingResultEventHandlerTest {
-
-    private static final String FASTAPI_DIRECT_UPLOAD_TASK_ID = "task-1";
 
     @Autowired
     private ProcessingResultEventHandler processingResultEventHandler;
 
     @Autowired
-    private ConsumedProcessingResultEventRepository consumedEventRepository;
+    private ProcessingResultEventStore consumedEventRepository;
 
     @Autowired
-    private AssetRepository assetRepository;
+    private AssetStore assetRepository;
 
     @Autowired
-    private ProcessingJobRepository processingJobRepository;
+    private ProcessingJobStore processingJobRepository;
 
     @Autowired
-    private AssetTranscriptRowSnapshotRepository transcriptRowSnapshotRepository;
+    private CanonicalTranscriptStore transcriptRowSnapshotRepository;
 
     @Autowired
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @MockBean
     private TranscriptArtifactGateway transcriptArtifactGateway;
 
     @BeforeEach
     void setUp() {
-        consumedEventRepository.deleteAll();
-        transcriptRowSnapshotRepository.deleteAll();
-        processingJobRepository.deleteAll();
-        assetRepository.deleteAll();
-        workspaceRepository.deleteAll();
         reset(transcriptArtifactGateway);
     }
 
@@ -92,7 +89,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         assertThat(result.applied()).isTrue();
 
-        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findEventById(eventId).orElseThrow();
         assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         assertThat(consumedEvent.getProcessedAt()).isNotNull();
         assertThat(consumedEvent.getErrorDetail()).isNull();
@@ -105,10 +102,10 @@ class ProcessingResultEventHandlerTest {
         assertThat(processingJob.getProcessingRequestEventId()).isEqualTo(processingRequestEventId);
         assertThat(processingJob.getRawUpstreamTaskState()).isEqualTo("transcript.ready");
 
-        List<AssetTranscriptRowSnapshot> transcriptRows = transcriptRowSnapshotRepository.findByAssetId(asset.getId());
+        List<AssetTranscriptRowView> transcriptRows = transcriptRowSnapshotRepository.load(asset.getId());
         assertThat(transcriptRows).hasSize(2);
-        assertThat(transcriptRows).extracting(AssetTranscriptRowSnapshot::getSegmentIndex).containsExactly(0, 1);
-        assertThat(transcriptRows).extracting(AssetTranscriptRowSnapshot::getText)
+        assertThat(transcriptRows).extracting(AssetTranscriptRowView::segmentIndex).containsExactly(0, 1);
+        assertThat(transcriptRows).extracting(AssetTranscriptRowView::text)
                 .containsExactly("Welcome to graph search", "Then we compare breadth first search");
     }
 
@@ -129,7 +126,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(duplicateResult.applied()).isFalse();
         assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         verify(transcriptArtifactGateway, times(1)).loadValidatedRows(processingRequestEventId);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).hasSize(1);
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).hasSize(1);
     }
 
     @Test
@@ -150,12 +147,13 @@ class ProcessingResultEventHandlerTest {
                 .isEqualTo(AssetStatus.PROCESSING);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.RUNNING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getErrorDetail())
                 .contains("text");
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void unexpectedRuntimeFailureIsNotConvertedIntoDurableFailedEvent() {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
@@ -169,12 +167,12 @@ class ProcessingResultEventHandlerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("database unavailable");
 
-        assertThat(consumedEventRepository.findById(eventId)).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId)).isEmpty();
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.RUNNING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
     }
 
     @Test
@@ -191,9 +189,9 @@ class ProcessingResultEventHandlerTest {
 
         assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(result.applied()).isFalse();
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getErrorDetail())
                 .contains("FastAPI returned HTTP 503");
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getRecoverableEventJson())
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getRecoverableEventJson())
                 .contains(eventId.toString())
                 .contains(processingRequestEventId.toString())
                 .doesNotContain("transcript text")
@@ -203,7 +201,7 @@ class ProcessingResultEventHandlerTest {
                 .isEqualTo(AssetStatus.PROCESSING);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.RUNNING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
     }
 
     @Test
@@ -223,7 +221,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(duplicateResult.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(duplicateResult.applied()).isFalse();
         verify(transcriptArtifactGateway, times(1)).loadValidatedRows(processingRequestEventId);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
     }
@@ -249,7 +247,7 @@ class ProcessingResultEventHandlerTest {
         assertThat(result.applied()).isTrue();
         verify(transcriptArtifactGateway, times(2)).loadValidatedRows(processingRequestEventId);
 
-        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findEventById(eventId).orElseThrow();
         assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         assertThat(consumedEvent.getRecoverableEventJson()).isNull();
         assertThat(consumedEvent.getErrorDetail()).isNull();
@@ -257,8 +255,8 @@ class ProcessingResultEventHandlerTest {
                 .isEqualTo(AssetStatus.TRANSCRIPT_READY);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.SUCCEEDED);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId()))
-                .extracting(AssetTranscriptRowSnapshot::getText)
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId()))
+                .extracting(AssetTranscriptRowView::text)
                 .containsExactly("Recovered transcript row", "Still ordered");
     }
 
@@ -318,16 +316,17 @@ class ProcessingResultEventHandlerTest {
 
         assertThat(result.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(result.applied()).isFalse();
-        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findEventById(eventId).orElseThrow();
         assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(consumedEvent.getErrorDetail()).contains("text");
         assertThat(consumedEvent.getRecoverableEventJson()).contains(eventId.toString());
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void manualRecoveryRethrowsUnexpectedRuntimeFailureAndLeavesFailedRecord() {
         UUID processingRequestEventId = UUID.randomUUID();
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
@@ -343,13 +342,13 @@ class ProcessingResultEventHandlerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("database unavailable");
 
-        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findById(eventId).orElseThrow();
+        ConsumedProcessingResultEvent consumedEvent = consumedEventRepository.findEventById(eventId).orElseThrow();
         assertThat(consumedEvent.getStatus()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
         assertThat(consumedEvent.getErrorDetail()).contains("FastAPI unavailable");
         assertThat(consumedEvent.getRecoverableEventJson()).contains(eventId.toString());
         assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
                 .isEqualTo(AssetStatus.PROCESSING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
     }
 
     @Test
@@ -376,7 +375,7 @@ class ProcessingResultEventHandlerTest {
         ProcessingJob processingJob = processingJobRepository.findByAssetId(asset.getId()).orElseThrow();
         assertThat(processingJob.getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.FAILED);
         assertThat(processingJob.getRawUpstreamTaskState()).isEqualTo("whisper_timeout");
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getStatus())
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getStatus())
                 .isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         verify(transcriptArtifactGateway, never()).loadValidatedRows(processingRequestEventId);
     }
@@ -390,7 +389,7 @@ class ProcessingResultEventHandlerTest {
                 .isInstanceOf(ProcessingResultEventRejectedException.class)
                 .hasMessageContaining("Unsupported processing result event type");
 
-        assertThat(consumedEventRepository.findById(eventId)).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId)).isEmpty();
     }
 
     @Test
@@ -407,7 +406,7 @@ class ProcessingResultEventHandlerTest {
                 .isInstanceOf(ProcessingResultEventRejectedException.class)
                 .hasMessageContaining("processingRequestId must match causationEventId");
 
-        assertThat(consumedEventRepository.findById(eventId)).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId)).isEmpty();
     }
 
     @Test
@@ -427,8 +426,8 @@ class ProcessingResultEventHandlerTest {
                 .isEqualTo(AssetStatus.PROCESSING);
         assertThat(processingJobRepository.findByAssetId(asset.getId()).orElseThrow().getProcessingJobStatus())
                 .isEqualTo(ProcessingJobStatus.RUNNING);
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(asset.getId())).isEmpty();
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+        assertThat(transcriptRowSnapshotRepository.load(asset.getId())).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getErrorDetail())
                 .contains("request correlation");
         verify(transcriptArtifactGateway, never()).loadValidatedRows(resultRequestEventId);
     }
@@ -442,9 +441,8 @@ class ProcessingResultEventHandlerTest {
                 processingRequestEventId
         );
         UUID deletedAssetId = deletedAsset.getId();
-        processingJobRepository.deleteAll();
+        processingJobRepository.findByAssetId(deletedAssetId).ifPresent(processingJobRepository::delete);
         assetRepository.delete(deletedAsset);
-        assetRepository.flush();
         UUID eventId = UUID.randomUUID();
         String lateEvent = transcriptReadyEvent(
                 eventId,
@@ -462,24 +460,10 @@ class ProcessingResultEventHandlerTest {
         assertThat(duplicateResult.applied()).isFalse();
         assertThat(assetRepository.findById(deletedAssetId)).isEmpty();
         assertThat(processingJobRepository.findByAssetId(deletedAssetId)).isEmpty();
-        assertThat(transcriptRowSnapshotRepository.findByAssetId(deletedAssetId)).isEmpty();
-        assertThat(consumedEventRepository.findById(eventId).orElseThrow().getErrorDetail())
+        assertThat(transcriptRowSnapshotRepository.load(deletedAssetId)).isEmpty();
+        assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getErrorDetail())
                 .contains("Processing job was not found");
         verify(transcriptArtifactGateway, never()).loadValidatedRows(processingRequestEventId);
-    }
-
-    @Test
-    void directUploadProcessingJobDoesNotRequireProcessingRequestEventId() {
-        ProcessingJob processingJob = new ProcessingJob(
-                UUID.randomUUID(),
-                FASTAPI_DIRECT_UPLOAD_TASK_ID,
-                "video-1",
-                ProcessingJobStatus.RUNNING,
-                "running"
-        );
-
-        assertThat(processingJob.getProcessingRequestEventId()).isNull();
-        assertThat(processingJob.getFastapiTaskId()).isEqualTo(FASTAPI_DIRECT_UPLOAD_TASK_ID);
     }
 
     private Asset persistedAsset(
@@ -508,8 +492,6 @@ class ProcessingResultEventHandlerTest {
         ));
         ProcessingJob processingJob = new ProcessingJob(
                 asset.getId(),
-                FASTAPI_DIRECT_UPLOAD_TASK_ID,
-                "video-1",
                 processingJobStatus,
                 "running"
         );

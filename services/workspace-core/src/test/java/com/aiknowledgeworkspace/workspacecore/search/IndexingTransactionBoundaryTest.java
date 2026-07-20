@@ -8,7 +8,7 @@ import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearch
 import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriteOperation;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriter;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.infrastructure.persistence.AssetSearchIndexJobRepository;
+import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
 import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,7 +31,7 @@ class IndexingTransactionBoundaryTest {
 
     @Test
     void indexingKeepsBeginAndFinalizeTransactionsAroundAnExternalWrite() {
-        AssetSearchIndexJobRepository repository = mock(AssetSearchIndexJobRepository.class);
+        SearchIndexJobStore repository = mock(SearchIndexJobStore.class);
         IndexingAssetPort assetPort = mock(IndexingAssetPort.class);
         RecordingTransactionManager transactionManager = new RecordingTransactionManager();
         RecordingWriter writer = new RecordingWriter(transactionManager);

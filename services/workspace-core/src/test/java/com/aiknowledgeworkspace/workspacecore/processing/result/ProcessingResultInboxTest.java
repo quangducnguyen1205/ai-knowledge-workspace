@@ -7,6 +7,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingResultEventStore;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,14 +15,14 @@ import org.junit.jupiter.api.Test;
 
 class ProcessingResultInboxTest {
 
-    private final ConsumedProcessingResultEventRepository repository =
-            mock(ConsumedProcessingResultEventRepository.class);
+    private final ProcessingResultEventStore repository =
+            mock(ProcessingResultEventStore.class);
     private final ProcessingResultInbox inbox = new ProcessingResultInbox(repository);
 
     @Test
     void createsInboxRecordFromProcessingContractAndPersistsStateThroughIntentNamedOperations() {
         ProcessingResultEventEnvelope event = event();
-        when(repository.findById(event.eventId())).thenReturn(Optional.empty());
+        when(repository.findEventById(event.eventId())).thenReturn(Optional.empty());
 
         ConsumedProcessingResultEvent consumedEvent = inbox.loadOrCreate(event);
         inbox.markReceivedForApplication(consumedEvent);
@@ -51,13 +52,13 @@ class ProcessingResultInboxTest {
         UUID eventId = UUID.randomUUID();
         ConsumedProcessingResultEvent failed = consumedEvent(eventId);
         failed.markFailed("safe-category", "{\"eventId\":\"" + eventId + "\"}");
-        when(repository.findById(eventId)).thenReturn(Optional.of(failed));
+        when(repository.findEventById(eventId)).thenReturn(Optional.of(failed));
 
         assertThat(inbox.requireRecoverableFailedEventJson(eventId)).contains(eventId.toString());
 
         ConsumedProcessingResultEvent applied = consumedEvent(eventId);
         applied.markApplied();
-        when(repository.findById(eventId)).thenReturn(Optional.of(applied));
+        when(repository.findEventById(eventId)).thenReturn(Optional.of(applied));
         assertThatThrownBy(() -> inbox.requireRecoverableFailedEventJson(eventId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("is not FAILED");

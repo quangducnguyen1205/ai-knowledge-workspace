@@ -2,7 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.workspace;
 
 
 import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
-import com.aiknowledgeworkspace.workspacecore.workspace.infrastructure.persistence.WorkspaceRepository;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
@@ -10,7 +10,6 @@ import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAss
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,7 +29,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.data.domain.Sort;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -38,7 +36,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 class WorkspaceServiceTest {
 
     @Mock
-    private WorkspaceRepository workspaceRepository;
+    private WorkspaceStore workspaceRepository;
 
     @Mock
     private WorkspaceAssetUsagePort workspaceAssetUsagePort;
@@ -78,16 +76,16 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(defaultWorkspace));
-        when(workspaceRepository.findByOwnerId(eq(currentUserId), any(Sort.class)))
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of(defaultWorkspace));
+        when(workspaceRepository.findOwned(currentUserId))
                 .thenReturn(List.of(defaultWorkspace, secondWorkspace));
 
         List<Workspace> workspaces = workspaceService.listWorkspaces();
 
         assertThat(workspaces).containsExactly(defaultWorkspace, secondWorkspace);
         InOrder inOrder = inOrder(workspaceRepository);
-        inOrder.verify(workspaceRepository).findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
-        inOrder.verify(workspaceRepository).findByOwnerId(eq(currentUserId), eq(workspaceListSort()));
+        inOrder.verify(workspaceRepository).findOwnedDefaults(currentUserId);
+        inOrder.verify(workspaceRepository).findOwned(currentUserId);
         verify(workspaceRepository, never()).save(any());
     }
 
@@ -106,7 +104,7 @@ class WorkspaceServiceTest {
                 Instant.parse("2026-04-03T08:00:00Z"));
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
 
         Workspace result = workspaceService.getWorkspace(workspaceId);
 
@@ -126,7 +124,7 @@ class WorkspaceServiceTest {
         UUID workspaceId = UUID.randomUUID();
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.empty());
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> workspaceService.getWorkspace(workspaceId))
                 .isInstanceOf(WorkspaceNotFoundException.class)
@@ -248,15 +246,15 @@ class WorkspaceServiceTest {
         );
 
         bindSessionCurrentUser(realCurrentUserService, currentUserId);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(defaultWorkspace));
-        when(workspaceRepository.findByOwnerId(eq(currentUserId), any(Sort.class)))
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of(defaultWorkspace));
+        when(workspaceRepository.findOwned(currentUserId))
                 .thenReturn(List.of(defaultWorkspace));
 
         List<Workspace> workspaces = workspaceService.listWorkspaces();
 
         assertThat(workspaces).containsExactly(defaultWorkspace);
-        verify(workspaceRepository).findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId);
-        verify(workspaceRepository).findByOwnerId(eq(currentUserId), eq(workspaceListSort()));
+        verify(workspaceRepository).findOwnedDefaults(currentUserId);
+        verify(workspaceRepository).findOwned(currentUserId);
     }
 
     @Test
@@ -279,10 +277,10 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
         when(workspaceRepository.save(any(Workspace.class))).thenReturn(defaultWorkspace);
 
-        Workspace result = workspaceService.resolveWorkspaceOrDefault(null);
+        Workspace result = workspaceService.resolveOwnedWorkspaceOrDefault(null);
 
         assertThat(result).isSameAs(defaultWorkspace);
 
@@ -316,10 +314,10 @@ class WorkspaceServiceTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
         when(workspaceRepository.save(any(Workspace.class))).thenReturn(savedWorkspace);
 
-        Workspace result = workspaceService.resolveWorkspaceOrDefault(null);
+        Workspace result = workspaceService.resolveOwnedWorkspaceOrDefault(null);
 
         assertThat(result).isSameAs(savedWorkspace);
 
@@ -354,7 +352,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId))
+        when(workspaceRepository.findOwnedDefaults(currentUserId))
                 .thenReturn(List.of(), List.of(persistedDefaultWorkspace));
 
         Workspace result = workspaceService.ensureDefaultWorkspace(currentUserId);
@@ -378,7 +376,7 @@ class WorkspaceServiceTest {
         String currentUserId = "local-dev-user";
 
         when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of());
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
 
         assertThatThrownBy(() -> workspaceService.ensureDefaultWorkspace(currentUserId))
                 .isInstanceOf(DefaultWorkspaceConflictException.class)
@@ -396,7 +394,7 @@ class WorkspaceServiceTest {
         );
         String currentUserId = "user-1";
 
-        when(workspaceRepository.findAllByOwnerIdAndDefaultWorkspaceTrue(currentUserId)).thenReturn(List.of(
+        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of(
                 workspace(UUID.randomUUID(), "Default Workspace", currentUserId, true,
                         Instant.parse("2026-04-03T08:00:00Z")),
                 workspace(UUID.randomUUID(), "Default Workspace", currentUserId, true,
@@ -428,7 +426,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
         when(workspaceRepository.save(ownedWorkspace)).thenReturn(ownedWorkspace);
 
         Workspace result = workspaceService.updateWorkspace(workspaceId, "  Renamed Workspace  ");
@@ -473,7 +471,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
         when(workspaceAssetUsagePort.workspaceHasAssets(workspaceId)).thenReturn(false);
 
         workspaceService.deleteWorkspace(workspaceId);
@@ -502,7 +500,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(defaultWorkspace));
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.of(defaultWorkspace));
 
         assertThatThrownBy(() -> workspaceService.deleteWorkspace(workspaceId))
                 .isInstanceOf(WorkspaceDeleteConflictException.class)
@@ -532,7 +530,7 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(workspaceRepository.findByIdAndOwnerId(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
+        when(workspaceRepository.findOwnedById(workspaceId, currentUserId)).thenReturn(Optional.of(ownedWorkspace));
         when(workspaceAssetUsagePort.workspaceHasAssets(workspaceId)).thenReturn(true);
 
         assertThatThrownBy(() -> workspaceService.deleteWorkspace(workspaceId))
@@ -549,12 +547,6 @@ class WorkspaceServiceTest {
         return workspace;
     }
 
-    private Sort workspaceListSort() {
-        return Sort.by(
-                Sort.Order.asc("createdAt"),
-                Sort.Order.asc("name")
-        );
-    }
 
     private void bindSessionCurrentUser(CurrentUserService currentUserService, String currentUserId) {
         MockHttpServletRequest request = new MockHttpServletRequest();
