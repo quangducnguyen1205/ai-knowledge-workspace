@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.processing.application.port.out;
 
-import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEvent;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEvent;
 import java.util.Optional;
 import java.util.UUID;
 

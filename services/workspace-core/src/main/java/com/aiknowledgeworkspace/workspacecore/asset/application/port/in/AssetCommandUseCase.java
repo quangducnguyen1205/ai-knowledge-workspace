@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.port.in;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
 import java.util.UUID;
 
 public interface AssetCommandUseCase {

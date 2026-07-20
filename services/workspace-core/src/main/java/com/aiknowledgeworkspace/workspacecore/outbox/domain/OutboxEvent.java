@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.domain;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

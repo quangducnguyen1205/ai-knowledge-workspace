@@ -1,1 +1,0 @@
-package com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch;

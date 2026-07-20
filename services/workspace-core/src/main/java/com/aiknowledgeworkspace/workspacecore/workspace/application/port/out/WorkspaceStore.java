@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.workspace.application.port.out;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

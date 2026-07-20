@@ -1,11 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.port.in;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetPage;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetStatusView;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetView;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetPage;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStatusView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
 import java.util.List;
 import java.util.UUID;
 

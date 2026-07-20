@@ -1,7 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.port.out;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowInput;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
 import java.util.List;
 import java.util.UUID;
 
