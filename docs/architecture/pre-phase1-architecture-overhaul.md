@@ -1,235 +1,436 @@
 # Pre-Phase-1 Architecture Overhaul
 
-Status: current architecture decision record and implementation report. This document describes
-the Spring product core after the pre-Phase-1 overhaul. Historical Project3 evidence remains in
-Git history; it is not a second source of current runtime truth.
+Status: architecture closure record for the Spring product core. It covers the first dependency-
+inversion pass and the final structural-convergence pass. `Project3` remains the historical stable
+baseline. This document does not claim manual end-to-end runtime acceptance and does not introduce
+timestamp-aware transcripts.
 
-## Verified baseline
+## Decision and evidence boundary
 
-The implementation baseline was local `main` at
-`758bbeda8d4ace804d47a783875104051b1fda54`. The worktree was clean and matched `origin/main`.
-The existing architecture already had real Spring Modulith boundaries, transactional outbox and
-inbox processing, owner-scoped workspace access, PostgreSQL canonical transcript snapshots, and
-Elasticsearch as derived state. The gaps were mainly inside modules: some application services
-depended on Spring Data or persistence implementations, controllers exposed JPA entities, reads
-could trigger FastAPI I/O and writes, and an obsolete direct-upload path duplicated the normal
-Project3 workflow.
+The target is a DDD-oriented modular monolith with Ports and Adapters inside meaningful modules,
+Spring Modulith verification, and event-driven integration where reliability requires it. The
+following are deliberately out of scope: microservices, full CQRS, tenant abstractions, generic
+repository/use-case hierarchies, duplicate domain/persistence models by default, frontend/FastAPI
+changes, timestamp fields, YouTube, and DevOps expansion.
 
-The target remains a DDD-oriented modular monolith. It is not CQRS, a microservice split, or a
-mechanical domain/persistence model duplication.
-
-## Target architecture
-
-The default dependency direction is:
+The current dependency direction is:
 
 ```text
-HTTP controller / Kafka listener / scheduler
+HTTP / Kafka / scheduler / operator adapter
                   |
                   v
-       application input contract
+        input use case or stable module API
                   |
                   v
-       application/domain policy
+        application orchestration and policy
                   |
                   v
-       application-owned output port
+       application-owned output capability
                   |
                   v
- package-private persistence/external adapter
+ persistence / storage / search / messaging / provider adapter
                   |
                   v
- package-private Spring Data repository / SDK / remote API
+ package-private Spring Data repository / SDK / protocol client
 ```
 
-The normal processing flow is the only upload-processing flow:
+PostgreSQL owns product truth and Elasticsearch remains derived. No JPA entity or persistence
+adapter is an intentional cross-module or HTTP contract.
+
+## First-pass changes retained
+
+- Removed the Spring direct-upload/status compatibility route, `direct_upload`/compatibility
+  profiles, and obsolete FastAPI task/video identifiers from product state.
+- Replaced application dependencies on public Spring Data repositories with application-owned
+  stores and package-private repositories/adapters.
+- Made asset queries side-effect free and stopped returning JPA entities from HTTP controllers.
+- Moved HTTP mapping out of search and assistant application services.
+- Consolidated the local-development Flyway chain into one clean V1 baseline.
+- Preserved artifact retrieval inside the processing-result transaction, upload compensation,
+  outbox claim/publish/finalize, and indexing begin/write/finalize.
+
+## Final package and module convergence
+
+The default physical convention is used only where a class exists:
 
 ```text
-AssetController
-  -> AssetUploadUseCase
-  -> UploadAssetApplicationService
-  -> ObjectStorageApplication                     (outside DB transaction)
-  -> AssetUploadTransaction                       (DB transaction)
-       -> AssetStore
-       -> ProcessingRequestApplication
-            -> ProcessingJobStore
-            -> OutboxEventStore
-  -> request relay -> Kafka -> FastAPI
-  -> result listener -> ProcessingResultEventHandler
-       -> ApplyProcessingResultApplicationService (DB transaction)
-            -> TranscriptArtifactGateway          (HTTP call intentionally retained in transaction)
-            -> ProcessingResultAssetPort
-            -> ProcessingJobStore
-            -> ProcessingResultEventStore
-  -> indexing request/outbox -> Kafka -> ExecuteIndexJobApplicationService
-       -> begin DB transaction
-       -> SearchIndexPort                          (Elasticsearch outside DB transaction)
-       -> finalize DB transaction
+<module>/
+  api/                                  intentional provider-owned Modulith API only
+  domain/
+  application/
+    port/in/
+    port/out/
+    service/
+    command|query|result|model/         only when semantically useful
+  adapter/
+    in/web|messaging|scheduling|operator|module/
+    out/persistence|storage|search|messaging|provider/
 ```
 
-## Over-engineering findings and decisions
+Every direct module base package is empty. Stable cross-module contracts are exposed only through
+these named interfaces:
 
-| Symbol or area | Evidence and protected behavior | Decision | Result / risk |
-|---|---|---|---|
-| `DirectProcessingCompatibilityAdapter` | Combined upload orchestration, FastAPI transport, task identifiers and persistence while duplicating the Kafka/outbox normal path. | **DELETE** | Direct upload/profile rollback is intentionally removed. Local databases must be recreated. |
-| `AssetPersistenceService` | Exposed broad asset, transcript, ownership, delete and title persistence operations to application code. | **SPLIT** | Replaced by need-based `AssetStore` and `CanonicalTranscriptStore`, implemented by one package-private adapter. |
-| Public `AssetRepository` and `AssetTranscriptRowSnapshotRepository` | Spring Data APIs were directly injectable outside persistence. | **INTERNALIZE** | Replaced by package-private `AssetJpaRepository` and `CanonicalTranscriptJpaRepository`. |
-| `AssetDeletionService` and `AssetTitleUpdateService` | Separate command services shared authorization and coordinated derived/external state. | **MERGE** | `AssetCommandApplicationService` groups cohesive asset mutations behind `AssetCommandUseCase`. |
-| `AssetQueryApplicationService` status/transcript fallback | Query paths polled FastAPI, changed job/asset state and captured transcript snapshots. | **SIMPLIFY** | Queries are now side-effect free and read only PostgreSQL product truth. |
-| Controller responses using `Asset` | JPA fields could become an accidental HTTP contract. | **DELETE boundary leak** | `AssetView` is mapped to web-only `AssetResponse`; endpoint paths and JSON field names remain stable. |
-| `WorkspaceQueryApplicationAdapter` | Forwarded calls without transformation or isolation. | **DELETE** | `WorkspaceService` directly implements cohesive `WorkspaceUseCase`; workspace remains simple CRUD. |
-| Public `WorkspaceRepository` | Leaked Spring Data across the workspace module. | **INTERNALIZE** | `WorkspaceStore` plus package-private `WorkspacePersistenceAdapter` and `WorkspaceJpaRepository`. |
-| Public processing repositories | Application services depended on framework repositories. | **INTERNALIZE** | `ProcessingJobStore` and `ProcessingResultEventStore` isolate package-private JPA repositories. |
-| Public indexing repository | Framework paging/query names were visible to application code. | **INTERNALIZE** | `SearchIndexJobStore` describes indexing-job needs; adapter owns derived queries. |
-| `OutboxPersistenceService` | Pass-through wrapper around a public repository. | **DELETE** | `OutboxEventStore` is the application capability and one adapter owns persistence. |
-| Infrastructure-owned `OutboxMessagePublisher` | Application relay imported an infrastructure package for its outbound capability. | **MOVE** | Publisher and failure-classification ports are application-owned; Kafka/logging adapters implement them. |
-| Search web `Response` records under `application.query` | Transport models polluted the application query contract. | **MOVE/SPLIT** | `SearchQuery`, `SearchResult` and `SearchHit` are application models; web response records stay at the HTTP boundary. |
-| Assistant services accepting web request records | Application behavior depended on controller DTOs. | **SPLIT** | Input ports and application command/query models are transport-neutral; controllers map HTTP records. |
-| Public identity repository | Auth application services imported Spring Data. | **INTERNALIZE** | `UserAccountStore` is application-owned; JPA implementation is internal. |
-| One interface for every method | Would increase vocabulary without a meaningful boundary. | **REJECT** | Cohesive command/query/use-case contracts group related operations; simple internal services stay concrete. |
-| Separate domain and persistence models everywhere | Current aggregates are simple and JPA annotations do not distort domain behavior. | **REJECT** | Entities remain combined but cannot cross HTTP or module boundaries. |
-| Full CQRS / separate read database | No evidence requires independently deployed read models. | **REJECT** | Fit-for-purpose CQS is used only at behaviorally asymmetric boundaries. |
-| Transaction seam classes | `AssetUploadTransaction`, `AssetMutationTransaction` and indexing begin/finalize seams prevent network calls from being hidden inside product transactions. | **KEEP** | They are deliberate Spring proxy and consistency boundaries, not layer ceremony. |
-| Result artifact HTTP inside transaction | Moving it would require a new reservation/idempotency design and could invalidate atomic canonical replacement. | **KEEP** | Existing correctness and recovery semantics are preserved and architecture-tested. |
-| Elasticsearch adapter breadth | One adapter supports narrow consumer-owned ports and centralizes mapping/error translation. | **KEEP** | Splitting it would not improve dependency direction. |
-| Legacy session authentication | Independent product/runtime decision; still used by local identity and smoke flows. | **KEEP** | No tenant or Keycloak-only abstraction is introduced. |
-
-## Module boundaries after the overhaul
-
-| Module | Input boundary | Application policy | Output ports | Internal adapters |
-|---|---|---|---|---|
-| `workspace` | `WorkspaceUseCase` | `WorkspaceService` | `WorkspaceStore`, asset-usage consumer port | package-private `WorkspacePersistenceAdapter` / `WorkspaceJpaRepository` |
-| `asset` | `AssetUploadUseCase`, `AssetCommandUseCase`, `AssetQueryUseCase` | upload, authorized reads, commands, transcript replacement | `AssetStore`, `CanonicalTranscriptStore`, storage/search/processing capabilities | package-private `AssetPersistenceAdapter` and two JPA repositories |
-| `processing` | request API, result handler, recovery API | request intent, correlation, inbox idempotency, result application | `ProcessingJobStore`, `ProcessingResultEventStore`, artifact and asset ports | package-private processing persistence adapter/repositories; FastAPI artifact adapter |
-| `search` | `SearchQueryUseCase`, explicit/automatic indexing APIs | query policy, snapshot fingerprint, indexing job lifecycle | search index ports, `SearchIndexJobStore`, transcript and asset capabilities | package-private job persistence adapter/repository; Elasticsearch client adapter |
-| `assistant` | answer command and context query use cases | context limits, answer/citation validation | provider and search/context ports | FastAPI provider adapter and state-owner adapters |
-| `outbox` | relay, recovery and operator entry points | claim/publish/finalize/retry classification | `OutboxEventStore`, `OutboxMessagePublisher`, failure classifier | package-private persistence adapter/repository; Kafka/logging publishers |
-| `common` identity | authentication/OIDC application services | server-owned user identity and provisioning | `UserAccountStore` | package-private identity persistence adapter/repository |
-| `storage` | `ObjectStorageApplication` | object-key and upload policy | technical S3 capability | S3/MinIO client adapter |
-| `integration` | none exposed to web | neutral FastAPI integration mapping only | HTTP transport | package-private FastAPI adapters and wire DTOs |
-
-Spring Data repositories and persistence adapters in the refactored slices are package-private.
-JPA models remain module-owned implementation types. Controllers and listeners cannot inject a
-Spring Data repository.
-
-## Naming rules
-
-- `*UseCase` is an inbound application contract, grouped by cohesive command or query behavior.
-- `*ApplicationService` implements use-case policy or application orchestration.
-- `*Store` is an application-owned persistence capability; it never exposes Spring Data,
-  `Pageable`, `Sort`, `EntityManager`, or SDK types.
-- `*JpaRepository` is a package-private Spring Data declaration.
-- `*PersistenceAdapter` is package-private and implements one or more owning-module stores.
-- `*Command`, `*Query`, `*Result`, and `*View` are application values whose suffix matches use.
-- `*Request` and `*Response` are reserved for transport boundaries.
-- `*Client` remains acceptable only for a real technical HTTP/SDK client.
-
-Existing accurate names are retained. There is no repository-wide suffix rewrite.
-
-## Transaction rules
-
-| Command | Transaction and I/O sequence | Failure and idempotency |
+| Module | Named interface | Intentional contents |
 |---|---|---|
-| Asset upload | Validate and upload object outside a DB transaction; `AssetUploadTransaction` atomically writes asset, processing job and request outbox. | DB failure triggers best-effort object deletion; event ID and inbox/outbox rules remain unchanged. |
-| Asset title update | Authorized load; update derived search title first only when searchable; `AssetMutationTransaction` commits product title. | Required search failure prevents a false successful product response. |
-| Asset deletion | Authorized load; delete derived transcript documents and stored object; then `AssetMutationTransaction` deletes canonical transcript/job/asset state. | Required cleanup failure prevents success and database deletion. |
-| Processing result | `ProcessingResultEventHandler` and application service join one DB transaction; artifact HTTP retrieval remains inside; canonical transcript, asset/job and inbox status change atomically. | Known artifact/apply failures become durable bounded `FAILED`; unexpected failures roll back and are redelivered. |
-| Index request | One DB transaction writes indexing job and outbox intent. | Unique active fingerprint prevents duplicate active work. |
-| Index execution | Begin transaction marks attempt; Elasticsearch write is outside DB transactions; finalize transaction marks indexed/searchable. | Failure finalization records retry state; Elasticsearch remains rebuildable. |
-| Workspace CRUD | `WorkspaceService` owns read-only/read-write transaction boundaries. | Owner predicates and not-found mapping remain unchanged. |
-| Outbox relay | Claim transaction, broker call outside DB transaction, then finalize/failure transaction. | At-least-once delivery and bounded recovery semantics remain. |
+| `common` | `api` | safe HTTP error envelope helpers only |
+| `identity` | `api` | `CurrentUserContext`; server-owned identity lookup |
+| `identity` | `workspace-provisioning` | consumer-owned default-workspace capability |
+| `assistant` | `outbound` | provider/search/transcript capabilities implemented by other modules |
+| `outbox` | `api` | enqueue, relay, recovery and their value contracts |
+| `processing` | `api` | request, asset and artifact cross-module contracts plus V1 request contract |
+| `search` | `api` | explicit/automatic indexing and derived-state maintenance contracts |
+| `search` | `asset-ports` | consumer-owned asset capabilities implemented by `asset` |
+| `storage` | `api` | object storage behavior and value contracts |
+| `workspace` | `api` | owner access and workspace asset-usage capability |
 
-## Compatibility decisions
+All other packages are Spring Modulith-internal even when a Java type remains `public` for JPA,
+Jackson, Spring proxying, or focused tests.
 
-Removed from Spring:
+### Module map
 
-- the `compatibility` profile and `direct_upload` trigger mode;
-- direct FastAPI upload/status orchestration and its task/video identifiers;
-- GET-like status refresh and transcript load-or-capture writes;
-- deprecated `make run-compatibility` and `make run-standalone` entry points.
+| Module | Inbound adapters | Input/API | Application/domain | Output ports | Outbound adapters | Transaction owner |
+|---|---|---|---|---|---|---|
+| `asset` | `AssetController`; processing/search/workspace/assistant module adapters | upload, command and query use cases | upload, authorized query, mutation, transcript snapshot services; `Asset` | `AssetStore`, `CanonicalTranscriptStore` plus stable module capabilities | separate asset and transcript persistence adapters | upload transaction; mutation transaction; transcript replacement service |
+| `processing` | result Kafka listener; request relay scheduler; recovery/smoke operators | request/result use cases | request correlation, parser/validator, inbox/idempotency, result application and recovery | job store, inbox store, event factory; asset/artifact capabilities | separate job/inbox persistence adapters; request codec; FastAPI artifact adapter | request service; one result-application transaction retained |
+| `search` | search controller; indexing Kafka listener; relay scheduler; smoke operator | query, indexing, maintenance APIs | query policy, fingerprinting, job lifecycle and execution | job store, query/write/maintenance ports, event factory, asset ports | job persistence; event codec; cohesive Elasticsearch adapter | indexing request; begin and finalize transactions |
+| `assistant` | answer/context controllers | answer and context use cases | source selection, provider request, alias/citation validation and canonical resolution | provider, search and transcript-context ports | FastAPI provider plus owning-module adapters | no product write transaction |
+| `workspace` | workspace controller; identity provisioning adapter | cohesive CRUD use case and access API | `WorkspaceService`, owner policy, `Workspace` | `WorkspaceStore`, asset-usage capability | workspace persistence adapter | `WorkspaceService` read/write methods |
+| `outbox` | recovery scheduler and callers through API | writer, relay, failure/manual recovery | claim/publish/finalize, classification, bounded recovery | event store, publisher, failure classifier | persistence and Kafka/logging/failing publishers | claim, finalize and failure transactions are separate from broker I/O |
+| `storage` | callers through stable API; web error advice | `ObjectStorageUseCase` | object-key and storage policy | SDK/protocol boundary | `S3ObjectStorageAdapter` | none; external I/O only |
+| `integration` | none | implements other modules' ports | transport mapping only | technical FastAPI clients | assistant and processing provider adapters | none owned |
+| `identity` | auth controller and security filters/configuration | auth use case and current-user API | credential/OIDC policy and provisioning | user store; workspace provisioning | user persistence and security adapters | auth/OIDC creation executors |
+| `common` | health and generic exception advice | safe web API only | feature-neutral helpers | none | web adapters | none |
 
-Retained:
+## Structural decisions
 
-- the normal Project3 Kafka topic names, keys, version-1 request/result payloads and outbox/inbox
-  idempotency;
-- FastAPI artifact retrieval by processing request event ID;
-- explicit indexing and exact-ID/manual recovery controls;
-- legacy session authentication and local identity behavior.
+| Area | Before | Final decision | Evidence/rationale |
+|---|---|---|---|
+| Asset persistence | One adapter implemented asset and canonical transcript stores | **SPLIT** into `AssetPersistenceAdapter` and `CanonicalTranscriptPersistenceAdapter` | Different repositories and lifecycles; transaction atomicity is supplied by the application transaction, not adapter co-location. |
+| Processing persistence | One adapter implemented job and consumed-result inbox stores | **SPLIT** into `ProcessingJobPersistenceAdapter` and `ProcessingResultInboxPersistenceAdapter` | Job lifecycle and inbox idempotency are separate responsibilities. |
+| Event serialization | Application services imported adapter codecs | **INVERT** through `ProcessingRequestEventFactory` and `IndexingRequestEventFactory` | Application code now owns the capability and codecs remain messaging adapters. |
+| Processing result listener | Listener called a concrete handler | **INVERT** through `ProcessingResultUseCase` | Kafka ingress depends on a stable input behavior. |
+| Indexing listener | Listener depended on orchestration implementation | **INVERT** through `AssetIndexingUseCase` | Messaging adapter no longer chooses transaction implementation. |
+| Artifact validation | Gateway adapter fetched and validated product policy | **MOVE POLICY INWARD** | Adapter maps HTTP rows; application validator owns product invariants, while retrieval stays in the same transaction. |
+| Identity/common | Identity lived below broad `common` and generic advice mapped identity exceptions | **EXTRACT** top-level `identity`; add identity-owned advice | `common` is feature-neutral and Spring Modulith no longer reports an inward feature dependency. |
+| Product-profile validator | Root bean depended on non-exported configuration classes from processing/search/outbox | **REMOVE CROSS-MODULE TYPES** | Root validator reads explicit public property keys. Obsolete `ProcessingAsyncConfiguration` and `SearchAsyncConfiguration` wrappers were deleted. |
+| Elasticsearch | One technical class implements query/write/maintenance ports | **KEEP COHESIVE** | It shares one client, index/mapping policy and error translation; splitting would duplicate infrastructure without improving dependency direction. |
+| Workspace | Cohesive CRUD service | **KEEP** | Owner authorization and transaction boundaries are coherent; command/query splitting would be ceremonial. |
+| Outbox | Seven-dependency relay state machine | **KEEP** | Dependencies represent event store, broker, failure classification, clock/properties and transaction separation; they are one reliability state machine. |
 
-The FastAPI repository is not modified. Its standalone endpoint may continue to exist, but Spring
-no longer calls it. This is an intentional removal of obsolete Spring behavior, not a public
-Kafka or HTTP contract change.
+## Naming convergence
 
-## Data and migration decision
+Names describe behavior, not HTTP verbs or pattern fashion.
 
-The historical Flyway chain represented local development evolution and included obsolete
-direct-upload columns. Existing local data compatibility is explicitly not required, so the
-selected strategy is one clean `V1__create_product_schema.sql` baseline.
+| Old symbol | Final symbol | Actual behavior | Decision reason |
+|---|---|---|---|
+| `AssistantAnswerCommand` | `AssistantAnswerQuery` | side-effect-free provider-backed answer request | POST does not make it a state-changing command |
+| `AssistantAnswerCommandUseCase` | `AssistantAnswerUseCase` | answer behavior with no product mutation | remove false CQS promise |
+| `AssistantAnswerService` | `AssistantAnswerApplicationService` | source/provider/citation orchestration | implementation role is explicit |
+| `AssistantContextService` | `AssistantContextApplicationService` | context retrieval policy | distinguish input use case from implementation |
+| `KafkaProcessingRequestCommand` | `ProcessingRequestCommand` | application request intent | Kafka is an adapter detail |
+| `ProcessingRequestApplication` | `ProcessingRequestUseCase` | stable processing request API | use-case suffix matches role |
+| `ProcessingResultEventHandler` | `ProcessingResultApplicationService` | parses and applies result behavior | listener is the message handler; service owns application orchestration |
+| `AssetSearchMaintenance` | `AssetSearchMaintenanceUseCase` | stable derived-index maintenance behavior | explicit inbound module API |
+| `ExplicitIndexingApplication` | `ExplicitIndexingUseCase` | explicit indexing behavior | contract rather than implementation |
+| `IndexingRequestApplication` | `IndexingRequestUseCase` | durable indexing intent | contract rather than implementation |
+| `AssetSearchMaintenanceService` | `AssetSearchMaintenanceApplicationService` | API-to-output-port orchestration | implementation role is explicit |
+| `SearchService` | `SearchApplicationService` | authorization-aware search orchestration | avoids generic service ambiguity |
+| `TranscriptSearchIndexClient` | `ElasticsearchTranscriptAdapter` | implements search query/write/maintenance ports | it is not merely a protocol client |
+| `ObjectStorageApplication` | `ObjectStorageUseCase` | stable storage behavior | contract role is explicit |
+| `S3ObjectStorageClient` | `S3ObjectStorageAdapter` | maps application storage behavior to SDK | adapter, not raw client |
+| `WorkspaceAccessApplication` | `WorkspaceAccessUseCase` | stable owner access behavior | contract role is explicit |
+| `AuthService` | `AuthApplicationService` | credential registration/login/current-user orchestration | separates web/session mapping from application policy |
 
-The baseline contains credential user accounts, owner-scoped workspaces, assets, processing jobs,
-canonical transcript rows,
-outbox events, consumed processing-result events, and search indexing jobs with their current
-foreign keys, uniqueness rules, recovery metadata, and indexes. It omits `fastapi_task_id` and
-`fastapi_video_id`. `processing_request_event_id` is required and unique for every processing
-job. Local PostgreSQL state created from the old chain must be recreated rather than migrated.
+`WorkspaceService`, `OutboxRelayService`, technical `FastApi*Client` interfaces and accurate policy
+names are intentionally unchanged. Broad repository-wide suffix churn was rejected.
 
-## Validation evidence
+## Forensic over-engineering inventory
 
-The following rules are executable in `ModuleBoundaryRulesTest` and
-`BackendModularityBaselineTest`:
+### Interfaces: complete production inventory
 
-- application code cannot depend on infrastructure, Spring Data, or web transport;
-- inbound adapters cannot access repositories;
-- Spring Data repositories are non-public;
-- JPA entities/repositories do not cross module boundaries;
-- FastAPI wire DTOs and Elasticsearch implementation stay in their integration owners;
-- indexing does not call Elasticsearch inside its database transaction seams;
-- `common` and generic outbox remain feature-neutral;
-- removed compatibility types cannot silently return;
-- Spring Modulith verification remains cycle-free.
+There are **62 interface declarations** including eight package-private Spring Data declarations,
+one sealed sum type, nested technical seams and functional/polymorphic models. Every remaining
+interface has a current production caller. The two dead configuration wrappers were classes, not
+interfaces, and were deleted.
 
-`CleanBaselineMigrationTest` migrates an empty database, validates JPA against it, and checks the
-absence of obsolete direct-upload columns. The canonical validation command remains:
+| Group | Symbols (complete within group) | Implementations / callers | Boundary and decision |
+|---|---|---|---|
+| Raw JPA repositories (8) | `AssetJpaRepository`, `CanonicalTranscriptJpaRepository`, `UserAccountJpaRepository`, `OutboxEventJpaRepository`, `ProcessingJobJpaRepository`, `ProcessingResultEventJpaRepository`, `AssetSearchIndexJobJpaRepository`, `WorkspaceJpaRepository` | one Spring proxy each; called only by owning persistence adapter | Framework boundary; package-private; **KEEP** |
+| Asset input (3) | `AssetUploadUseCase`, `AssetCommandUseCase`, `AssetQueryUseCase` | one application implementation each; HTTP caller | Stable inbound behavior; **KEEP** |
+| Assistant input (2) | `AssistantAnswerUseCase`, `AssistantContextQueryUseCase` | one implementation each; HTTP caller | Separates web from application; **KEEP** |
+| Identity input/API (2) | `AuthUseCase`, `CurrentUserContext` | one implementation each; controller/product modules | Auth and server-owned identity boundary; **KEEP** |
+| Outbox input/API (5) | `OutboxWriter`, `OutboxRelay`, `OutboxFailureRecovery`, `OutboxManualRecovery`, sealed `RelaySelection` | one service per behavior; multiple module/scheduler/operator callers; two permitted selection variants | Reliability/module API and explicit sum type; **KEEP** |
+| Processing input/API (4) | `ProcessingRequestUseCase`, `ProcessingResultUseCase`, `ProcessingResultAssetPort`, `TranscriptArtifactGateway` | one implementation each across processing/asset/integration | Message ingress and cross-module/external boundaries; **KEEP** |
+| Search input/API (5) | `SearchQueryUseCase`, `AssetIndexingUseCase`, `ExplicitIndexingUseCase`, `IndexingRequestUseCase`, `AssetSearchMaintenanceUseCase` | one implementation each; web/listener/asset callers | Query, command and derived-state ownership; **KEEP** |
+| Storage/workspace input/API (4) | `ObjectStorageUseCase`, `WorkspaceUseCase`, `WorkspaceAccessUseCase`, `WorkspaceAssetUsagePort` | one implementation each; multiple module/web callers | External storage and owner/module boundaries; **KEEP** |
+| Persistence/output stores (8) | `AssetStore`, `CanonicalTranscriptStore`, `UserAccountStore`, `OutboxEventStore`, `ProcessingJobStore`, `ProcessingResultEventStore`, `SearchIndexJobStore`, `WorkspaceStore` | one adapter each; application callers | Hides Spring Data and persistence queries; **KEEP** |
+| Assistant output (3) | `AssistantAnswerProviderPort`, `AssistantSearchPort`, `AssistantTranscriptContextPort` | one provider/owning-module adapter each | Provider and cross-module capability; **KEEP** |
+| Outbox output (3) | `OutboxMessagePublisher`, `OutboxPublicationFailureClassifier`, nested `KafkaSender` | multiple publisher adapters / one classifier / one Kafka technical implementation | Broker, failure and deterministic test seams; **KEEP** |
+| Processing output (3) | `ProcessingRequestEventFactory`, `ProcessingJobStore`, `ProcessingResultEventStore` | codec or persistence adapters | The two stores are counted above; factory protects wire serialization; **KEEP** |
+| Search output (7) | `TranscriptSearchQueryPort`, `TranscriptSearchMaintenancePort`, `IndexingAssetPort`, `SearchAssetQueryPort`, `SearchIndexJobStore`, `TranscriptIndexWriter`, `IndexingRequestEventFactory` | Elasticsearch, asset, persistence and codec adapters | External/derived state and consumer-owned module capabilities; stores counted above; **KEEP** |
+| Identity workspace/output (3) | `DefaultWorkspaceProvisioner`, `OidcUserCreationExecutor`, `DefaultWorkspaceCreationExecutor` | one adapter/executor each | Cross-module provisioning and transaction-proxy seams; **KEEP** |
+| Technical provider clients (2) | `FastApiAssistantClient`, `FastApiProcessingClient` | one HTTP implementation each | Protocol seam used by provider adapters/tests; **KEEP** |
+| Boundary-neutral polymorphism (3) | `AssetUploadContent`, `ProcessingResultPayload`, `TranscriptFingerprintRow` | production stream lambda; two result payload records; two fingerprint row records | Avoids HTTP/provider coupling or unsafe branching; **KEEP** |
+
+Repeated store names in the input/output grouping above are intentional cross-classification; the
+unique declaration total is 62. No interface remains solely to mirror one method without a module,
+I/O, transaction, reliability, or polymorphism boundary.
+
+### Application services and dependency counts
+
+There are **30 `@Service` classes**. Counts below are constructor dependencies, not a quality score.
+
+| Module | Services (`dependency count`) | Decision |
+|---|---|---|
+| asset | `AssetCommandApplicationService(4)`, `AssetMutationTransaction(3)`, `AssetQueryApplicationService(4)`, `AssetSearchabilityService(1)`, `AssetTranscriptQueryService(3)`, `AssetTranscriptSnapshotService(3)`, `AssetUploadTransaction(2)`, `AssetWorkspaceUsageService(1)`, `UploadAssetApplicationService(4)` | **KEEP**; responsibilities are command/query/upload/transcript/transaction seams, not one god service |
+| assistant | `AssistantAnswerApplicationService(2)`, `AssistantContextApplicationService(2)` | **KEEP**; different answer-provider and retrieval-pack policies |
+| identity | `AuthApplicationService(2)`, `OidcUserProvisioningService(2)`; inbound security adapter `CurrentUserService(4)` | **KEEP**; credential, OIDC and request identity concerns remain distinct |
+| outbox | `OutboxManualRecoveryService(2)`, `OutboxRecoveryService(4)`, `OutboxRelayService(7)` | **KEEP**; distinct operator, bounded recovery and broker state-machine behavior |
+| processing | `ApplyProcessingResultApplicationService(5)`, `ProcessingRecoveryService(2)`, `ProcessingRequestApplicationService(3)`, `ProcessingResultApplicationService(3)` | **KEEP**; transaction, recovery, request and ingress roles are separate |
+| search | `AssetIndexingApplicationService(3)`, `AssetSearchIndexRequestService(5)`, `AssetSearchMaintenanceApplicationService(1)`, `ExecuteIndexJobApplicationService(3)`, `IndexingAttemptTransactionService(4)`, `SearchApplicationService(3)`, `TranscriptIndexingService(4)` | **KEEP**; request, execute, transaction, query and maintenance seams preserve I/O ordering |
+| workspace | `WorkspaceAccessPolicy(1)`, `WorkspaceService(6)` | **KEEP**; cohesive owner-aware CRUD and reusable policy |
+
+The one-dependency search-maintenance implementation is a deliberate module API boundary hiding
+the Elasticsearch adapter. The dead `ProcessingAsyncConfiguration` and `SearchAsyncConfiguration`
+pass-through components were **DELETE**. The unused `WorkspaceQueryApplication` and
+`ProcessingJobUpdateCommand`/`updateJob` path were also **DELETE**.
+
+### Catch-block inventory
+
+There are **77 production catch blocks**. The following table accounts for every block by file and
+line set; line numbers are for this closure tree.
+
+| Classification | Files and catch lines | Count | Decision |
+|---|---|---:|---|
+| `REQUIRED_TRANSLATION` | `S3ObjectStorageAdapter:64,77`; `WorkspaceService:229`; `TranscriptIndexingService:43`; `IndexingAttemptTransactionService:139`; `SearchApplicationService:99`; `AssetIndexingEventParser:81,90,115`; `TranscriptSnapshotFingerprintService:30`; `ApplyProcessingResultApplicationService:123,131`; `ProcessingResultEventParser:89,171,221,241`; `IndexingRequestedEventCodec:55`; `UploadAssetApplicationService:86`; `SupportedUploadMediaPolicy:65`; `ElasticsearchTranscriptAdapter:196,233,238,247,263,268,277,417,548,553,559`; `KafkaOutboxMessagePublisher:57,60,89,107`; `SearchAssetPortAdapter:50,59,68,78`; `ProcessingResultAssetPortAdapter:34,43`; `ProcessingSmokeCommandRunner:113`; `TranscriptArtifactGatewayAdapter:28`; `FastApiProcessingClientImpl:37,39,44`; `ProcessingRequestedEventCodec:74`; `FastApiProperties:78`; `AssistantAnswerApplicationService:79,141`; `FastApiAssistantClientImpl:67,69,74`; `CurrentUserService:137`; `UserAccountPersistenceAdapter:44,53`; `OidcUserProvisioningService:68`; `AuthApplicationService:55,85` | 58 | **KEEP**; converts protocol/framework/owner errors into stable capability or product meanings |
+| `REQUIRED_COMPENSATION` | `TranscriptIndexingService:62,65`; `IndexingAttemptTransactionService:70`; `ExecuteIndexJobApplicationService:49,87,102,133`; `ApplyProcessingResultApplicationService:74`; `UploadAssetApplicationService:63`; `OidcUserProvisioningService:47` | 10 | **KEEP**; preserves derived-state rollback, durable diagnostics, upload cleanup trigger, result failure state or concurrent OIDC recovery |
+| `REQUIRED_FAILURE_CLASSIFICATION` | `OutboxRelayService:147,164`; `AssetIndexingKafkaListener:41,50`; `ProcessingResultKafkaListener:41,50` | 6 | **KEEP**; distinguishes ineligible/durable rejection from retryable publication/listener failure and controls acknowledgment |
+| `REQUIRED_CLEANUP` | `KafkaOutboxMessagePublisher:70`; `UploadAssetApplicationService:94` | 2 | **KEEP**; restores interrupt/cleanup contract or records best-effort compensation failure |
+| `SILENT_SWALLOW` (intentional scheduler isolation) | `OutboxRecoveryScheduler:33` | 1 | **KEEP WITH LOG**; one failed reconciliation must not terminate future scheduled runs; warning emits only safe category |
+
+No remaining catch is `DUPLICATE_LOG_AND_RETHROW`, `CATCH_AND_WRAP_WITHOUT_VALUE`, or
+`OBSOLETE_AFTER_RESPONSIBILITY_SPLIT`. Removed compatibility catches disappeared with their owning
+direct-upload/status orchestration; errors now terminate at normal Kafka/outbox, provider, or web
+adapter boundaries.
+
+### Custom exceptions
+
+There are **40 custom exception files**:
+
+- Asset (8): `AssetListRequestException`, `AssetNotFoundException`, `InvalidAssetTitleException`,
+  `InvalidTranscriptContextWindowException`, `InvalidUploadRequestException`,
+  `ProcessingJobNotFoundException`, `TranscriptRowNotFoundException`, `TranscriptUnavailableException`.
+- Assistant (2): `AssistantProviderUnavailableException`, `InvalidAssistantContextRequestException`.
+- Identity (8): `AuthModeUnavailableException`, `AuthenticationRequiredException`,
+  `EmailAlreadyRegisteredException`, `InvalidAuthRequestException`, `InvalidCredentialsException`,
+  `InvalidCurrentUserIdException`, `InvalidJwtIdentityException`, `UserAccountConflictException`.
+- FastAPI integration (3): `FastApiConnectivityException`, `FastApiIntegrationException`,
+  `InvalidFastApiResponseException`.
+- Outbox (2): `OutboxPublishException`, `PermanentOutboxPublishException`.
+- Processing (4): `ProcessingAssetUnavailableException`, `TranscriptArtifactAccessException`,
+  `ProcessingResultEventApplyException`, `ProcessingResultEventRejectedException`.
+- Search (8): `InvalidSearchRequestException`, `SearchAssetNotFoundException`,
+  `SearchProcessingJobNotFoundException`, `SearchTranscriptUnavailableException`,
+  `SearchIndexConnectivityException`, `SearchIndexOperationException`,
+  `SearchAssetUnavailableException`, `AssetIndexingEventRejectedException`.
+- Storage/workspace (5): `ObjectStorageException`, `DefaultWorkspaceConflictException`,
+  `InvalidWorkspaceNameException`, `WorkspaceDeleteConflictException`, `WorkspaceNotFoundException`.
+
+All are **KEEP**: web-mapped product errors carry distinct stable status/code behavior; adapter
+exceptions distinguish connectivity/permanent/retry or translate module ownership; result/event
+rejections control Kafka acknowledgment. `UserAccountConflictException` is deliberately an output-
+port error so the application does not import Spring's `DataIntegrityViolationException`.
+
+### DTO/model chains
+
+| Flow | Semantic chain | Decision |
+|---|---|---|
+| upload | `multipart + web request` -> `AssetUploadCommand/AssetUploadContent` -> `Asset` + `ProcessingRequestCommand` -> JPA-owned models -> V1 outbox payload -> `AssetUploadResponse` | Boundary duplication is required; HTTP and stream types do not enter application policy |
+| processing result | Kafka JSON -> parser envelope/payload -> validated transcript rows -> canonical snapshot persistence -> indexing request rows/payload | Product validator owns invariants; provider wire row is mapped once and does not leak inward |
+| search | HTTP parameters -> `SearchQuery` -> `SearchPage/SearchHit` -> `SearchResponse/SearchResultResponse` | Application results differ from Elasticsearch documents and HTTP response; **KEEP** |
+| assistant | HTTP request -> `AssistantAnswerQuery`/context query -> provider request/response -> validated result/citations -> HTTP response | Provider aliases and canonical citations have different trust boundaries; **KEEP** |
+| auth | HTTP register/login records -> application commands -> `AuthenticatedUser` -> HTTP response/session | Session and HTTP DTOs remain in controller; **KEEP** |
+
+No DTO was removed solely because fields match. Reuse is allowed within one semantic layer only.
+
+### Configuration and compatibility inventory
+
+There are **16 live `@ConfigurationProperties` classes**:
+
+| Owner | Properties and current caller |
+|---|---|
+| identity | `CurrentUserProperties` (request identity/session adapter), `WorkspaceSecurityProperties` (auth mode/security configuration) |
+| integration | `FastApiProperties` (HTTP client/provider configuration) |
+| outbox | `WorkspaceKafkaProperties` (publisher/listeners), `OutboxRecoveryProperties` (recovery), `OutboxRelayProperties` (relay) |
+| processing | `ProcessingRecoveryProperties` (operator), `ProcessingSmokeProperties` (smoke operator), `ProcessingRequestRelayProperties` (scheduler) |
+| search | `SearchSmokeProperties` (operator), `IndexingRequestRelayProperties` (scheduler), `ElasticsearchProperties` (adapter), `SearchIndexingProperties` (indexing request policy) |
+| storage/workspace | `ObjectStorageProperties` (S3 adapter), `WorkspaceProperties` (workspace policy) |
+
+The `project3` bootstrap validator reads seven explicit keys without importing module-internal
+property classes. Searches of production/configuration contain no direct-upload profile/flag,
+FastAPI task/video field, `run-compatibility`, or `run-standalone`. The migration test deliberately
+mentions obsolete columns to prevent their return.
+
+### Visibility inventory
+
+There are **288 top-level public production declarations**. Classification:
+
+- **54 intentional Spring Modulith API declarations** in the ten named-interface packages above.
+- **2 bootstrap/framework entries**: `WorkspaceCoreApplication` and
+  `CoherentAsyncProductProfileValidator`.
+- **232 Java-public but Modulith-internal declarations** under domain/application/adapter packages.
+  They include JPA/Jackson models, configuration properties, web controllers/DTOs, Spring beans and
+  application values. They are not module APIs; all direct module bases are empty.
+- **8 raw Spring Data declarations are package-private**, as are persistence adapters and many
+  listener/configuration implementations.
+
+Making all 232 internal declarations package-private would add package-alignment test churn without
+changing the enforced module surface. That modifier-only campaign is **REJECT**. Accidental module
+exposure is prevented by physical package placement, named interfaces and strict Modulith checks.
+
+### Architecture-rule inventory
+
+| Rule | Classification | Decision |
+|---|---|---|
+| detected module roots + strict `ApplicationModules.verify()` | zero cycles and intentional cross-module APIs | **KEEP** |
+| application cannot depend on adapter/infrastructure | inward dependency invariant | **KEEP/GENERALIZE** |
+| domain cannot depend on application/adapter | domain direction invariant | **ADD** |
+| application cannot depend on Spring Data/web/HTTP | framework boundary invariant | **KEEP** |
+| inbound adapters cannot access Spring repositories | input boundary invariant | **GENERALIZE** to controllers/listeners/schedulers/operators |
+| message listeners cannot depend on concrete `@Service` | stable message input boundary | **ADD** |
+| controllers cannot depend on JPA entities | HTTP contract invariant | **KEEP** |
+| raw repositories package-private | persistence encapsulation | **KEEP** |
+| repositories/entities cannot cross modules | data ownership invariant | **KEEP** |
+| common/outbox feature neutral | shared/reliability ownership | **GENERALIZE** with exact root packages |
+| FastAPI provider types remain integration-owned | transport isolation | **GENERALIZE** for new package |
+| non-search code cannot depend on search-engine adapter | derived-state ownership | **GENERALIZE** for new package |
+| indexing transaction cannot call external index writer | transaction topology | **KEEP** |
+| direct module bases are empty | accidental API surface | **ADD** without exact file-tree freeze |
+| obsolete compatibility/facade types absent | prevents deleted paths returning | **UPDATE** to current symbol set |
+
+These rules complement Spring Modulith. They do not assert the complete repository tree or demand
+one implementation class per interface.
+
+## Transaction map and retained debt
+
+| Flow | Sequence | Failure semantics |
+|---|---|---|
+| Asset upload | validate -> object storage outside DB -> one DB transaction writes asset + job + request outbox | DB failure triggers best-effort object deletion; cleanup failure is logged; original failure propagates |
+| Asset title | authorize/load -> update derived title when searchable -> DB mutation transaction | search failure prevents product success and DB title change |
+| Asset delete | authorize/load -> Elasticsearch cleanup -> object deletion -> DB delete transaction | any required cleanup failure prevents reported success and DB deletion; partial external cleanup remains retry-by-client debt |
+| Processing result | listener -> parse -> one DB transaction -> artifact HTTP -> validate -> canonical replacement + asset/job + inbox | known failures become durable bounded failure; unexpected failure rolls back for redelivery; external retrieval remains intentionally inside transaction |
+| Index request | one DB transaction writes job + indexing outbox | active fingerprint uniqueness suppresses duplicates |
+| Index execute | begin transaction -> Elasticsearch write outside DB -> finalize transaction | stale fingerprint/finalize rejection prevents incorrect searchable state; diagnostic failures do not hide primary write failure |
+| Outbox relay | claim transaction -> Kafka outside DB -> mark-published or failure transaction | at-least-once semantics, bounded retry/recovery and explicit operator controls retained |
+| Workspace/auth | method-level DB transaction with server-owned user/owner identity | owner mismatch maps to not-found; DB uniqueness becomes stable conflict |
+
+Retained debt is narrow and explicit: processing artifact HTTP remains inside its result transaction;
+asset deletion has no durable multi-resource deletion state machine; Elasticsearch adapter is large
+but cohesive. None is changed in this structural pass.
+
+## Test-suite regression review
+
+The original `origin/main` run executed **504 tests** with zero failures/errors. The first-pass tree
+executed **365 tests**. The final source currently declares **372 `@Test` methods**; the authoritative
+final Surefire count is recorded in the validation section after the clean full run.
+
+| Removed or merged original test | Original invariant | Surviving/reworked protection | Coverage strength | Decision |
+|---|---|---|---|---|
+| `AssetApplicationServicesTest` | asset query/mutation behavior | focused query, command, transcript and transaction tests | stronger responsibility-local assertions | **MERGE** |
+| `AssetDeletionServiceTest` + `AssetTitleUpdateServiceTest` | ordering and title policy | `AssetCommandApplicationServiceTest`, including search/storage partial failures | equal/stronger | **MERGE + RESTORE variants** |
+| `AssetPersistenceServiceTest` | asset/transcript persistence | adapter/repository tests plus `CanonicalTranscriptStoreTest` | stronger boundary/atomic replacement coverage | **REWRITE** |
+| original `UploadAssetApplicationServiceTest` path | upload compensation | focused package-converged test of storage/DB failure ordering | equal | **MOVE** |
+| `AuthServiceTest` | register/login policy | `AuthApplicationServiceTest` plus controller session tests | stronger layer separation | **REWRITE** |
+| `DirectProcessingCompatibilityGatewayAdapterTest` | removed direct-upload behavior | no replacement; normal request/result contract tests | obsolete invariant | **DELETE** |
+| `OutboxPersistenceServiceTest` | pass-through wrapper | `OutboxEventRepositoryTest` and adapter-backed relay/recovery tests | stronger behavior at real seam | **DELETE WRAPPER TEST** |
+| `OutboxRecoveryMigrationTest` | historical migration chain | `CleanBaselineMigrationTest` plus recovery persistence/service tests | correct for clean V1 policy | **REPLACE** |
+| `OutboxRelayServiceTest` | claim/publish/retry/type/filter state machine | expanded `KafkaOutboxRelayServiceTest`: success, retry, terminal failure, future skip, type/batch, candidate isolation, explicit mismatch | restored essential state-machine coverage | **REWRITE/RESTORE** |
+| `DirectUploadDeprecationReporterTest` + `ProcessingPropertiesTest` | compatibility warning/flag | architecture absence rule + clean migration/config search | obsolete product behavior | **DELETE** |
+| `WorkspaceQueryApplicationAdapterTest` | pass-through adapter | `WorkspaceServiceTest`, controller and owner policy tests | equal without wrapper ceremony | **DELETE** |
+
+High-risk surviving suites cover outbox failure classification/recovery, processing inbox duplicate
+terminal results, canonical atomic replacement, indexing begin/write/finalize and stale fingerprint,
+owner authorization, HTTP error/correlation shape, search scope/relevance, assistant source/citation
+validation, Kafka V1 payload compatibility, migration constraints and strict module verification.
+
+## Automated validation and manual boundary
+
+Final closure validation uses:
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test
+docker compose --env-file .env -f infra/docker-compose.dev.yml config
+git diff --check
 ```
 
-Runtime validation requires project-specific PostgreSQL, Kafka, MinIO, Elasticsearch, FastAPI,
-Redis and optional assistant-provider availability. Results must be recorded as passed or blocked;
-static tests are not evidence that an unavailable provider flow ran.
+Targeted architecture, bootstrap-profile, asset-deletion and outbox-relay tests are run before the
+full suite. `CleanBaselineMigrationTest` supplies an empty in-memory PostgreSQL-compatible Flyway/JPA
+validation. No persistent database or Docker volume is reset by this task.
 
-### Runtime result for this overhaul
+Final automated result:
 
-- `docker compose --env-file .env -f infra/docker-compose.dev.yml config` parsed successfully and
-  resolved the expected PostgreSQL, Elasticsearch, MinIO, Kafka and helper services.
-- Inventory found no existing `infra` containers. It found the four product data volumes plus the
-  opt-in Keycloak PostgreSQL volume; the Keycloak volume was explicitly excluded from reset scope.
-- Deleting the four persistent product volumes was blocked by the execution approval layer. No
-  persistent volume was deleted or changed by this validation.
-- A temporary PostgreSQL 15.18 container used `tmpfs` with no attached volume. Spring applied
-  exactly one Flyway V1 to an empty database, Hibernate validated the mappings, and the application
-  started on port 18081.
-- Real local HTTP calls registered one legacy-session user (`201`) and loaded/created its default
-  workspace (`200`). PostgreSQL inspection showed one successful Flyway row, all eight product
-  tables, a non-null `processing_request_event_id`, both transcript uniqueness constraints, and
-  one user-account/one workspace row.
-- The Spring process and temporary PostgreSQL container were stopped; `--rm` removed the tmpfs
-  container. No validation container or persistent validation volume remains.
-- Upload/media, Kafka/FastAPI result, duplicate-result, automatic indexing/search,
-  assistant/provider and deletion-cleanup runtime flows are **BLOCKED** in this run because the
-  persistent integration reset was not approved and no authorized real media/provider fixture was
-  available. Their automated contract/transaction tests passed, but that is `TEST`, not `RUNTIME`.
+- targeted architecture, profile, clean migration, persistence and transaction group: **passed**;
+- canonical full Maven command: **84 suites / 372 tests / 0 failures / 0 errors / 0 skipped**;
+- clean V1 Flyway migration: **passed** against empty in-memory H2 in PostgreSQL mode, including JPA
+  mapping/constraint checks and obsolete-column rejection;
+- Compose parse: **passed**; project name resolved to `infra` and exactly the four product volume
+  keys below were present;
+- `git diff --check`: **passed**.
 
-## Rejected options
+This state is `AUTOMATED CODE/TEST READY`. Manual upload -> processing -> transcript -> indexing ->
+search -> assistant -> deletion acceptance remains `MANUAL RUNTIME ACCEPTANCE PENDING`.
 
-- No microservices, tenant context, generic repository framework, service locator, broad shared
-  orchestration module, separate read database, or timestamp-aware transcript fields.
-- No speculative interface is added merely because the reference accounting project has one.
-- No change to result-application transaction topology is combined with this boundary cleanup.
-- No preservation layer is added for local data or deleted direct-upload behavior.
+## Manual project-scoped reset and acceptance checklist
 
-## Rollback
+Compose project directory `infra` resolves these four product volumes:
 
-Code recovery uses the recorded original commit and Git reflog. Runtime rollback is code/history
-rollback followed by clean recreation of project-specific data stores; old local data is not a
-supported rollback artifact. The immutable annotated `project3-submission-v1` tag is not moved.
+- `infra_workspace_core_postgres_data`
+- `infra_workspace_core_elasticsearch_data`
+- `infra_workspace_core_minio_data`
+- `infra_workspace_core_kafka_data`
+
+Do **not** remove `infra_workspace_core_keycloak_postgres_data`. Before deleting anything, the user
+must stop the project and resolve exact names:
+
+```bash
+docker compose --env-file .env -f infra/docker-compose.dev.yml down
+docker volume ls --format '{{.Name}}' \
+  | grep -E '^infra_workspace_core_(postgres|elasticsearch|minio|kafka)_data$'
+```
+
+After confirming exactly four matches, remove those four explicit volumes (never use prune):
+
+```bash
+docker volume rm \
+  infra_workspace_core_postgres_data \
+  infra_workspace_core_elasticsearch_data \
+  infra_workspace_core_minio_data \
+  infra_workspace_core_kafka_data
+```
+
+Then recreate services and validate, recording the first failed boundary rather than masking it:
+
+1. Start PostgreSQL, Elasticsearch, MinIO and Kafka with their helper services.
+2. Start FastAPI and Spring with the normal Project3 profile; verify health and one Flyway V1.
+3. Authenticate/register and obtain the server-owned default workspace.
+4. Upload one supported media asset; verify object, asset, processing job and request outbox.
+5. Verify Kafka request -> FastAPI processing -> result event -> Spring inbox.
+6. Verify canonical transcript replacement and terminal asset/job state.
+7. Verify indexing outbox -> Elasticsearch -> searchable state.
+8. Verify owner-scoped search and assistant answer/citation resolution.
+9. Delete the asset; verify Elasticsearch rows and MinIO object are gone before product deletion
+   reports success.
+10. Classify failure as configuration, authentication/authorization, storage, Kafka/outbox,
+    FastAPI/artifact, inbox/idempotency, PostgreSQL transaction, Elasticsearch/finalize, provider,
+    or deletion cleanup. Preserve logs/correlation/event IDs for the failed boundary.
+
+## Rollback and Phase-1 gate
+
+Code rollback uses Git history/reflog or the recorded external safety bundle. Runtime rollback after
+the clean V1 decision means code/history rollback followed by project-scoped data recreation; old
+local databases are not a supported migration artifact. The immutable `project3-submission-v1` tag
+must not move.
+
+The architecture gate is closed only when strict Modulith/ArchUnit and the full suite pass with the
+validated tree exactly reconstructed above original `origin/main`. Manual runtime acceptance is a
+separate gate and must not be inferred from automated tests.
