@@ -1,4 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle;
+package com.aiknowledgeworkspace.workspacecore.asset.application.service;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetMutationTransaction;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetCommandApplicationService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,14 +14,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidAssetTitleException;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetView;
-import com.aiknowledgeworkspace.workspacecore.search.application.AssetSearchMaintenance;
-import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidAssetTitleException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
+import com.aiknowledgeworkspace.workspacecore.search.api.AssetSearchMaintenanceUseCase;
+import com.aiknowledgeworkspace.workspacecore.storage.api.ObjectStorageUseCase;
+import com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,10 +40,10 @@ class AssetCommandApplicationServiceTest {
     private AssetMutationTransaction mutationTransaction;
 
     @Mock
-    private AssetSearchMaintenance searchMaintenance;
+    private AssetSearchMaintenanceUseCase searchMaintenance;
 
     @Mock
-    private ObjectStorageApplication objectStorage;
+    private ObjectStorageUseCase objectStorage;
 
     private AssetCommandApplicationService service;
 
@@ -131,6 +135,24 @@ class AssetCommandApplicationServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("storage unavailable");
 
+        verify(searchMaintenance).deleteTranscriptRows(assetId);
+        verify(mutationTransaction, never()).delete(asset);
+    }
+
+    @Test
+    void searchCleanupFailureStopsStorageAndDatabaseDeletion() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = asset(assetId, "Asset", AssetStatus.SEARCHABLE, "media", "raw/video.mp4");
+        when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
+        org.mockito.Mockito.doThrow(new IllegalStateException("search unavailable"))
+                .when(searchMaintenance)
+                .deleteTranscriptRows(assetId);
+
+        assertThatThrownBy(() -> service.delete(assetId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("search unavailable");
+
+        verifyNoInteractions(objectStorage);
         verify(mutationTransaction, never()).delete(asset);
     }
 

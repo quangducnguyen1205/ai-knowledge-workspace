@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.ProcessingRecoveryProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;

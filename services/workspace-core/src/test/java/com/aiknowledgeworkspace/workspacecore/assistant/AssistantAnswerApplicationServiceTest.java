@@ -1,5 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.InvalidAssistantContextRequestException;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.AssistantProviderUnavailableException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,16 +12,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantAnswerService;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCommand;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerResult;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantCitation;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantAnswerProviderPort;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderResponse;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.service.AssistantAnswerApplicationService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.service.AssistantContextApplicationService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.query.AssistantAnswerQuery;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantAnswerResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantContextSource;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantAnswerProviderPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantProviderRequest;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantProviderResponse;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,19 +32,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class AssistantAnswerServiceTest {
+class AssistantAnswerApplicationServiceTest {
 
     @Mock
-    private AssistantContextService contextService;
+    private AssistantContextApplicationService contextService;
 
     @Mock
     private AssistantAnswerProviderPort provider;
 
-    private AssistantAnswerService service;
+    private AssistantAnswerApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AssistantAnswerService(contextService, provider);
+        service = new AssistantAnswerApplicationService(contextService, provider);
     }
 
     @Test
@@ -57,7 +61,7 @@ class AssistantAnswerServiceTest {
             );
         });
 
-        AssistantAnswerResult result = service.answer(new AssistantAnswerCommand(
+        AssistantAnswerResult result = service.answer(new AssistantAnswerQuery(
                 workspaceId, "  dynamic programming  ", null, 2, 1
         ));
 
@@ -121,7 +125,7 @@ class AssistantAnswerServiceTest {
 
     @Test
     void invalidQuestionStopsBeforeContextOrProviderCalls() {
-        assertThatThrownBy(() -> service.answer(new AssistantAnswerCommand(
+        assertThatThrownBy(() -> service.answer(new AssistantAnswerQuery(
                 UUID.randomUUID(), "   ", null, null, null
         ))).isInstanceOf(InvalidAssistantContextRequestException.class)
                 .hasMessage("question is required");
@@ -130,8 +134,8 @@ class AssistantAnswerServiceTest {
         verify(provider, never()).answer(any());
     }
 
-    private AssistantAnswerCommand command(UUID workspaceId) {
-        return new AssistantAnswerCommand(workspaceId, "question", null, null, null);
+    private AssistantAnswerQuery command(UUID workspaceId) {
+        return new AssistantAnswerQuery(workspaceId, "question", null, null, null);
     }
 
     private AssistantContextResult context(UUID workspaceId, UUID assetId) {

@@ -1,8 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublishException;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.KafkaOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.OutboxPublishException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,8 +15,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;

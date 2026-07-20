@@ -1,11 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetCommandApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadCommand;
-import com.aiknowledgeworkspace.workspacecore.asset.application.upload.UploadAssetApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetCommandApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.command.AssetUploadCommand;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.UploadAssetApplicationService;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -25,7 +27,7 @@ class AssetTransactionBoundaryTest {
     @Test
     void uploadProductTruthAndOutboxIntentShareOneTransaction() throws Exception {
         Class<?> transactionClass = Class.forName(
-                "com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadTransaction"
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetUploadTransaction"
         );
         Method persist = transactionClass.getDeclaredMethod(
                 "persist",
@@ -34,7 +36,7 @@ class AssetTransactionBoundaryTest {
                 String.class,
                 java.util.UUID.class,
                 String.class,
-                com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference.class
+                com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference.class
         );
 
         assertThat(transactional(persist)).isNotNull();
@@ -46,7 +48,7 @@ class AssetTransactionBoundaryTest {
                 "replaceCanonicalSnapshot", Asset.class, java.util.List.class
         );
         Class<?> mutationClass = Class.forName(
-                "com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetMutationTransaction"
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetMutationTransaction"
         );
         Method updateTitle = mutationClass.getDeclaredMethod("updateTitle", Asset.class, String.class);
         Method delete = mutationClass.getDeclaredMethod("delete", Asset.class);

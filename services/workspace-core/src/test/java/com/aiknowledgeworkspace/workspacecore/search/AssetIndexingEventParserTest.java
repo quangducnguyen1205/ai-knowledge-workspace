@@ -1,13 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventEnvelope;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventEnvelope;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventParser;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventRejectedException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.UUID;

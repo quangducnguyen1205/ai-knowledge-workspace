@@ -1,7 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchTranscriptAdapter;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
@@ -12,7 +12,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,10 +22,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-class TranscriptSearchIndexClientTest {
+class ElasticsearchTranscriptAdapterTest {
 
     private MockRestServiceServer mockServer;
-    private TranscriptSearchIndexClient client;
+    private ElasticsearchTranscriptAdapter client;
 
     @BeforeEach
     void setUp() {
@@ -37,7 +37,7 @@ class TranscriptSearchIndexClientTest {
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        client = new TranscriptSearchIndexClient(builder.build(), properties, new ObjectMapper());
+        client = new ElasticsearchTranscriptAdapter(builder.build(), properties, new ObjectMapper());
     }
 
     @Test

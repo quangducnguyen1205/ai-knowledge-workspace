@@ -1,10 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
-
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.TranscriptSearchIndexClient;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.in.web.SearchApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.in.web.SearchController;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.SearchApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchTranscriptAdapter;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -20,15 +19,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.search.infrastructure.elasticsearch.ElasticsearchProperties;
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetDetails;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -45,7 +44,7 @@ class SearchControllerTest {
 
     private MockRestServiceServer mockServer;
     private MockMvc mockMvc;
-    private WorkspaceQueryApplication workspaceQueryApplication;
+    private WorkspaceAccessUseCase workspaceQueryApplication;
     private SearchAssetQueryPort searchAssetQueryPort;
 
     @BeforeEach
@@ -53,19 +52,19 @@ class SearchControllerTest {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl("http://localhost:9201");
         mockServer = MockRestServiceServer.bindTo(builder).build();
-        workspaceQueryApplication = mock(WorkspaceQueryApplication.class);
+        workspaceQueryApplication = mock(WorkspaceAccessUseCase.class);
         searchAssetQueryPort = mock(SearchAssetQueryPort.class);
 
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://localhost:9201");
         properties.setTranscriptIndexName("asset-transcript-rows");
 
-        TranscriptSearchIndexClient searchIndexClient = new TranscriptSearchIndexClient(
+        ElasticsearchTranscriptAdapter searchIndexClient = new ElasticsearchTranscriptAdapter(
                 builder.build(),
                 properties,
                 new ObjectMapper()
         );
-        SearchService searchService = new SearchService(workspaceQueryApplication, searchAssetQueryPort, searchIndexClient);
+        SearchApplicationService searchService = new SearchApplicationService(workspaceQueryApplication, searchAssetQueryPort, searchIndexClient);
         SearchController searchController = new SearchController(searchService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(searchController)

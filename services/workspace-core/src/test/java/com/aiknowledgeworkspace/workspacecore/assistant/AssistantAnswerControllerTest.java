@@ -1,8 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantAnswerCommandUseCase;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerCitation;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantAnswerResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.InvalidAssistantContextRequestException;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.AssistantProviderUnavailableException;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.adapter.in.web.AssistantApiExceptionHandler;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.adapter.in.web.AssistantAnswerController;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantAnswerUseCase;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantAnswerCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantAnswerResult;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -14,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -27,12 +35,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AssistantAnswerControllerTest {
 
-    private AssistantAnswerCommandUseCase assistantAnswerService;
+    private AssistantAnswerUseCase assistantAnswerService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        assistantAnswerService = mock(AssistantAnswerCommandUseCase.class);
+        assistantAnswerService = mock(AssistantAnswerUseCase.class);
         AssistantAnswerController assistantAnswerController = new AssistantAnswerController(assistantAnswerService);
         ObjectMapper objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders.standaloneSetup(assistantAnswerController)

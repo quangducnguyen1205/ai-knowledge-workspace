@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi.assistant.internal;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.assistant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -6,9 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderRequest;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderResponse;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantProviderSource;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantProviderRequest;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantProviderResponse;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantProviderSource;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

@@ -1,11 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchIndexingProperties;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexRequestService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
+import com.aiknowledgeworkspace.workspacecore.search.application.configuration.SearchIndexingProperties;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetSearchIndexRequestService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptSnapshotFingerprintService;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,11 +15,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestRow;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxWriter;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventCodec;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.api.IndexingRequestRow;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxWriter;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.out.messaging.IndexingRequestedEventCodec;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;

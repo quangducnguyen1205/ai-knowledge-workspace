@@ -1,16 +1,16 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;

@@ -4,9 +4,9 @@ package com.aiknowledgeworkspace.workspacecore.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayExecutionPolicy;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelaySelection;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayExecutionPolicy;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelaySelection;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 

@@ -1,17 +1,19 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
+import com.aiknowledgeworkspace.workspacecore.processing.application.service.ProcessingRecoveryService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxManualRecovery;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.StuckOutboxRecoveryRequest;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxManualRecovery;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.StuckOutboxRecoveryRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.in.ProcessingResultUseCase;
+import com.aiknowledgeworkspace.workspacecore.processing.application.model.ProcessingResultHandleResult;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEventStatus;
 import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ProcessingRecoveryServiceTest {
 
     @Mock
-    private ProcessingResultEventHandler resultHandler;
+    private ProcessingResultUseCase resultHandler;
 
     @Mock
     private OutboxManualRecovery outboxRecovery;

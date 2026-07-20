@@ -1,9 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.InvalidAssistantContextRequestException;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.adapter.in.web.AssistantApiExceptionHandler;
+
+import com.aiknowledgeworkspace.workspacecore.assistant.adapter.in.web.AssistantContextController;
+
 import com.aiknowledgeworkspace.workspacecore.assistant.application.port.in.AssistantContextQueryUseCase;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantCitation;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextSource;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantCitation;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantContextSource;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -12,10 +18,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.AuthenticationRequiredException;
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.identity.application.exception.AuthenticationRequiredException;
+import com.aiknowledgeworkspace.workspacecore.identity.adapter.in.web.IdentityApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
@@ -39,6 +46,7 @@ class AssistantContextControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(assistantContextController)
                 .setControllerAdvice(
                         new ApiExceptionHandler(),
+                        new IdentityApiExceptionHandler(),
                         new AssistantApiExceptionHandler(),
                         new WorkspaceApiExceptionHandler()
                 )

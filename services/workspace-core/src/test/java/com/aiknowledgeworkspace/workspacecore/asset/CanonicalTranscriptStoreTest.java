@@ -1,10 +1,17 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import java.util.List;
 import java.util.UUID;

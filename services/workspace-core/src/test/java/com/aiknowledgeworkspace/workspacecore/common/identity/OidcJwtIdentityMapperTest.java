@@ -1,5 +1,9 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security;
 
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.WorkspaceSecurityProperties;
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.AuthenticationMode;
+import com.aiknowledgeworkspace.workspacecore.identity.application.exception.InvalidJwtIdentityException;
+import com.aiknowledgeworkspace.workspacecore.identity.application.model.OidcJwtIdentity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

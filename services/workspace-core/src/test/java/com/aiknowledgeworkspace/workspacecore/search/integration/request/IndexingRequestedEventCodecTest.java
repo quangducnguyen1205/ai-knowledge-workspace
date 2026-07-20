@@ -1,8 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.search.integration.request;
+package com.aiknowledgeworkspace.workspacecore.search.adapter.out.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashSet;

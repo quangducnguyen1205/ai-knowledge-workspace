@@ -1,4 +1,14 @@
-package com.aiknowledgeworkspace.workspacecore.asset.application.upload;
+package com.aiknowledgeworkspace.workspacecore.asset.application.service;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.command.AssetUploadCommand;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.SupportedUploadMediaPolicy;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.UploadAssetApplicationService;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetUploadTransaction;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetUploadResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,13 +18,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.AssetStatus;
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidUploadRequestException;
-import com.aiknowledgeworkspace.workspacecore.storage.application.ObjectStorageApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidUploadRequestException;
+import com.aiknowledgeworkspace.workspacecore.storage.api.ObjectStorageUseCase;
+import com.aiknowledgeworkspace.workspacecore.storage.api.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.io.ByteArrayInputStream;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,10 +40,10 @@ class UploadAssetApplicationServiceTest {
     private AssetUploadTransaction transaction;
 
     @Mock
-    private WorkspaceAccessApplication workspaceAccess;
+    private WorkspaceAccessUseCase workspaceAccess;
 
     @Mock
-    private ObjectStorageApplication objectStorage;
+    private ObjectStorageUseCase objectStorage;
 
     private UploadAssetApplicationService service;
 

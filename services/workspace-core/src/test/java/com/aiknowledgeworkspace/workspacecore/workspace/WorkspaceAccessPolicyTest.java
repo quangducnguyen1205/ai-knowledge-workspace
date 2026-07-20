@@ -1,11 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceAccessPolicy;
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.service.WorkspaceAccessPolicy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security.CurrentUserService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

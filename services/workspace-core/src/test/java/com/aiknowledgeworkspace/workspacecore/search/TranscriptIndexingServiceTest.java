@@ -1,18 +1,18 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexRequestService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexingService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventEnvelope;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventParser;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetSearchIndexExecutionResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetSearchIndexRequestService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.ExecuteIndexJobApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptIndexingService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptSnapshotFingerprintService;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventEnvelope;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventParser;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.application.result.AssetIndexingHandleResult;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,12 +21,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
-import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingResult;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedPayload;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.api.ExplicitIndexingResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingAssetPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedPayload;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -194,8 +194,8 @@ class TranscriptIndexingServiceTest {
         );
     }
 
-    private AssetIndexingEventHandler indexingEventHandler() {
-        return new AssetIndexingEventHandler(
+    private AssetIndexingApplicationService indexingEventHandler() {
+        return new AssetIndexingApplicationService(
                 indexingEventParser,
                 searchIndexJobRepository,
                 executeIndexJobApplicationService

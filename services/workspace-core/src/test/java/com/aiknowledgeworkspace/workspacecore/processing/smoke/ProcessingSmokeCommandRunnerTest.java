@@ -1,19 +1,25 @@
 package com.aiknowledgeworkspace.workspacecore.processing.smoke;
 
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.smoke.ProcessingSmokeCommandRunner;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.smoke.ProcessingSmokeProperties;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.smoke.ProcessingSmokeCommand;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEventStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.in.ProcessingResultUseCase;
+import com.aiknowledgeworkspace.workspacecore.processing.application.model.ProcessingResultHandleResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -32,7 +38,7 @@ class ProcessingSmokeCommandRunnerTest {
     private OutboxRelay outboxRelay;
 
     @Mock
-    private ProcessingResultEventHandler processingResultEventHandler;
+    private ProcessingResultUseCase processingResultEventHandler;
 
     @Mock
     private ConfigurableApplicationContext applicationContext;

@@ -4,12 +4,12 @@ import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxEventStore;
-import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryService;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxEventStore;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.service.OutboxRecoveryService;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRecoveryResult;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxRecoveryResult;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;

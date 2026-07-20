@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.KafkaOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.KafkaOutboxMessagePublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

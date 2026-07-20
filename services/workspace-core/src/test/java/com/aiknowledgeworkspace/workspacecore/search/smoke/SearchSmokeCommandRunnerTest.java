@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.search.smoke;
+package com.aiknowledgeworkspace.workspacecore.search.adapter.in.operator;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -6,11 +6,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
-import com.aiknowledgeworkspace.workspacecore.search.integration.request.IndexingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

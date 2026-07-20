@@ -1,12 +1,26 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.application.service.DefaultWorkspaceCreationExecutor;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.application.internal.WorkspaceService;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.configuration.WorkspaceProperties;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceDeleteConflictException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.InvalidWorkspaceNameException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.DefaultWorkspaceConflictException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
+
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.service.WorkspaceService;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserProperties;
-import com.aiknowledgeworkspace.workspacecore.common.identity.CurrentUserService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAssetUsagePort;
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.CurrentUserProperties;
+import com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAssetUsagePort;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;

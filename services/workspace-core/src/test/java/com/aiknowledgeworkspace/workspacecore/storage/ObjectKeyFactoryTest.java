@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.storage;
 
-import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.ObjectKeyFactory;
+import com.aiknowledgeworkspace.workspacecore.storage.adapter.out.storage.ObjectKeyFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

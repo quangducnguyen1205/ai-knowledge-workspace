@@ -1,19 +1,21 @@
 package com.aiknowledgeworkspace.workspacecore.assistant;
 
+import com.aiknowledgeworkspace.workspacecore.assistant.application.exception.InvalidAssistantContextRequestException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.assistant.application.AssistantContextService;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextQuery;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.model.AssistantContextResult;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchHit;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPage;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantSearchPort;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContext;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptContextPort;
-import com.aiknowledgeworkspace.workspacecore.assistant.application.port.AssistantTranscriptSegment;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.service.AssistantContextApplicationService;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.query.AssistantContextQuery;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.result.AssistantContextResult;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantSearchHit;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantSearchPage;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantSearchPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantTranscriptContext;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantTranscriptContextPort;
+import com.aiknowledgeworkspace.workspacecore.assistant.application.port.out.AssistantTranscriptSegment;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,7 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class AssistantContextServiceTest {
+class AssistantContextApplicationServiceTest {
 
     @Mock
     private AssistantSearchPort search;
@@ -32,11 +34,11 @@ class AssistantContextServiceTest {
     @Mock
     private AssistantTranscriptContextPort transcripts;
 
-    private AssistantContextService service;
+    private AssistantContextApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AssistantContextService(search, transcripts);
+        service = new AssistantContextApplicationService(search, transcripts);
     }
 
     @Test
@@ -87,7 +89,7 @@ class AssistantContextServiceTest {
                 workspaceId, "query", null, 0, 1
         ))).isInstanceOf(InvalidAssistantContextRequestException.class);
         assertThatThrownBy(() -> service.query(new AssistantContextQuery(
-                workspaceId, "query", null, 1, AssistantContextService.MAX_CONTEXT_WINDOW + 1
+                workspaceId, "query", null, 1, AssistantContextApplicationService.MAX_CONTEXT_WINDOW + 1
         ))).isInstanceOf(InvalidAssistantContextRequestException.class);
 
         verifyNoInteractions(search, transcripts);

@@ -1,23 +1,23 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.AssetSearchIndexExecutionResult;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.ExecuteIndexJobApplicationService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptSnapshotFingerprintService;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.TranscriptIndexDocumentMapper;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJob;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriteOperation;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.TranscriptIndexWriter;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.application.port.out.SearchIndexJobStore;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.transaction.IndexingAttemptTransactionService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetSearchIndexExecutionResult;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.ExecuteIndexJobApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptSnapshotFingerprintService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptIndexDocumentMapper;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.TranscriptIndexWriteOperation;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.TranscriptIndexWriter;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.IndexingAttemptTransactionService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetPort;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingTranscriptRow;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingAssetPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingTranscriptRow;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;

@@ -1,6 +1,12 @@
-package com.aiknowledgeworkspace.workspacecore.asset.application.upload;
+package com.aiknowledgeworkspace.workspacecore.asset.application.service;
 
-import com.aiknowledgeworkspace.workspacecore.asset.InvalidUploadRequestException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.command.AssetUploadCommand;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.SupportedUploadMediaPolicy;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.ValidatedUploadMedia;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidUploadRequestException;
 import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 

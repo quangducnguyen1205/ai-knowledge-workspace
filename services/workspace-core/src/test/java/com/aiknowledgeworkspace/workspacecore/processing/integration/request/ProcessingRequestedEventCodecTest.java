@@ -1,10 +1,12 @@
-package com.aiknowledgeworkspace.workspacecore.processing.integration.request;
+package com.aiknowledgeworkspace.workspacecore.processing.adapter.out.messaging;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.out.messaging.ProcessingRequestedEventData;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.out.messaging.ProcessingRequestedEventCodec;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;

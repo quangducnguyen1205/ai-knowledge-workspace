@@ -1,4 +1,7 @@
-package com.aiknowledgeworkspace.workspacecore.processing.result;
+package com.aiknowledgeworkspace.workspacecore.processing.application.service;
+
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEvent;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEventStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

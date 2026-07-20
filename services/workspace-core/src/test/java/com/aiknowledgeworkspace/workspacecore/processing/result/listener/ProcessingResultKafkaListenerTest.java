@@ -1,4 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.processing.result.listener;
+package com.aiknowledgeworkspace.workspacecore.processing.adapter.in.messaging;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.messaging.ProcessingResultKafkaListenerConfiguration;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.messaging.ProcessingResultKafkaListener;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,11 +11,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventHandler;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventRejectedException;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEventStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.in.ProcessingResultUseCase;
+import com.aiknowledgeworkspace.workspacecore.processing.application.model.ProcessingResultEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.processing.application.model.ProcessingResultHandleResult;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -25,7 +29,7 @@ import org.springframework.kafka.support.Acknowledgment;
 
 class ProcessingResultKafkaListenerTest {
 
-    private final ProcessingResultEventHandler handler = mock(ProcessingResultEventHandler.class);
+    private final ProcessingResultUseCase handler = mock(ProcessingResultUseCase.class);
     private final ProcessingResultKafkaListener listener = new ProcessingResultKafkaListener(handler);
 
     @Test

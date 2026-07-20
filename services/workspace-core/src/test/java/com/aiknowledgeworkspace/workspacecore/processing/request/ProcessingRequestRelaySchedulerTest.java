@@ -1,15 +1,19 @@
 package com.aiknowledgeworkspace.workspacecore.processing.request;
 
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.scheduling.ProcessingRequestRelayScheduler;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.scheduling.ProcessingRequestRelayProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxRelay;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayOutcome;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.RelayRequest;
-import com.aiknowledgeworkspace.workspacecore.processing.integration.request.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxRelay;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayOutcome;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayRequest;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

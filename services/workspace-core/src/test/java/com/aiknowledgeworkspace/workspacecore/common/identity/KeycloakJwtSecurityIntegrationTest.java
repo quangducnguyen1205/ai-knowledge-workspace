@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -8,7 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
-import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
+import com.aiknowledgeworkspace.workspacecore.identity.application.port.out.UserAccountStore;
+import com.aiknowledgeworkspace.workspacecore.identity.domain.UserAccount;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,10 +1,11 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.FailingOutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.LoggingOutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxMessagePublisher;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublishException;
-import com.aiknowledgeworkspace.workspacecore.outbox.infrastructure.publication.OutboxPublisherConfiguration;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.FailingOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.LoggingOutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxMessagePublisher;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.OutboxPublishException;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.OutboxPublisherConfiguration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

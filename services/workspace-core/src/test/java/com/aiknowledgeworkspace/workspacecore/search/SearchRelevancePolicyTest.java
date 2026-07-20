@@ -6,14 +6,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.SearchApplicationService;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -28,7 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SearchRelevancePolicyTest {
 
     @Mock
-    private WorkspaceQueryApplication workspaceQueryApplication;
+    private WorkspaceAccessUseCase workspaceQueryApplication;
 
     @Mock
     private SearchAssetQueryPort searchAssetQueryPort;
@@ -36,11 +36,11 @@ class SearchRelevancePolicyTest {
     @Mock
     private TranscriptSearchQueryPort transcriptSearchQueryPort;
 
-    private SearchService searchService;
+    private SearchApplicationService searchService;
 
     @BeforeEach
     void setUp() {
-        searchService = new SearchService(
+        searchService = new SearchApplicationService(
                 workspaceQueryApplication,
                 searchAssetQueryPort,
                 transcriptSearchQueryPort

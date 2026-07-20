@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.processing.request;
 
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.scheduling.ProcessingRequestRelayProperties;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 

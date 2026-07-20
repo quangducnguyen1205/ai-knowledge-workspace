@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.configuration.OutboxRecoveryProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,5 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetController;
+
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetApiExceptionHandler;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
@@ -19,19 +27,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetCommandUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetUploadUseCase;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetPage;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetStatusView;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetSummary;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetView;
-import com.aiknowledgeworkspace.workspacecore.asset.application.upload.AssetUploadResult;
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.search.SearchApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.search.application.ExplicitIndexingApplication;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.storage.ObjectStorageException;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceApiExceptionHandler;
-import com.aiknowledgeworkspace.workspacecore.workspace.WorkspaceNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetPage;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStatusView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetSummary;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetUploadResult;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.in.web.SearchApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.search.api.ExplicitIndexingUseCase;
+import com.aiknowledgeworkspace.workspacecore.storage.adapter.in.web.ObjectStorageApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.storage.application.exception.ObjectStorageException;
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -50,7 +58,7 @@ class AssetControllerTest {
     private AssetQueryUseCase assetQueries;
     private AssetUploadUseCase assetUpload;
     private AssetCommandUseCase assetCommands;
-    private ExplicitIndexingApplication explicitIndexing;
+    private ExplicitIndexingUseCase explicitIndexing;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -58,7 +66,7 @@ class AssetControllerTest {
         assetQueries = mock(AssetQueryUseCase.class);
         assetUpload = mock(AssetUploadUseCase.class);
         assetCommands = mock(AssetCommandUseCase.class);
-        explicitIndexing = mock(ExplicitIndexingApplication.class);
+        explicitIndexing = mock(ExplicitIndexingUseCase.class);
         AssetController controller = new AssetController(assetQueries, assetUpload, assetCommands, explicitIndexing);
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())

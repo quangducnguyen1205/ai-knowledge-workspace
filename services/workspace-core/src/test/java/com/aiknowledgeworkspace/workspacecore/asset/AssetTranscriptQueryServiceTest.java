@@ -1,13 +1,22 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptContext;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,7 +37,7 @@ class AssetTranscriptQueryServiceTest {
     private CanonicalTranscriptStore transcriptStore;
 
     @Mock
-    private WorkspaceAccessApplication workspaceAccess;
+    private WorkspaceAccessUseCase workspaceAccess;
 
     private AssetTranscriptQueryService service;
 

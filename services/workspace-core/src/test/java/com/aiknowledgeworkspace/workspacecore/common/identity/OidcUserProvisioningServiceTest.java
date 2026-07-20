@@ -1,12 +1,12 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
-import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
-import java.time.Instant;
+import com.aiknowledgeworkspace.workspacecore.identity.application.model.OidcJwtIdentity;
+import com.aiknowledgeworkspace.workspacecore.identity.application.port.out.UserAccountStore;
+import com.aiknowledgeworkspace.workspacecore.identity.domain.UserAccount;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -14,7 +14,6 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.oauth2.jwt.Jwt;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:oidc-user-provisioning;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -42,7 +41,7 @@ class OidcUserProvisioningServiceTest {
 
     @Test
     void firstJwtProvisionsLocalUserAndDefaultWorkspace() {
-        UserAccount user = provisioningService.resolveUser(jwt("subject-1", "learner@example.com"));
+        UserAccount user = provisioningService.resolveUser(identity("subject-1", "learner@example.com"));
 
         assertThat(user.getId()).isNotNull();
         assertThat(user.getEmail()).isEqualTo("learner@example.com");
@@ -55,8 +54,8 @@ class OidcUserProvisioningServiceTest {
 
     @Test
     void repeatedJwtResolvesSameLocalUser() {
-        UserAccount first = provisioningService.resolveUser(jwt("subject-2", "repeat@example.com"));
-        UserAccount second = provisioningService.resolveUser(jwt("subject-2", "changed@example.com"));
+        UserAccount first = provisioningService.resolveUser(identity("subject-2", "repeat@example.com"));
+        UserAccount second = provisioningService.resolveUser(identity("subject-2", "changed@example.com"));
 
         assertThat(second.getId()).isEqualTo(first.getId());
         assertThat(userAccountRepository.findByExternalIdentity(ISSUER, "subject-2"))
@@ -68,8 +67,8 @@ class OidcUserProvisioningServiceTest {
 
     @Test
     void differentSubjectCreatesDifferentLocalUserEvenWhenEmailMatches() {
-        UserAccount first = provisioningService.resolveUser(jwt("subject-3a", "shared@example.com"));
-        UserAccount second = provisioningService.resolveUser(jwt("subject-3b", "shared@example.com"));
+        UserAccount first = provisioningService.resolveUser(identity("subject-3a", "shared@example.com"));
+        UserAccount second = provisioningService.resolveUser(identity("subject-3b", "shared@example.com"));
 
         assertThat(second.getId()).isNotEqualTo(first.getId());
         assertThat(second.getExternalSubject()).isEqualTo("subject-3b");
@@ -79,8 +78,8 @@ class OidcUserProvisioningServiceTest {
 
     @Test
     void concurrentFirstLoginDoesNotCreateDuplicateUsersOrDefaultWorkspaces() throws Exception {
-        Jwt jwt = jwt("subject-concurrent", "concurrent@example.com");
-        Callable<UUID> resolve = () -> provisioningService.resolveUser(jwt).getId();
+        OidcJwtIdentity identity = identity("subject-concurrent", "concurrent@example.com");
+        Callable<UUID> resolve = () -> provisioningService.resolveUser(identity).getId();
         var executor = Executors.newFixedThreadPool(4);
         try {
             List<Future<UUID>> futures = executor.invokeAll(List.of(resolve, resolve, resolve, resolve));
@@ -99,17 +98,7 @@ class OidcUserProvisioningServiceTest {
         }
     }
 
-    private Jwt jwt(String subject, String email) {
-        return new Jwt(
-                "raw-access-token-value-must-not-be-stored",
-                Instant.parse("2026-06-01T00:00:00Z"),
-                Instant.parse("2026-06-01T01:00:00Z"),
-                Map.of("alg", "none"),
-                Map.of(
-                        "iss", ISSUER,
-                        "sub", subject,
-                        "email", email
-                )
-        );
+    private OidcJwtIdentity identity(String subject, String email) {
+        return new OidcJwtIdentity(ISSUER, subject, email);
     }
 }

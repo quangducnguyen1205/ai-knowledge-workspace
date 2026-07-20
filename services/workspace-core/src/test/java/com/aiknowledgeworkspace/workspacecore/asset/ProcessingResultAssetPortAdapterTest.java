@@ -1,14 +1,18 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.adapter.ProcessingResultAssetPortAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.module.ProcessingResultAssetPortAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptSnapshotService;
 
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.ProcessingTranscriptRow;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingTranscriptRow;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

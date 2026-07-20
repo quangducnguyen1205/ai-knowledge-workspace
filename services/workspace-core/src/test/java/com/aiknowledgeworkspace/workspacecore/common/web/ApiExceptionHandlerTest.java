@@ -1,5 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.common.web;
 
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.UnexpectedApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.api.PublicApiErrorResponses;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;

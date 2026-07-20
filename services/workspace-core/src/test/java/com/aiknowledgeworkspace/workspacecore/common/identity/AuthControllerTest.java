@@ -1,6 +1,10 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.adapter.in.web;
 
-import com.aiknowledgeworkspace.workspacecore.common.identity.application.UserAccountStore;
+import com.aiknowledgeworkspace.workspacecore.identity.application.port.out.UserAccountStore;
+import com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security.CurrentUserService;
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.CurrentUserProperties;
+import com.aiknowledgeworkspace.workspacecore.identity.application.service.AuthApplicationService;
+import com.aiknowledgeworkspace.workspacecore.identity.domain.UserAccount;
 
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,7 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,15 +40,14 @@ class AuthControllerTest {
         currentUserProperties = new CurrentUserProperties();
         userAccountRepository = Mockito.mock(UserAccountStore.class);
         CurrentUserService currentUserService = new CurrentUserService(currentUserProperties);
-        AuthService authService = new AuthService(
+        AuthApplicationService authService = new AuthApplicationService(
                 userAccountRepository,
-                currentUserService,
                 new BCryptPasswordEncoder()
         );
         AuthController authController = new AuthController(authService, currentUserService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
-                .setControllerAdvice(new ApiExceptionHandler())
+                .setControllerAdvice(new IdentityApiExceptionHandler(), new ApiExceptionHandler())
                 .build();
     }
 

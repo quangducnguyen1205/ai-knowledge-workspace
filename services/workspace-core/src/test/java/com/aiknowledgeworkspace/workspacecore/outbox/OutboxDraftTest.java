@@ -1,10 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.outbox;
 
-import com.aiknowledgeworkspace.workspacecore.asset.Asset;
-
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 

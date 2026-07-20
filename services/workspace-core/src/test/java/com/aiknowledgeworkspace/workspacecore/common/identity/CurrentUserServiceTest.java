@@ -1,5 +1,8 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.adapter.in.security;
 
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.CurrentUserProperties;
+import com.aiknowledgeworkspace.workspacecore.identity.application.exception.AuthenticationRequiredException;
+import com.aiknowledgeworkspace.workspacecore.identity.application.exception.InvalidCurrentUserIdException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.exception.SearchAssetNotFoundException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -7,15 +8,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetDetails;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetQueryPort;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetDetails;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
-import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchService;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceQueryApplication;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.SearchApplicationService;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,10 +27,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class SearchServiceTest {
+class SearchApplicationServiceTest {
 
     @Mock
-    private WorkspaceQueryApplication workspaces;
+    private WorkspaceAccessUseCase workspaces;
 
     @Mock
     private SearchAssetQueryPort assets;
@@ -37,11 +38,11 @@ class SearchServiceTest {
     @Mock
     private TranscriptSearchQueryPort searchIndex;
 
-    private SearchService service;
+    private SearchApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new SearchService(workspaces, assets, searchIndex);
+        service = new SearchApplicationService(workspaces, assets, searchIndex);
     }
 
     @Test

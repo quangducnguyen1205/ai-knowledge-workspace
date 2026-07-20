@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.search.listener;
+package com.aiknowledgeworkspace.workspacecore.search.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,11 +7,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventHandler;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingEventRejectedException;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.integration.AssetIndexingHandleResult;
-import com.aiknowledgeworkspace.workspacecore.search.indexing.domain.AssetSearchIndexJobStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingApplicationService;
+import com.aiknowledgeworkspace.workspacecore.search.application.service.AssetIndexingEventRejectedException;
+import com.aiknowledgeworkspace.workspacecore.search.application.result.AssetIndexingHandleResult;
+import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -25,7 +25,7 @@ import org.springframework.kafka.support.Acknowledgment;
 
 class AssetIndexingKafkaListenerTest {
 
-    private final AssetIndexingEventHandler assetIndexingEventHandler = mock(AssetIndexingEventHandler.class);
+    private final AssetIndexingApplicationService assetIndexingEventHandler = mock(AssetIndexingApplicationService.class);
     private final AssetIndexingKafkaListener listener = new AssetIndexingKafkaListener(assetIndexingEventHandler);
 
     @Test

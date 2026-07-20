@@ -1,6 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetWorkspaceUsageService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetWorkspaceUsageService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 
 import static org.assertj.core.api.Assertions.assertThat;

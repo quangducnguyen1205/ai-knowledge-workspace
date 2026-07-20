@@ -1,15 +1,23 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetDetails;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.asset.adapter.SearchAssetPortAdapter;
-import com.aiknowledgeworkspace.workspacecore.asset.application.lifecycle.AssetSearchabilityService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingAssetSource;
-import com.aiknowledgeworkspace.workspacecore.search.application.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.module.SearchAssetPortAdapter;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetSearchabilityService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingAssetSource;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetUnavailableException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;

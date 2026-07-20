@@ -1,4 +1,10 @@
-package com.aiknowledgeworkspace.workspacecore.workspace;
+package com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.provisioning;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.provisioning.DefaultWorkspaceProvisionerAdapter;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.configuration.WorkspaceProperties;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 

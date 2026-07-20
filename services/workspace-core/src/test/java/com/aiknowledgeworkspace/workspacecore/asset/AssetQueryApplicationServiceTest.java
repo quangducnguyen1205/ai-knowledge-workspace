@@ -1,20 +1,27 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.TranscriptUnavailableException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetPage;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetQueryApplicationService;
-import com.aiknowledgeworkspace.workspacecore.asset.application.query.AssetStatusView;
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptQueryService;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingJobView;
-import com.aiknowledgeworkspace.workspacecore.processing.application.ProcessingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccess;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceAccessApplication;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetPage;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetQueryApplicationService;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStatusView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptQueryService;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobView;
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUseCase;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -33,13 +40,13 @@ class AssetQueryApplicationServiceTest {
     private AssetStore assetStore;
 
     @Mock
-    private ProcessingRequestApplication processingRequests;
+    private ProcessingRequestUseCase processingRequests;
 
     @Mock
     private AssetTranscriptQueryService transcripts;
 
     @Mock
-    private WorkspaceAccessApplication workspaceAccess;
+    private WorkspaceAccessUseCase workspaceAccess;
 
     private AssetQueryApplicationService service;
 

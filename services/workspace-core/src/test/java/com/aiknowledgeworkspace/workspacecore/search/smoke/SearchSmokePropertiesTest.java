@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.search.smoke;
+package com.aiknowledgeworkspace.workspacecore.search.adapter.in.operator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.common.identity;
+package com.aiknowledgeworkspace.workspacecore.identity.application.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -13,6 +13,7 @@ class BackendModularityBaselineTest {
             "asset",
             "assistant",
             "common",
+            "identity",
             "integration",
             "outbox",
             "processing",

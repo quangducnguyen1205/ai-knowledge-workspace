@@ -2,15 +2,13 @@ package com.aiknowledgeworkspace.workspacecore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration.FastApiProperties;
-import com.aiknowledgeworkspace.workspacecore.common.identity.WorkspaceSecurityProperties;
-import com.aiknowledgeworkspace.workspacecore.outbox.WorkspaceKafkaProperties;
-import com.aiknowledgeworkspace.workspacecore.outbox.recovery.OutboxRecoveryProperties;
-import com.aiknowledgeworkspace.workspacecore.processing.ProcessingAsyncConfiguration;
-import com.aiknowledgeworkspace.workspacecore.processing.request.ProcessingRequestRelayProperties;
-import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchIndexingProperties;
-import com.aiknowledgeworkspace.workspacecore.search.configuration.SearchAsyncConfiguration;
-import com.aiknowledgeworkspace.workspacecore.search.relay.IndexingRequestRelayProperties;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.configuration.FastApiProperties;
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.WorkspaceSecurityProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.WorkspaceKafkaProperties;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.configuration.OutboxRecoveryProperties;
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.scheduling.ProcessingRequestRelayProperties;
+import com.aiknowledgeworkspace.workspacecore.search.application.configuration.SearchIndexingProperties;
+import com.aiknowledgeworkspace.workspacecore.search.adapter.in.scheduling.IndexingRequestRelayProperties;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -83,11 +81,7 @@ class CoherentAsyncProductProfileValidatorTest {
             OutboxRecoveryProperties.class,
             FastApiProperties.class,
     })
-    @Import({
-            CoherentAsyncProductProfileValidator.class,
-            ProcessingAsyncConfiguration.class,
-            SearchAsyncConfiguration.class,
-    })
+    @Import(CoherentAsyncProductProfileValidator.class)
     static class TestConfiguration {
     }
 }

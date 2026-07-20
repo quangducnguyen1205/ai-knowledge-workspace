@@ -1,8 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.storage;
 
-import com.aiknowledgeworkspace.workspacecore.storage.infrastructure.s3.S3ObjectStorageClient;
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoreObjectCommand;
-import com.aiknowledgeworkspace.workspacecore.storage.application.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.storage.application.exception.ObjectStorageException;
+import com.aiknowledgeworkspace.workspacecore.storage.adapter.out.storage.S3ObjectStorageAdapter;
+import com.aiknowledgeworkspace.workspacecore.storage.api.StoreObjectCommand;
+import com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,14 +27,14 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 @ExtendWith(MockitoExtension.class)
-class S3ObjectStorageClientTest {
+class S3ObjectStorageAdapterTest {
 
     @Mock
     private S3Client s3Client;
 
     @Test
     void storePutsObjectAndReturnsStoredMetadata() {
-        S3ObjectStorageClient storageClient = new S3ObjectStorageClient(s3Client);
+        S3ObjectStorageAdapter storageClient = new S3ObjectStorageAdapter(s3Client);
         when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().eTag("\"etag-1\"").build());
 
@@ -63,7 +64,7 @@ class S3ObjectStorageClientTest {
 
     @Test
     void deleteDeletesObjectByBucketAndKey() {
-        S3ObjectStorageClient storageClient = new S3ObjectStorageClient(s3Client);
+        S3ObjectStorageAdapter storageClient = new S3ObjectStorageAdapter(s3Client);
         when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
                 .thenReturn(DeleteObjectResponse.builder().build());
 
@@ -79,7 +80,7 @@ class S3ObjectStorageClientTest {
 
     @Test
     void storeWrapsS3Exception() {
-        S3ObjectStorageClient storageClient = new S3ObjectStorageClient(s3Client);
+        S3ObjectStorageAdapter storageClient = new S3ObjectStorageAdapter(s3Client);
         when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenThrow(S3Exception.builder().message("s3 put failed").build());
 
@@ -99,7 +100,7 @@ class S3ObjectStorageClientTest {
 
     @Test
     void deleteWrapsS3Exception() {
-        S3ObjectStorageClient storageClient = new S3ObjectStorageClient(s3Client);
+        S3ObjectStorageAdapter storageClient = new S3ObjectStorageAdapter(s3Client);
         when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
                 .thenThrow(S3Exception.builder().message("s3 delete failed").build());
 

@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.processing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,7 +8,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.common.FastApiIntegrationException;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

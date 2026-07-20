@@ -1,6 +1,15 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
-import com.aiknowledgeworkspace.workspacecore.asset.application.transcript.AssetTranscriptSnapshotService;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.TranscriptUnavailableException;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetTranscriptSnapshotService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 
@@ -11,8 +20,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.search.application.IndexingRequestApplication;
-import com.aiknowledgeworkspace.workspacecore.workspace.Workspace;
+import com.aiknowledgeworkspace.workspacecore.search.api.IndexingRequestUseCase;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,7 +40,7 @@ class AssetTranscriptSnapshotServiceTest {
     private CanonicalTranscriptStore transcriptStore;
 
     @Mock
-    private IndexingRequestApplication indexingRequestApplication;
+    private IndexingRequestUseCase indexingRequestApplication;
 
     @Test
     void canonicalReplacementPersistsRowsAndRequestsAutomaticIndexing() {

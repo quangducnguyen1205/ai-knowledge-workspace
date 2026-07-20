@@ -1,13 +1,21 @@
 package com.aiknowledgeworkspace.workspacecore.processing.recovery;
 
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.ProcessingRecoveryCommandRunner;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.ProcessingRecoveryCommand;
+
+import com.aiknowledgeworkspace.workspacecore.processing.adapter.in.operator.ProcessingRecoveryProperties;
+
+import com.aiknowledgeworkspace.workspacecore.processing.application.service.ProcessingRecoveryService;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.outbox.application.OutboxDeliveryStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ConsumedProcessingResultEventStatus;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultHandleResult;
+import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDeliveryStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.domain.ConsumedProcessingResultEventStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.model.ProcessingResultHandleResult;
 import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

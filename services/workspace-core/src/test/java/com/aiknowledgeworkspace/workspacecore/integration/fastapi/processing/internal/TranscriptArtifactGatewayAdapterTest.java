@@ -1,14 +1,12 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi.processing.internal;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.processing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.aiknowledgeworkspace.workspacecore.integration.fastapi.FastApiIntegrationException;
-import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactAccessException;
-import com.aiknowledgeworkspace.workspacecore.processing.application.artifact.TranscriptArtifactValidator;
-import com.aiknowledgeworkspace.workspacecore.processing.result.ProcessingResultEventApplyException;
+import com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.common.FastApiIntegrationException;
+import com.aiknowledgeworkspace.workspacecore.processing.api.TranscriptArtifactAccessException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -16,9 +14,7 @@ import org.junit.jupiter.api.Test;
 class TranscriptArtifactGatewayAdapterTest {
 
     private final FastApiProcessingClient client = mock(FastApiProcessingClient.class);
-    private final TranscriptArtifactGatewayAdapter gateway = new TranscriptArtifactGatewayAdapter(
-            client, new TranscriptArtifactValidator()
-    );
+    private final TranscriptArtifactGatewayAdapter gateway = new TranscriptArtifactGatewayAdapter(client);
 
     @Test
     void mapsValidatedTransportRowsToProcessingOwnedArtifactRows() {
@@ -29,7 +25,7 @@ class TranscriptArtifactGatewayAdapterTest {
                 )
         ));
 
-        var rows = gateway.loadValidatedRows(processingRequestId);
+        var rows = gateway.loadRows(processingRequestId);
 
         assertThat(rows).singleElement().satisfies(row -> {
             assertThat(row.id()).isEqualTo("row-1");
@@ -46,14 +42,14 @@ class TranscriptArtifactGatewayAdapterTest {
         FastApiIntegrationException transportFailure = new FastApiIntegrationException("FastAPI returned HTTP 503");
         when(client.getTranscriptArtifactRows(processingRequestId.toString())).thenThrow(transportFailure);
 
-        assertThatThrownBy(() -> gateway.loadValidatedRows(processingRequestId))
+        assertThatThrownBy(() -> gateway.loadRows(processingRequestId))
                 .isInstanceOf(TranscriptArtifactAccessException.class)
                 .hasMessage("FastAPI returned HTTP 503")
                 .hasCause(transportFailure);
     }
 
     @Test
-    void keepsRequiredArtifactFieldValidationInTheProcessingBoundary() {
+    void mapsTransportRowsWithoutOwningApplicationValidation() {
         UUID processingRequestId = UUID.randomUUID();
         when(client.getTranscriptArtifactRows(processingRequestId.toString())).thenReturn(List.of(
                 new FastApiTranscriptRowResponse(
@@ -61,8 +57,9 @@ class TranscriptArtifactGatewayAdapterTest {
                 )
         ));
 
-        assertThatThrownBy(() -> gateway.loadValidatedRows(processingRequestId))
-                .isInstanceOf(ProcessingResultEventApplyException.class)
-                .hasMessage("Transcript artifact row segmentIndex is required");
+        assertThat(gateway.loadRows(processingRequestId))
+                .singleElement()
+                .extracting(row -> row.segmentIndex())
+                .isNull();
     }
 }

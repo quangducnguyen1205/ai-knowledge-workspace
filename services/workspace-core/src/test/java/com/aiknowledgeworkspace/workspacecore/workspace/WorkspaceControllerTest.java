@@ -1,8 +1,20 @@
 package com.aiknowledgeworkspace.workspacecore.workspace;
 
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceController;
 
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceUseCase;
-import com.aiknowledgeworkspace.workspacecore.workspace.application.WorkspaceView;
+import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceApiExceptionHandler;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceDeleteConflictException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.InvalidWorkspaceNameException;
+
+import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
+
+
+import com.aiknowledgeworkspace.workspacecore.workspace.application.port.in.WorkspaceUseCase;
+import com.aiknowledgeworkspace.workspacecore.workspace.application.result.WorkspaceView;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
@@ -14,7 +26,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiknowledgeworkspace.workspacecore.common.web.ApiExceptionHandler;
+import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;

@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.search.relay;
+package com.aiknowledgeworkspace.workspacecore.search.adapter.in.scheduling;
 
 
 import static org.assertj.core.api.Assertions.assertThat;

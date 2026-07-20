@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.processing.result;
+package com.aiknowledgeworkspace.workspacecore.processing.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,8 +12,8 @@ class ProcessingResultTransactionBoundaryTest {
 
     @Test
     void kafkaAndManualApplicationEntrypointsKeepRequiredTransactionParticipation() throws Exception {
-        assertRequiredTransaction(ProcessingResultEventHandler.class.getMethod("handle", String.class));
-        assertRequiredTransaction(ProcessingResultEventHandler.class.getMethod("recoverFailedEvent", UUID.class));
+        assertRequiredTransaction(ProcessingResultApplicationService.class.getMethod("handle", String.class));
+        assertRequiredTransaction(ProcessingResultApplicationService.class.getMethod("recoverFailedEvent", UUID.class));
         assertRequiredTransaction(ApplyProcessingResultApplicationService.class.getDeclaredMethod(
                 "apply", ApplyProcessingResultCommand.class
         ));

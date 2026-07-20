@@ -1,4 +1,4 @@
-package com.aiknowledgeworkspace.workspacecore.integration.fastapi.configuration;
+package com.aiknowledgeworkspace.workspacecore.integration.fastapi.adapter.out.provider.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
