@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import com.aiknowledgeworkspace.workspacecore.search.application.service.TranscriptSnapshotFingerprintService;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.IndexingTranscriptRow;
 import java.util.List;
@@ -39,6 +40,16 @@ class TranscriptSnapshotFingerprintServiceTest {
                 .isNotEqualTo(timed);
         assertThat(fingerprintService.fingerprint(List.of(row(0, "first", 0L, 1001L))))
                 .isNotEqualTo(timed);
+    }
+
+    @Test
+    void partialTimingPairsAreRejectedInsteadOfBeingEncoded() {
+        assertThatThrownBy(() -> fingerprintService.fingerprint(List.of(row(0, "first", 0L, null))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("both be present or both be absent");
+        assertThatThrownBy(() -> fingerprintService.fingerprint(List.of(row(0, "first", null, 1000L))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("both be present or both be absent");
     }
 
     @Test

@@ -56,6 +56,11 @@ public class TranscriptSnapshotFingerprintService {
     }
 
     private void updateTimingIfPresent(MessageDigest digest, Long startMs, Long endMs) {
+        if ((startMs == null) != (endMs == null)) {
+            throw new IllegalArgumentException(
+                    "Transcript fingerprint timing must both be present or both be absent"
+            );
+        }
         if (startMs == null && endMs == null) {
             return;
         }
@@ -64,12 +69,8 @@ public class TranscriptSnapshotFingerprintService {
         updateLongField(digest, endMs);
     }
 
-    private void updateLongField(MessageDigest digest, Long value) {
+    private void updateLongField(MessageDigest digest, long value) {
         digest.update(FIELD_SEPARATOR);
-        if (value == null) {
-            updateInt(digest, -1);
-            return;
-        }
         updateInt(digest, Long.BYTES);
         digest.update(ByteBuffer.allocate(Long.BYTES).putLong(value).array());
     }

@@ -575,8 +575,9 @@ Response:
 Current behavior:
 
 - Indexing is explicit and product-side.
-- Spring indexes from the local product-owned transcript snapshot in the normal path.
-- If no local snapshot exists yet but processing has already succeeded, Spring captures that snapshot first through the same transcript path before indexing.
+- Spring indexes only from the existing local product-owned canonical transcript snapshot.
+- If the canonical snapshot has no usable rows, indexing fails with `TRANSCRIPT_NOT_READY`; it
+  does not call FastAPI or capture transcript data during the indexing request.
 - Spring builds one logical Elasticsearch document per transcript row and writes them through one bulk indexing request per asset.
 - Indexed transcript-row documents include `workspaceId` and nullable `startMs`/`endMs`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
