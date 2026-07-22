@@ -156,6 +156,8 @@ class SearchRelevancePolicyTest {
                 assetTitle,
                 transcriptRowId,
                 segmentIndex,
+                null,
+                null,
                 text,
                 "2026-07-16T00:00:00Z",
                 score

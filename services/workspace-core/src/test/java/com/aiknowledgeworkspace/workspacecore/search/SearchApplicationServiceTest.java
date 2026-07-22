@@ -52,13 +52,16 @@ class SearchApplicationServiceTest {
         when(workspaces.resolveWorkspaceId(null)).thenReturn(workspaceId);
         when(assets.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(assetId));
         when(searchIndex.search(any())).thenReturn(List.of(new TranscriptSearchHit(
-                assetId, "Lecture", "row-1", 1, "dynamic programming", "2026-01-01T00:00:00Z", 2.0
+                assetId, "Lecture", "row-1", 1, 1000L, 2000L,
+                "dynamic programming", "2026-01-01T00:00:00Z", 2.0
         )));
 
         SearchResult result = service.search(new SearchQuery(" dynamic programming ", null, null));
 
         assertThat(result.workspaceIdFilter()).isEqualTo(workspaceId);
         assertThat(result.hits()).hasSize(1);
+        assertThat(result.hits().get(0).startMs()).isEqualTo(1000L);
+        assertThat(result.hits().get(0).endMs()).isEqualTo(2000L);
         ArgumentCaptor<TranscriptSearchQuery> query = ArgumentCaptor.forClass(TranscriptSearchQuery.class);
         verify(searchIndex).search(query.capture());
         assertThat(query.getValue().eligibleAssetIds()).containsExactly(assetId);

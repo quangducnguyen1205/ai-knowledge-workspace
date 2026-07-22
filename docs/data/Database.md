@@ -5,17 +5,18 @@ MinIO and Redis are derived, transport, binary or execution infrastructure.
 
 ## Migration policy
 
-The Spring backend uses one clean Flyway baseline:
+The Spring backend uses the immutable clean baseline plus one additive Phase 1 migration:
 
 ```text
 services/workspace-core/src/main/resources/db/migration/
-└── V1__create_product_schema.sql
+├── V1__create_product_schema.sql
+└── V2__add_transcript_timing.sql
 ```
 
 The previous local-development migration chain was consolidated before timestamp-aware transcript
-work. Existing local database compatibility is intentionally unsupported. Recreate the
-project-specific `workspace_core` database/volume when moving from the old chain. Do not set
-`baseline-on-migrate=true` to preserve an old schema.
+work. `V1` remains unchanged. Existing clean-V1 databases migrate in place through `V2`; databases
+from the older pre-baseline chain remain outside this compatibility promise. Do not set
+`baseline-on-migrate=true` to disguise an unsupported schema.
 
 `spring.jpa.hibernate.ddl-auto=validate` remains the normal setting, so Flyway creates the schema
 and Hibernate verifies mappings without mutating it.
@@ -82,11 +83,13 @@ with the Kafka result contract. There are no direct FastAPI upload task/video co
 ### `asset_transcript_rows`
 
 Rows store snapshot identity, asset, transcript-row identity, source video identity,
-`segment_index`, text and source creation metadata. `(asset_id, segment_index)` and
+`segment_index`, nullable `start_ms`/`end_ms`, text and source creation metadata.
+`ck_asset_transcript_rows_timing` permits either both timing columns null or both present with
+`start_ms >= 0` and `end_ms >= start_ms`. `(asset_id, segment_index)` and
 `(asset_id, transcript_row_id)` are unique when the nullable value is present. A successful result
 validates the complete artifact and replaces the asset snapshot atomically. This is the canonical
-transcript used by indexing, search context and assistant citations. Media-time fields are not
-part of this pre-Phase-1 baseline.
+transcript used by indexing, search context and assistant citations. No timing backfill is run;
+legacy rows remain null.
 
 ### `outbox_events`
 
@@ -122,8 +125,9 @@ index does not change product truth.
 
 ## Clean-schema validation
 
-`CleanBaselineMigrationTest` starts from an empty database, runs exactly one migration, validates
-JPA mappings, checks key tables/constraints and rejects obsolete direct-upload columns.
+`CleanBaselineMigrationTest` starts from an empty database, migrates to V1, proves timing columns
+are absent, then migrates V1→V2, validates JPA mappings, and exercises valid legacy/zero rows plus
+partial, negative and backwards-timing constraint failures.
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test

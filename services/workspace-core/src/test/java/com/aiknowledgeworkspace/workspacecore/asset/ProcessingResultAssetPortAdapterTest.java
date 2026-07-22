@@ -36,7 +36,7 @@ class ProcessingResultAssetPortAdapterTest {
         ProcessingResultAssetPortAdapter adapter = new ProcessingResultAssetPortAdapter(transcriptSnapshotService);
 
         adapter.applyTranscriptReady(assetId, List.of(new ProcessingTranscriptRow(
-                "row-1", "video-1", 0, "canonical", "2026-06-26T00:00:00Z"
+                "row-1", "video-1", 0, 0L, 1250L, "canonical", "2026-06-26T00:00:00Z"
         )));
 
         ArgumentCaptor<List<AssetTranscriptRowInput>> rows = ArgumentCaptor.forClass(List.class);
@@ -46,7 +46,7 @@ class ProcessingResultAssetPortAdapterTest {
                 rows.capture()
         );
         org.assertj.core.api.Assertions.assertThat(rows.getValue()).containsExactly(new AssetTranscriptRowInput(
-                "row-1", "video-1", 0, "canonical", "2026-06-26T00:00:00Z"
+                "row-1", "video-1", 0, 0L, 1250L, "canonical", "2026-06-26T00:00:00Z"
         ));
     }
 

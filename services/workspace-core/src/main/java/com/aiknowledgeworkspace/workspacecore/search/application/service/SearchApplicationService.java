@@ -107,7 +107,7 @@ public class SearchApplicationService implements SearchQueryUseCase {
         List<SearchHit> results = hits.stream()
                 .map(hit -> new SearchHit(
                         hit.assetId(), hit.assetTitle(), hit.transcriptRowId(), hit.segmentIndex(),
-                        hit.text(), hit.createdAt(), hit.score()
+                        hit.startMs(), hit.endMs(), hit.text(), hit.createdAt(), hit.score()
                 ))
                 .toList();
         return new SearchResult(query, workspaceId, assetId, results);

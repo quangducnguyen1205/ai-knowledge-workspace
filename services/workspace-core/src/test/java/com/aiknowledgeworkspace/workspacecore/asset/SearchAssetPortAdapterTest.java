@@ -50,13 +50,19 @@ class SearchAssetPortAdapterTest {
                 new AssetDetails(assetId, workspaceId, "Lecture", AssetStatus.TRANSCRIPT_READY)
         );
         when(transcriptQueries.loadUsableSnapshot(assetId)).thenReturn(List.of(
-                new AssetTranscriptRowView("row-1", "video-1", 1, "canonical", "2026-01-01T00:00:00Z")
+                new AssetTranscriptRowView(
+                        "row-1", "video-1", 1, 1000L, 2000L, "canonical", "2026-01-01T00:00:00Z"
+                )
         ));
 
         IndexingAssetSource source = adapter.loadAuthorizedIndexingSource(assetId);
 
         assertThat(source.assetId()).isEqualTo(assetId);
         assertThat(source.transcriptRows()).extracting(row -> row.text()).containsExactly("canonical");
+        assertThat(source.transcriptRows()).singleElement().satisfies(row -> {
+            assertThat(row.startMs()).isEqualTo(1000L);
+            assertThat(row.endMs()).isEqualTo(2000L);
+        });
     }
 
     @Test

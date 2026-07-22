@@ -142,13 +142,13 @@ class AssetTranscriptSnapshotServiceTest {
 
     private AssetTranscriptRowInput row(String id, Integer segmentIndex, String text) {
         return new AssetTranscriptRowInput(
-                id, "video-1", segmentIndex, text, "2026-06-26T00:00:00Z"
+                id, "video-1", segmentIndex, null, null, text, "2026-06-26T00:00:00Z"
         );
     }
 
     private AssetTranscriptRowView snapshot(String id, Integer segmentIndex, String text) {
         return new AssetTranscriptRowView(
-                id, "video-1", segmentIndex, text, "2026-06-26T00:00:00Z"
+                id, "video-1", segmentIndex, null, null, text, "2026-06-26T00:00:00Z"
         );
     }
 }

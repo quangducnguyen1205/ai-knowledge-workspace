@@ -37,12 +37,16 @@ public class AssistantContextController {
                                 source.assetTitle(),
                                 source.transcriptRowId(),
                                 source.segmentIndex(),
+                                source.startMs(),
+                                source.endMs(),
                                 source.createdAt(),
                                 source.text(),
                                 new AssistantCitationResponse(
                                         source.citation().assetId(),
                                         source.citation().transcriptRowId(),
-                                        source.citation().segmentIndex()
+                                        source.citation().segmentIndex(),
+                                        source.citation().startMs(),
+                                        source.citation().endMs()
                                 )
                         ))
                         .toList()

@@ -24,7 +24,8 @@ class AssistantTranscriptContextPortAdapter implements AssistantTranscriptContex
                 .map(context -> new AssistantTranscriptContext(
                         context.assetId(), context.assetTitle(), context.transcriptRowId(), context.hitSegmentIndex(),
                         context.window(), context.rows().stream().map(row -> new AssistantTranscriptSegment(
-                                row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                                row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                                row.text(), row.createdAt()
                         )).toList()
                 ));
     }

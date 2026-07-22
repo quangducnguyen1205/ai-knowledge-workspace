@@ -62,6 +62,9 @@ class AssistantContextApplicationServiceTest {
         assertThat(result.sources()).hasSize(1);
         assertThat(result.sources().get(0).assetId()).isEqualTo(approvedAsset);
         assertThat(result.sources().get(0).text()).isEqualTo("canonical context");
+        assertThat(result.sources().get(0).startMs()).isEqualTo(1000L);
+        assertThat(result.sources().get(0).endMs()).isEqualTo(2000L);
+        assertThat(result.sources().get(0).citation().startMs()).isEqualTo(1000L);
     }
 
     @Test
@@ -97,7 +100,8 @@ class AssistantContextApplicationServiceTest {
 
     private AssistantSearchHit hit(UUID assetId, String rowId, Integer segmentIndex) {
         return new AssistantSearchHit(
-                assetId, "Indexed title", rowId, segmentIndex, "indexed text", "2026-01-01T00:00:00Z", 2.0
+                assetId, "Indexed title", rowId, segmentIndex, 999L, 1999L,
+                "indexed text", "2026-01-01T00:00:00Z", 2.0
         );
     }
 
@@ -109,7 +113,7 @@ class AssistantContextApplicationServiceTest {
                 segmentIndex,
                 1,
                 List.of(new AssistantTranscriptSegment(
-                        rowId, "video-1", segmentIndex, text, "2026-01-01T00:00:00Z"
+                        rowId, "video-1", segmentIndex, 1000L, 2000L, text, "2026-01-01T00:00:00Z"
                 ))
         );
     }

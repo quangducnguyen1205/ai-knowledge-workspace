@@ -91,7 +91,8 @@ public class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQue
                 source.workspaceId(),
                 source.assetTitle(),
                 source.transcriptRows().stream().map(row -> new IndexingTranscriptRow(
-                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                        row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                        row.text(), row.createdAt()
                 )).toList()
         );
     }

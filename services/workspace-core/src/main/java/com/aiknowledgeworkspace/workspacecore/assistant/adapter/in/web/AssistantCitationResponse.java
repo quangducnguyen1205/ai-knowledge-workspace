@@ -5,6 +5,8 @@ import java.util.UUID;
 public record AssistantCitationResponse(
         UUID assetId,
         String transcriptRowId,
-        Integer segmentIndex
+        Integer segmentIndex,
+        Long startMs,
+        Long endMs
 ) {
 }

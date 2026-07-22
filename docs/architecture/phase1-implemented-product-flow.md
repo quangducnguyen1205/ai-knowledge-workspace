@@ -1,7 +1,7 @@
-# Implemented Product Flow Before Timestamp-Aware Transcript Phase 1
+# Implemented Product Flow After Timestamp-Aware Transcript Phase 1
 
-Status: current Spring-side product behavior. This is the foundation on which timestamp-aware
-transcript work will build; it does not yet add transcript timestamps.
+Status: current Spring-side product behavior. Timestamp metadata is preserved as additive,
+nullable integer milliseconds without changing transcript identity or playback behavior.
 
 ## Public boundary
 
@@ -34,9 +34,9 @@ paths have been removed. Reads are side-effect free.
 
 ## Canonical transcript
 
-`asset_transcript_rows` is PostgreSQL truth. Each row currently has stable row identity, asset,
-source video identity, segment order, text and creation metadata. No media-time fields exist in
-this pre-Phase-1 foundation.
+`asset_transcript_rows` is PostgreSQL truth. Each row has stable row identity, asset, source video
+identity, segment order, nullable `start_ms`/`end_ms`, text and creation metadata. A row has either
+both timing values null, or both present with `start_ms >= 0` and `end_ms >= start_ms`.
 
 Canonical replacement invariants:
 
@@ -66,9 +66,10 @@ same public not-found behavior.
 Exact-ID result/outbox recovery and explicit indexing remain supported operator controls. There
 is no broad alternate processing path.
 
-## Phase 1 boundary
+## Phase 1 result
 
-Timestamp-aware transcript work should extend the processing artifact contract, neutral Spring
-artifact row, canonical row/schema, indexing document and public result/citation models without
-reopening controller-to-repository or application-to-infrastructure dependencies. It must preserve
-the transaction and idempotency rules above.
+Timing now crosses the FastAPI wire adapter, processing-owned artifact row, asset-owned canonical
+row, PostgreSQL, search indexing ports, Elasticsearch, search responses, assistant canonical
+citation resolution and browser-facing responses. Web adapters still own HTTP mapping; the
+provider-facing assistant source does not carry authoritative timing. Kafka v1 payloads,
+transaction boundaries and duplicate-result behavior are unchanged.

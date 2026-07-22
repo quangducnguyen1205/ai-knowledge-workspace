@@ -37,6 +37,8 @@ public class AssistantAnswerController {
                                 citation.assetTitle(),
                                 citation.transcriptRowId(),
                                 citation.segmentIndex(),
+                                citation.startMs(),
+                                citation.endMs(),
                                 citation.createdAt()
                         ))
                         .toList(),

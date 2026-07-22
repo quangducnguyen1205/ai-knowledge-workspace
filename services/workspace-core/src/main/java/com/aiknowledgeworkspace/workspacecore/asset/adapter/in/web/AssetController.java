@@ -104,7 +104,8 @@ public class AssetController {
     public List<AssetTranscriptRowResponse> getAssetTranscript(@PathVariable UUID assetId) {
         return assetQueries.getAssetTranscript(assetId).stream()
                 .map(row -> new AssetTranscriptRowResponse(
-                        row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                        row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                        row.text(), row.createdAt()
                 ))
                 .toList();
     }
@@ -123,7 +124,8 @@ public class AssetController {
                 result.window(),
                 result.rows().stream()
                         .map(row -> new AssetTranscriptRowResponse(
-                                row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                                row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                                row.text(), row.createdAt()
                         ))
                         .toList()
         );

@@ -15,6 +15,8 @@ public class TranscriptIndexDocumentMapper {
                 asset.assetTitle(),
                 transcriptRow.id(),
                 transcriptRow.segmentIndex(),
+                transcriptRow.startMs(),
+                transcriptRow.endMs(),
                 transcriptRow.text(),
                 transcriptRow.createdAt(),
                 "SEARCHABLE"

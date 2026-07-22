@@ -489,6 +489,8 @@ Response:
   - `id`
   - `videoId`
   - `segmentIndex`
+  - `startMs` nullable integer milliseconds
+  - `endMs` nullable integer milliseconds
   - `text`
   - `createdAt`
 
@@ -497,7 +499,7 @@ Current behavior:
 - Spring serves transcript rows only from the local product-owned canonical snapshot.
 - This GET is side-effect free. A missing canonical snapshot is not captured from an upstream
   service during the request.
-- Only the currently verified transcript fields are exposed.
+- Legacy rows expose both timing fields as `null`; Spring never fabricates timing.
 - Transcript fetch is rejected until `processingJobStatus = SUCCEEDED`.
 - Empty or unusable transcript is treated as not usable.
 
@@ -534,6 +536,8 @@ Each context row currently contains:
 - `id`
 - `videoId`
 - `segmentIndex`
+- `startMs` nullable integer milliseconds
+- `endMs` nullable integer milliseconds
 - `text`
 - `createdAt`
 
@@ -544,7 +548,8 @@ Current behavior:
 - Context rows are selected by transcript ordering on `segmentIndex`.
 - If a transcript row has a real upstream `id`, context lookup matches only that `id`.
 - The fallback identifier `segment-{segmentIndex}` is accepted only when the upstream transcript row `id` is missing or blank.
-- The endpoint is intentionally narrow and does not add timestamps, speaker labels, snippet metadata, or transcript caching.
+- The endpoint preserves canonical row timing but adds no player, seek, speaker, snippet, or
+  transcript-caching behavior.
 
 Common failure cases:
 
@@ -573,7 +578,7 @@ Current behavior:
 - Spring indexes from the local product-owned transcript snapshot in the normal path.
 - If no local snapshot exists yet but processing has already succeeded, Spring captures that snapshot first through the same transcript path before indexing.
 - Spring builds one logical Elasticsearch document per transcript row and writes them through one bulk indexing request per asset.
-- Indexed transcript-row documents include `workspaceId`.
+- Indexed transcript-row documents include `workspaceId` and nullable `startMs`/`endMs`.
 - Repeated indexing reuses stable transcript-row document IDs for the same asset and transcript row.
 - Only usable non-empty transcript rows can be indexed.
 - Successful indexing refreshes the transcript index before returning.
@@ -615,6 +620,8 @@ Each result currently contains:
 - `assetTitle`
 - `transcriptRowId`
 - `segmentIndex`
+- `startMs` nullable integer milliseconds
+- `endMs` nullable integer milliseconds
 - `text`
 - `createdAt`
 - `score`
@@ -671,6 +678,8 @@ Each source contains:
 - `assetTitle`
 - `transcriptRowId`
 - `segmentIndex`
+- `startMs` nullable integer milliseconds
+- `endMs` nullable integer milliseconds
 - `createdAt`
 - `text`
 - `citation`
@@ -721,6 +730,8 @@ Each citation contains Spring-owned metadata only:
 - `assetTitle`
 - `transcriptRowId`
 - `segmentIndex`
+- `startMs` nullable integer milliseconds
+- `endMs` nullable integer milliseconds
 - `createdAt`
 
 Current behavior:
@@ -731,6 +742,8 @@ Current behavior:
 - FastAPI receives only the normalized question and Spring-approved source entries.
 - FastAPI returns only `answer`, `citedSourceIds`, and `insufficientContext`; provider-specific fields are not exposed.
 - Spring validates every cited source ID against the exact source IDs it supplied to FastAPI.
+- Spring resolves citation timing from the canonical transcript source associated with that
+  validated ID; FastAPI/provider responses do not supply authoritative timing.
 - A non-insufficient answer must cite at least one valid supplied source.
 - An insufficient-context answer may return no citations.
 - Unknown or malformed cited source IDs fail closed with the assistant provider-unavailable error shape; Spring does not fabricate citations.

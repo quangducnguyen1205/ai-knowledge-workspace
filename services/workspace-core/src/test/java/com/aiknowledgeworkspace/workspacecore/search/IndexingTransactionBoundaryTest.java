@@ -43,7 +43,8 @@ class IndexingTransactionBoundaryTest {
                 UUID.randomUUID(),
                 "Transaction boundary",
                 List.of(new IndexingTranscriptRow(
-                        "row-1", "video-1", 0, "Indexed outside the transaction", "2026-07-13T00:00:00Z"
+                        "row-1", "video-1", 0, null, null,
+                        "Indexed outside the transaction", "2026-07-13T00:00:00Z"
                 ))
         );
         AssetSearchIndexJob job = new AssetSearchIndexJob(

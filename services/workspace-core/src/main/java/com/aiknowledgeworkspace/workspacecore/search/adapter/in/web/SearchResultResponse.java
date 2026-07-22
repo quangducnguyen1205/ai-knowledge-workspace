@@ -7,6 +7,8 @@ public record SearchResultResponse(
         String assetTitle,
         String transcriptRowId,
         Integer segmentIndex,
+        Long startMs,
+        Long endMs,
         String text,
         String createdAt,
         Double score

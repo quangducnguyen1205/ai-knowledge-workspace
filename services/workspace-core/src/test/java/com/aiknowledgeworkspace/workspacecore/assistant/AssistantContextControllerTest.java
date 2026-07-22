@@ -66,9 +66,11 @@ class AssistantContextControllerTest {
                         "Lecture",
                         "row-1",
                         1,
+                        1000L,
+                        2000L,
                         "2026-06-25T00:00:01Z",
                         "bounded transcript context",
-                        new AssistantCitation(assetId, "row-1", 1)
+                        new AssistantCitation(assetId, "row-1", 1, 1000L, 2000L)
                 ))
         ));
 
@@ -89,9 +91,13 @@ class AssistantContextControllerTest {
                 .andExpect(jsonPath("$.sources[0].assetTitle").value("Lecture"))
                 .andExpect(jsonPath("$.sources[0].transcriptRowId").value("row-1"))
                 .andExpect(jsonPath("$.sources[0].segmentIndex").value(1))
+                .andExpect(jsonPath("$.sources[0].startMs").value(1000))
+                .andExpect(jsonPath("$.sources[0].endMs").value(2000))
                 .andExpect(jsonPath("$.sources[0].text").value("bounded transcript context"))
                 .andExpect(jsonPath("$.sources[0].citation.assetId").value(assetId.toString()))
                 .andExpect(jsonPath("$.sources[0].citation.transcriptRowId").value("row-1"))
+                .andExpect(jsonPath("$.sources[0].citation.startMs").value(1000))
+                .andExpect(jsonPath("$.sources[0].citation.endMs").value(2000))
                 .andExpect(jsonPath("$.answer").doesNotExist())
                 .andExpect(jsonPath("$.summary").doesNotExist());
     }

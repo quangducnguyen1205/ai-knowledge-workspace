@@ -117,9 +117,14 @@ public class AssistantContextApplicationService implements AssistantContextQuery
                 contextValue.assetTitle(),
                 stableTranscriptRowId,
                 hitRow.segmentIndex(),
+                hitRow.startMs(),
+                hitRow.endMs(),
                 hitRow.createdAt(),
                 boundText(joinContextText(contextRows)),
-                new AssistantCitation(contextValue.assetId(), stableTranscriptRowId, hitRow.segmentIndex())
+                new AssistantCitation(
+                        contextValue.assetId(), stableTranscriptRowId, hitRow.segmentIndex(),
+                        hitRow.startMs(), hitRow.endMs()
+                )
         ));
     }
 

@@ -63,8 +63,20 @@ public class TranscriptArtifactValidator {
         if (!StringUtils.hasText(row.text()) || row.text().length() > MAX_TEXT_LENGTH) {
             throw new ProcessingResultEventApplyException("Transcript artifact row text was empty or too large");
         }
+        validateTiming(row);
         if (!StringUtils.hasText(row.createdAt()) || row.createdAt().length() > MAX_CREATED_AT_LENGTH) {
             throw new ProcessingResultEventApplyException("Transcript artifact row createdAt was invalid");
+        }
+    }
+
+    private void validateTiming(ProcessingTranscriptRow row) {
+        if ((row.startMs() == null) != (row.endMs() == null)) {
+            throw new ProcessingResultEventApplyException(
+                    "Transcript artifact row timestamps must both be present or both be absent"
+            );
+        }
+        if (row.startMs() != null && (row.startMs() < 0 || row.endMs() < row.startMs())) {
+            throw new ProcessingResultEventApplyException("Transcript artifact row timestamps were invalid");
         }
     }
 }

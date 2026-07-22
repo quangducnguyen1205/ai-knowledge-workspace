@@ -32,6 +32,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStat
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetSummary;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetUploadResult;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobStatus;
 import com.aiknowledgeworkspace.workspacecore.search.adapter.in.web.SearchApiExceptionHandler;
@@ -112,6 +113,28 @@ class AssetControllerTest {
                         && "Lecture 1".equals(command.requestedTitle())
                         && command.content() != null
         ));
+    }
+
+    @Test
+    void transcriptEndpointExposesNullableMillisecondTimingAdditively() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetQueries.getAssetTranscript(assetId)).thenReturn(List.of(
+                new AssetTranscriptRowView(
+                        "row-1", "video-1", 0, 0L, 1250L,
+                        "Timed transcript", "2026-07-22T00:00:00Z"
+                ),
+                new AssetTranscriptRowView(
+                        "row-2", "video-1", 1, null, null,
+                        "Legacy transcript", "2026-07-22T00:00:01Z"
+                )
+        ));
+
+        mockMvc.perform(get("/api/assets/{assetId}/transcript", assetId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].startMs").value(0))
+                .andExpect(jsonPath("$[0].endMs").value(1250))
+                .andExpect(jsonPath("$[1].startMs").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$[1].endMs").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

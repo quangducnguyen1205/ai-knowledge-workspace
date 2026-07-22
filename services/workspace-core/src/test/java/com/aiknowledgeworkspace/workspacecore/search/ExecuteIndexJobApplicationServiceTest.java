@@ -98,7 +98,10 @@ class ExecuteIndexJobApplicationServiceTest {
         UUID assetId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
         IndexingAssetSource indexingSource = source(assetId, workspaceId, "Lecture 1", List.of(
-                transcriptRow("row-1", 0, "Binary search tree overview"),
+                new IndexingTranscriptRow(
+                        "row-1", "video-1", 0, 0L, 1250L,
+                        "Binary search tree overview", "2026-03-26T00:00:00Z"
+                ),
                 transcriptRow("row-2", 1, "Traversal example")
         ));
         List<IndexingTranscriptRow> transcriptRows = indexingSource.transcriptRows();
@@ -115,6 +118,8 @@ class ExecuteIndexJobApplicationServiceTest {
                 .andExpect(content().string(containsString("{\"index\":{\"_id\":\"" + assetId + "-row-2\"}}")))
                 .andExpect(content().string(containsString("\"assetTitle\":\"Lecture 1\"")))
                 .andExpect(content().string(containsString("\"workspaceId\":\"" + workspaceId + "\"")))
+                .andExpect(content().string(containsString("\"startMs\":0")))
+                .andExpect(content().string(containsString("\"endMs\":1250")))
                 .andExpect(content().string(containsString("\"assetStatus\":\"SEARCHABLE\"")))
                 .andRespond(withSuccess("""
                         {
@@ -588,6 +593,11 @@ class ExecuteIndexJobApplicationServiceTest {
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows"))
                 .andExpect(method(HttpMethod.HEAD))
                 .andRespond(withSuccess());
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_mapping"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().string(containsString("\"startMs\":{\"type\":\"long\"}")))
+                .andExpect(content().string(containsString("\"endMs\":{\"type\":\"long\"}")))
+                .andRespond(withSuccess());
     }
 
     private void expectMissingIndexCreated() {
@@ -638,6 +648,8 @@ class ExecuteIndexJobApplicationServiceTest {
                 transcriptRowId,
                 "video-1",
                 segmentIndex,
+                null,
+                null,
                 text,
                 "2026-03-26T00:00:00Z"
         );

@@ -21,7 +21,7 @@ class AssistantSearchPortAdapter implements AssistantSearchPort {
         return new AssistantSearchPage(response.workspaceIdFilter(), response.hits().stream()
                 .map(result -> new AssistantSearchHit(
                         result.assetId(), result.assetTitle(), result.transcriptRowId(), result.segmentIndex(),
-                        result.text(), result.createdAt(), result.score()
+                        result.startMs(), result.endMs(), result.text(), result.createdAt(), result.score()
                 )).toList());
     }
 }

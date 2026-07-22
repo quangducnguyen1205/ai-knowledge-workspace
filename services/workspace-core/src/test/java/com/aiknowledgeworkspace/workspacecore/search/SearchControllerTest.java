@@ -96,6 +96,8 @@ class SearchControllerTest {
                           "assetTitle": "Lecture 5",
                           "transcriptRowId": "row-55",
                           "segmentIndex": 4,
+                          "startMs": 1234,
+                          "endMs": 5678,
                           "text": "Dynamic programming solves overlapping subproblems.",
                           "createdAt": "2026-03-26T00:00:00Z",
                           "assetStatus": "SEARCHABLE"
@@ -136,6 +138,8 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.results[0].assetTitle").value("Lecture 5"))
                 .andExpect(jsonPath("$.results[0].transcriptRowId").value("row-55"))
                 .andExpect(jsonPath("$.results[0].segmentIndex").value(4))
+                .andExpect(jsonPath("$.results[0].startMs").value(1234))
+                .andExpect(jsonPath("$.results[0].endMs").value(5678))
                 .andExpect(jsonPath("$.results[0].text")
                         .value("Dynamic programming solves overlapping subproblems."))
                 .andExpect(jsonPath("$.results[0].createdAt").value("2026-03-26T00:00:00Z"))

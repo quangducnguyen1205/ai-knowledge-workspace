@@ -100,6 +100,8 @@ class AssetTranscriptQueryServiceTest {
     }
 
     private AssetTranscriptRowView row(String id, Integer segmentIndex, String text) {
-        return new AssetTranscriptRowView(id, "video-1", segmentIndex, text, "2026-01-01T00:00:00Z");
+        return new AssetTranscriptRowView(
+                id, "video-1", segmentIndex, null, null, text, "2026-01-01T00:00:00Z"
+        );
     }
 }

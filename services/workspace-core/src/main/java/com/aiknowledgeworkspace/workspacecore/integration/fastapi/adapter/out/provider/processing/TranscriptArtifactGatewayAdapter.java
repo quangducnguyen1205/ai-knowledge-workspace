@@ -21,7 +21,8 @@ class TranscriptArtifactGatewayAdapter implements TranscriptArtifactGateway {
         try {
             List<ProcessingTranscriptRow> rows = client.getTranscriptArtifactRows(processingRequestId.toString()).stream()
                     .map(row -> row == null ? null : new ProcessingTranscriptRow(
-                            row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                            row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                            row.text(), row.createdAt()
                     ))
                     .toList();
             return rows;

@@ -28,6 +28,12 @@ public class AssetTranscriptRowSnapshot {
     @Column
     private Integer segmentIndex;
 
+    @Column(name = "start_ms")
+    private Long startMs;
+
+    @Column(name = "end_ms")
+    private Long endMs;
+
     @Column(nullable = false, columnDefinition = "text")
     private String text;
 
@@ -42,6 +48,8 @@ public class AssetTranscriptRowSnapshot {
             String transcriptRowId,
             String videoId,
             Integer segmentIndex,
+            Long startMs,
+            Long endMs,
             String text,
             String createdAt
     ) {
@@ -49,6 +57,8 @@ public class AssetTranscriptRowSnapshot {
         this.transcriptRowId = transcriptRowId;
         this.videoId = videoId;
         this.segmentIndex = segmentIndex;
+        this.startMs = startMs;
+        this.endMs = endMs;
         this.text = text;
         this.createdAt = createdAt;
     }
@@ -71,6 +81,14 @@ public class AssetTranscriptRowSnapshot {
 
     public Integer getSegmentIndex() {
         return segmentIndex;
+    }
+
+    public Long getStartMs() {
+        return startMs;
+    }
+
+    public Long getEndMs() {
+        return endMs;
     }
 
     public String getText() {

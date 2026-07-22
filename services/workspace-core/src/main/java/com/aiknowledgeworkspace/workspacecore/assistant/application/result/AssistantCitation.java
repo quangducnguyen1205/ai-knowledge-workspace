@@ -2,5 +2,11 @@ package com.aiknowledgeworkspace.workspacecore.assistant.application.result;
 
 import java.util.UUID;
 
-public record AssistantCitation(UUID assetId, String transcriptRowId, Integer segmentIndex) {
+public record AssistantCitation(
+        UUID assetId,
+        String transcriptRowId,
+        Integer segmentIndex,
+        Long startMs,
+        Long endMs
+) {
 }

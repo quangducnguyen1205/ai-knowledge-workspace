@@ -13,7 +13,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchProperties;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -41,11 +44,47 @@ class ElasticsearchTranscriptAdapterTest {
     }
 
     @Test
-    void ensureTranscriptIndexExistsDoesNotCreateExistingIndex() {
+    void ensureTranscriptIndexExistsConvergesTimingMappingForExistingIndex() {
         expectIndexExists();
+        expectTimingMappingUpdate();
 
         client.ensureTranscriptIndexExists();
 
+        mockServer.verify();
+    }
+
+    @Test
+    void repeatedExistingIndexConvergenceIsIdempotent() {
+        expectIndexExists();
+        expectTimingMappingUpdate();
+        expectIndexExists();
+        expectTimingMappingUpdate();
+
+        client.ensureTranscriptIndexExists();
+        client.ensureTranscriptIndexExists();
+
+        mockServer.verify();
+    }
+
+    @Test
+    void legacySearchHitWithoutTimingRemainsReadableAsNull() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {"hits":{"hits":[{"_score":1.0,"_source":{
+                          "assetId":"%s","assetTitle":"Legacy","transcriptRowId":"row-1",
+                          "segmentIndex":0,"text":"legacy","createdAt":"2026-07-22T00:00:00Z"
+                        }}]}}
+                        """.formatted(assetId), MediaType.APPLICATION_JSON));
+
+        var hit = client.search(new TranscriptSearchQuery(
+                "legacy", workspaceId, assetId, List.of(assetId), List.of("legacy")
+        )).get(0);
+
+        org.assertj.core.api.Assertions.assertThat(hit.startMs()).isNull();
+        org.assertj.core.api.Assertions.assertThat(hit.endMs()).isNull();
         mockServer.verify();
     }
 
@@ -76,6 +115,7 @@ class ElasticsearchTranscriptAdapterTest {
                                 }
                                 """));
         expectIndexExists();
+        expectTimingMappingUpdate();
 
         client.ensureTranscriptIndexExists();
 
@@ -144,7 +184,17 @@ class ElasticsearchTranscriptAdapterTest {
                 .andExpect(content().string(containsString("\"fields\":{\"keyword\"")))
                 .andExpect(content().string(containsString("\"transcriptRowId\"")))
                 .andExpect(content().string(containsString("\"segmentIndex\":{\"type\":\"integer\"}")))
+                .andExpect(content().string(containsString("\"startMs\":{\"type\":\"long\"}")))
+                .andExpect(content().string(containsString("\"endMs\":{\"type\":\"long\"}")))
                 .andExpect(content().string(containsString("\"text\":{\"type\":\"text\"}")))
+                .andRespond(withSuccess());
+    }
+
+    private void expectTimingMappingUpdate() {
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_mapping"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().string(containsString("\"startMs\":{\"type\":\"long\"}")))
+                .andExpect(content().string(containsString("\"endMs\":{\"type\":\"long\"}")))
                 .andRespond(withSuccess());
     }
 }

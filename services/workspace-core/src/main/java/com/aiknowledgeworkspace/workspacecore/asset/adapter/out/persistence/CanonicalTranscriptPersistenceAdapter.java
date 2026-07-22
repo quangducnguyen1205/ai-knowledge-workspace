@@ -32,6 +32,8 @@ class CanonicalTranscriptPersistenceAdapter implements CanonicalTranscriptStore 
                         row.id(),
                         row.videoId(),
                         row.segmentIndex(),
+                        row.startMs(),
+                        row.endMs(),
                         row.text(),
                         row.createdAt()
                 ))
@@ -59,6 +61,8 @@ class CanonicalTranscriptPersistenceAdapter implements CanonicalTranscriptStore 
                 row.getTranscriptRowId(),
                 row.getVideoId(),
                 row.getSegmentIndex(),
+                row.getStartMs(),
+                row.getEndMs(),
                 row.getText(),
                 row.getCreatedAt()
         );

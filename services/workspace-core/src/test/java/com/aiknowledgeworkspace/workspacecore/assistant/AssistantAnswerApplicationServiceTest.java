@@ -69,6 +69,8 @@ class AssistantAnswerApplicationServiceTest {
         assertThat(result.insufficientContext()).isFalse();
         assertThat(result.citations()).hasSize(1);
         assertThat(result.citations().get(0).assetId()).isEqualTo(assetId);
+        assertThat(result.citations().get(0).startMs()).isEqualTo(1000L);
+        assertThat(result.citations().get(0).endMs()).isEqualTo(2000L);
         ArgumentCaptor<AssistantProviderRequest> request = ArgumentCaptor.forClass(AssistantProviderRequest.class);
         verify(provider).answer(request.capture());
         assertThat(request.getValue().question()).isEqualTo("dynamic programming");
@@ -144,9 +146,11 @@ class AssistantAnswerApplicationServiceTest {
                 "Lecture",
                 "row-1",
                 1,
+                1000L,
+                2000L,
                 "2026-01-01T00:00:00Z",
                 "approved context",
-                new AssistantCitation(assetId, "row-1", 1)
+                new AssistantCitation(assetId, "row-1", 1, 1000L, 2000L)
         );
         return new AssistantContextResult(workspaceId, "dynamic programming", List.of(source));
     }

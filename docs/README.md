@@ -14,11 +14,12 @@ For the current Spring product-core baseline, this is the fastest useful reading
 6. `architecture/01-system-context.md`
 7. `architecture/02-service-boundaries.md`
 8. `architecture/deprecations.md`
-9. `architecture/phase1-implemented-product-flow.md`
-10. `api/API.md`
-11. `data/Database.md`
-12. `runbooks/local-dev.md`
-13. `testing/integration-smoke-checklist.md`
+9. `architecture/phase1-timestamp-aware-transcript-foundation.md`
+10. `architecture/phase1-implemented-product-flow.md`
+11. `api/API.md`
+12. `data/Database.md`
+13. `runbooks/local-dev.md`
+14. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -59,6 +60,8 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/pre-phase1-architecture-overhaul.md`: verified overhaul decisions, boundaries,
   transaction rules, migration strategy and validation evidence
 - `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
+- `architecture/phase1-timestamp-aware-transcript-foundation.md`: Phase 1 impact map,
+  compatibility decisions, boundary proof, migration, indexing and validation evidence
 
 ## Submission Documents
 

@@ -101,6 +101,8 @@ public class AssetTranscriptSnapshotService {
                         snapshot.id(),
                         snapshot.videoId(),
                         snapshot.segmentIndex(),
+                        snapshot.startMs(),
+                        snapshot.endMs(),
                         snapshot.text(),
                         snapshot.createdAt()
                 ))

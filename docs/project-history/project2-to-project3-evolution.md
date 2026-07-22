@@ -238,9 +238,9 @@ The stable Project3 baseline is complete. Product development continues as a per
 **Future Direction:**
 > AI Knowledge Workspace — a timestamp-grounded video learning workspace that turns YouTube and private videos into searchable, watchable and citable knowledge.
 
-This is a personal project intended for learning and controlled testing with the owner and trusted acquaintances. It is not being positioned as a public SaaS or production-certified platform. The immediate next implementation phase is timestamp-aware transcript support. DevOps study begins after the defined product feature freeze.
+This is a personal project intended for learning and controlled testing with the owner and trusted acquaintances. It is not being positioned as a public SaaS or production-certified platform. The timestamp-aware transcript foundation is implemented; the next source-oriented phase can build on its canonical timing contract. DevOps study begins after the defined product feature freeze.
 
-### Phase 1 — Timestamp-aware transcript foundation
+### Phase 1 — Timestamp-aware transcript foundation (implemented)
 Carry `startMs` and `endMs` through:
 - Whisper/FastAPI transcript output;
 - processing artifact contract;

@@ -28,7 +28,8 @@ public class ProcessingResultAssetPortAdapter implements ProcessingResultAssetPo
             Asset asset = transcriptSnapshotService.loadAsset(assetId);
             transcriptSnapshotService.applySuccessfulProcessingResult(asset, transcriptRows.stream()
                     .map(row -> new AssetTranscriptRowInput(
-                            row.id(), row.videoId(), row.segmentIndex(), row.text(), row.createdAt()
+                            row.id(), row.videoId(), row.segmentIndex(), row.startMs(), row.endMs(),
+                            row.text(), row.createdAt()
                     ))
                     .toList());
         } catch (AssetNotFoundException exception) {

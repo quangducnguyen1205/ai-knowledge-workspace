@@ -61,6 +61,8 @@ class AssistantAnswerControllerTest {
                         "Lecture",
                         "row-1",
                         1,
+                        1000L,
+                        2000L,
                         "2026-06-25T00:00:01Z"
                 )),
                 false
@@ -83,6 +85,8 @@ class AssistantAnswerControllerTest {
                 .andExpect(jsonPath("$.citations[0].assetId").value(assetId.toString()))
                 .andExpect(jsonPath("$.citations[0].assetTitle").value("Lecture"))
                 .andExpect(jsonPath("$.citations[0].transcriptRowId").value("row-1"))
+                .andExpect(jsonPath("$.citations[0].startMs").value(1000))
+                .andExpect(jsonPath("$.citations[0].endMs").value(2000))
                 .andExpect(jsonPath("$.model").doesNotExist())
                 .andExpect(jsonPath("$.provider").doesNotExist());
     }

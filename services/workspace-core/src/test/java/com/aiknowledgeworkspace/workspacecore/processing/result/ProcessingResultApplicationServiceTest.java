@@ -88,7 +88,7 @@ class ProcessingResultApplicationServiceTest {
         Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
         UUID eventId = UUID.randomUUID();
         when(transcriptArtifactGateway.loadRows(processingRequestEventId)).thenReturn(List.of(
-                transcriptRow("row-1", 0, "Welcome to graph search"),
+                transcriptRow("row-1", 0, 0L, 1250L, "Welcome to graph search"),
                 transcriptRow("row-2", 1, "Then we compare breadth first search")
         ));
 
@@ -118,6 +118,10 @@ class ProcessingResultApplicationServiceTest {
         assertThat(transcriptRows).extracting(AssetTranscriptRowView::segmentIndex).containsExactly(0, 1);
         assertThat(transcriptRows).extracting(AssetTranscriptRowView::text)
                 .containsExactly("Welcome to graph search", "Then we compare breadth first search");
+        assertThat(transcriptRows).extracting(AssetTranscriptRowView::startMs)
+                .containsExactly(0L, null);
+        assertThat(transcriptRows).extracting(AssetTranscriptRowView::endMs)
+                .containsExactly(1250L, null);
     }
 
     @Test
@@ -513,10 +517,22 @@ class ProcessingResultApplicationServiceTest {
     }
 
     private ProcessingTranscriptRow transcriptRow(String id, int segmentIndex, String text) {
+        return transcriptRow(id, segmentIndex, null, null, text);
+    }
+
+    private ProcessingTranscriptRow transcriptRow(
+            String id,
+            int segmentIndex,
+            Long startMs,
+            Long endMs,
+            String text
+    ) {
         return new ProcessingTranscriptRow(
                 id,
                 "video-1",
                 segmentIndex,
+                startMs,
+                endMs,
                 text,
                 "2026-06-21T00:00:00Z"
         );

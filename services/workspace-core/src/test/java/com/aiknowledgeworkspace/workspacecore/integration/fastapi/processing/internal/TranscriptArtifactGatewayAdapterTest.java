@@ -21,7 +21,7 @@ class TranscriptArtifactGatewayAdapterTest {
         UUID processingRequestId = UUID.randomUUID();
         when(client.getTranscriptArtifactRows(processingRequestId.toString())).thenReturn(List.of(
                 new FastApiTranscriptRowResponse(
-                        "row-1", "video-1", 0, "Validated text", "2026-07-13T00:00:00Z"
+                        "row-1", "video-1", 0, 0L, 1235L, "Validated text", "2026-07-13T00:00:00Z"
                 )
         ));
 
@@ -31,6 +31,8 @@ class TranscriptArtifactGatewayAdapterTest {
             assertThat(row.id()).isEqualTo("row-1");
             assertThat(row.videoId()).isEqualTo("video-1");
             assertThat(row.segmentIndex()).isZero();
+            assertThat(row.startMs()).isZero();
+            assertThat(row.endMs()).isEqualTo(1235L);
             assertThat(row.text()).isEqualTo("Validated text");
             assertThat(row.createdAt()).isEqualTo("2026-07-13T00:00:00Z");
         });
@@ -53,7 +55,7 @@ class TranscriptArtifactGatewayAdapterTest {
         UUID processingRequestId = UUID.randomUUID();
         when(client.getTranscriptArtifactRows(processingRequestId.toString())).thenReturn(List.of(
                 new FastApiTranscriptRowResponse(
-                        "row-1", "video-1", null, "Validated text", "2026-07-13T00:00:00Z"
+                        "row-1", "video-1", null, null, null, "Validated text", "2026-07-13T00:00:00Z"
                 )
         ));
 

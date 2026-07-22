@@ -124,6 +124,8 @@ public class AssistantAnswerApplicationService implements AssistantAnswerUseCase
                 source.assetTitle(),
                 source.transcriptRowId(),
                 source.segmentIndex(),
+                source.startMs(),
+                source.endMs(),
                 source.createdAt()
         );
     }

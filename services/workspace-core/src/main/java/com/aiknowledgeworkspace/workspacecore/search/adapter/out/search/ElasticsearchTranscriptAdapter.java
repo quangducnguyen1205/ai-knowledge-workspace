@@ -76,10 +76,13 @@ public class ElasticsearchTranscriptAdapter implements
     public void ensureTranscriptIndexExists() {
         String indexName = elasticsearchProperties.getTranscriptIndexName();
         if (transcriptIndexExists(indexName)) {
+            updateTranscriptTimingMapping(indexName);
             return;
         }
 
-        createTranscriptIndex(indexName);
+        if (!createTranscriptIndex(indexName)) {
+            updateTranscriptTimingMapping(indexName);
+        }
     }
 
     @Override
@@ -178,6 +181,8 @@ public class ElasticsearchTranscriptAdapter implements
                     readOptionalText(sourceNode, "assetTitle"),
                     readOptionalText(sourceNode, "transcriptRowId"),
                     readOptionalInteger(sourceNode, "segmentIndex"),
+                    readOptionalLong(sourceNode, "startMs"),
+                    readOptionalLong(sourceNode, "endMs"),
                     readOptionalText(sourceNode, "text"),
                     readOptionalText(sourceNode, "createdAt"),
                     readOptionalScore(hitNode)
@@ -218,6 +223,19 @@ public class ElasticsearchTranscriptAdapter implements
         return fieldNode.asInt();
     }
 
+    private Long readOptionalLong(JsonNode sourceNode, String fieldName) {
+        JsonNode fieldNode = sourceNode.path(fieldName);
+        if (fieldNode.isMissingNode() || fieldNode.isNull()) {
+            return null;
+        }
+        if (!fieldNode.isIntegralNumber() || !fieldNode.canConvertToLong()) {
+            throw new SearchIndexOperationException(
+                    "Elasticsearch search hit included a non-numeric value for " + fieldName
+            );
+        }
+        return fieldNode.asLong();
+    }
+
     private Double readOptionalScore(JsonNode hitNode) {
         JsonNode scoreNode = hitNode.path("_score");
         return scoreNode.isMissingNode() || scoreNode.isNull() ? null : scoreNode.asDouble();
@@ -252,7 +270,7 @@ public class ElasticsearchTranscriptAdapter implements
         }
     }
 
-    private void createTranscriptIndex(String indexName) {
+    private boolean createTranscriptIndex(String indexName) {
         try {
             elasticsearchRestClient.put()
                     .uri("/{indexName}", indexName)
@@ -260,6 +278,7 @@ public class ElasticsearchTranscriptAdapter implements
                     .body(buildTranscriptIndexDefinition())
                     .retrieve()
                     .toBodilessEntity();
+            return true;
         } catch (ResourceAccessException exception) {
             throw new SearchIndexConnectivityException(
                     "Elasticsearch is unavailable while creating transcript index",
@@ -267,7 +286,7 @@ public class ElasticsearchTranscriptAdapter implements
             );
         } catch (RestClientResponseException exception) {
             if (isIndexAlreadyExistsRace(exception) && transcriptIndexExists(indexName)) {
-                return;
+                return false;
             }
             throw new SearchIndexOperationException(
                     "Elasticsearch returned HTTP " + exception.getStatusCode().value()
@@ -280,6 +299,18 @@ public class ElasticsearchTranscriptAdapter implements
                     exception
             );
         }
+    }
+
+    private void updateTranscriptTimingMapping(String indexName) {
+        execute(
+                () -> elasticsearchRestClient.put()
+                        .uri("/{indexName}/_mapping", indexName)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(Map.of("properties", transcriptTimingProperties()))
+                        .retrieve()
+                        .toBodilessEntity(),
+                "converge transcript timing mapping"
+        );
     }
 
     private boolean isIndexAlreadyExistsRace(RestClientResponseException exception) {
@@ -298,6 +329,7 @@ public class ElasticsearchTranscriptAdapter implements
         properties.put("assetTitle", textWithKeywordField());
         properties.put("transcriptRowId", textWithKeywordField());
         properties.put("segmentIndex", Map.of("type", "integer"));
+        properties.putAll(transcriptTimingProperties());
         properties.put("text", Map.of("type", "text"));
         properties.put("createdAt", Map.of("type", "keyword"));
         properties.put("assetStatus", textWithKeywordField());
@@ -306,6 +338,13 @@ public class ElasticsearchTranscriptAdapter implements
         definition.put("settings", settings);
         definition.put("mappings", Map.of("properties", properties));
         return definition;
+    }
+
+    private Map<String, Object> transcriptTimingProperties() {
+        return Map.of(
+                "startMs", Map.of("type", "long"),
+                "endMs", Map.of("type", "long")
+        );
     }
 
     private Map<String, Object> textWithKeywordField() {

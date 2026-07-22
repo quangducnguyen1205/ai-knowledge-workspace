@@ -8,6 +8,8 @@ public record AssistantAnswerCitationResponse(
         String assetTitle,
         String transcriptRowId,
         Integer segmentIndex,
+        Long startMs,
+        Long endMs,
         String createdAt
 ) {
 }

@@ -195,6 +195,8 @@ class AssetSearchIndexRequestServiceTest {
                 "row-" + segmentIndex,
                 "video-1",
                 segmentIndex,
+                null,
+                null,
                 text,
                 "2026-06-22T00:00:00Z"
         );

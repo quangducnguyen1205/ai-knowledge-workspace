@@ -38,6 +38,8 @@ public class SearchController {
                                 hit.assetTitle(),
                                 hit.transcriptRowId(),
                                 hit.segmentIndex(),
+                                hit.startMs(),
+                                hit.endMs(),
                                 hit.text(),
                                 hit.createdAt(),
                                 hit.score()

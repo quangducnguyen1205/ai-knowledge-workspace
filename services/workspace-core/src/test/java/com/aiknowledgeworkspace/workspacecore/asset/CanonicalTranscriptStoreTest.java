@@ -66,14 +66,42 @@ class CanonicalTranscriptStoreTest {
 
         assertThat(replacement).extracting(AssetTranscriptRowView::text)
                 .containsExactly("Replacement");
+        assertThat(replacement).singleElement().satisfies(row -> {
+            assertThat(row.startMs()).isZero();
+            assertThat(row.endMs()).isEqualTo(1250L);
+        });
         assertThat(transcriptStore.load(asset.getId()))
                 .extracting(AssetTranscriptRowView::text)
                 .containsExactly("Replacement");
     }
 
+    @Test
+    void legacyRowsWithoutTimingRoundTripAsNull() {
+        Workspace workspace = workspaceStore.save(new Workspace(
+                UUID.randomUUID(), "Legacy", "owner-1", false
+        ));
+        Asset asset = assetStore.save(new Asset(
+                UUID.randomUUID(), "legacy.mp4", "Legacy", AssetStatus.TRANSCRIPT_READY,
+                workspace.getId(), "workspace-media", "users/owner-1/assets/legacy.mp4",
+                "video/mp4", 42L, null
+        ));
+
+        List<AssetTranscriptRowView> rows = transcriptStore.replace(asset.getId(), List.of(
+                new AssetTranscriptRowInput(
+                        "legacy-row", "video-legacy", 0, null, null,
+                        "Legacy text", "2026-07-20T00:00:00Z"
+                )
+        ));
+
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row.startMs()).isNull();
+            assertThat(row.endMs()).isNull();
+        });
+    }
+
     private AssetTranscriptRowInput row(String text) {
         return new AssetTranscriptRowInput(
-                "row-1", "video-1", 0, text, "2026-07-20T00:00:00Z"
+                "row-1", "video-1", 0, 0L, 1250L, text, "2026-07-20T00:00:00Z"
         );
     }
 }

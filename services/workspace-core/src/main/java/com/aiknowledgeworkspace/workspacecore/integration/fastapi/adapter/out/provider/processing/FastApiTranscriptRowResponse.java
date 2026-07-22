@@ -10,6 +10,10 @@ public record FastApiTranscriptRowResponse(
         String videoId,
         @JsonProperty("segment_index")
         Integer segmentIndex,
+        @JsonProperty("start_ms")
+        Long startMs,
+        @JsonProperty("end_ms")
+        Long endMs,
         String text,
         @JsonProperty("created_at")
         String createdAt
