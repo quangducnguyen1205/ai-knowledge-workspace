@@ -94,9 +94,10 @@ class AssetTranscriptQueryServiceTest {
     }
 
     private Asset asset(UUID id, UUID workspaceId, AssetStatus status) {
-        Asset asset = new Asset("lecture.mp4", "Lecture", status, workspaceId);
-        ReflectionTestUtils.setField(asset, "id", id);
-        return asset;
+        return Asset.uploaded(
+                id, "lecture.mp4", "Lecture", status, workspaceId,
+                "workspace-media", "objects/lecture.mp4", "video/mp4", 42L, null
+        );
     }
 
     private AssetTranscriptRowView row(String id, Integer segmentIndex, String text) {

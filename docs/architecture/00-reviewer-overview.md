@@ -57,6 +57,7 @@ collaboration platform, or unrestricted RAG product.
 - [System Context](01-system-context.md)
 - [Service Boundaries](02-service-boundaries.md)
 - [Current Implemented Product Flow](phase1-implemented-product-flow.md)
+- [Phase 2 Source-Aware Asset Foundation](phase2-source-aware-asset-foundation.md)
 - [API Summary](../api/API.md)
 - [Database](../data/Database.md)
 - [Local Development](../runbooks/local-dev.md)

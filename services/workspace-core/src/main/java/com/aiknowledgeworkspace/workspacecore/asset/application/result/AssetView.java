@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.result;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
 import java.time.Instant;
 import java.util.UUID;
@@ -11,6 +12,8 @@ public record AssetView(
         String title,
         AssetStatus status,
         UUID workspaceId,
+        AssetSourceType sourceType,
+        String youtubeVideoId,
         String contentType,
         Long sizeBytes,
         Instant createdAt,
@@ -23,6 +26,8 @@ public record AssetView(
                 asset.getTitle(),
                 asset.getStatus(),
                 asset.getWorkspaceId(),
+                asset.getSourceType(),
+                asset.getYoutubeVideoId(),
                 asset.getContentType(),
                 asset.getSizeBytes(),
                 asset.getCreatedAt(),

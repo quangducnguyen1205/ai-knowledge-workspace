@@ -46,7 +46,7 @@ class CanonicalTranscriptStoreTest {
         Workspace workspace = workspaceStore.save(new Workspace(
                 UUID.randomUUID(), "Architecture", "owner-1", false
         ));
-        Asset asset = assetStore.save(new Asset(
+        Asset asset = assetStore.save(Asset.uploaded(
                 UUID.randomUUID(),
                 "lecture.mp4",
                 "Lecture",
@@ -80,7 +80,7 @@ class CanonicalTranscriptStoreTest {
         Workspace workspace = workspaceStore.save(new Workspace(
                 UUID.randomUUID(), "Legacy", "owner-1", false
         ));
-        Asset asset = assetStore.save(new Asset(
+        Asset asset = assetStore.save(Asset.uploaded(
                 UUID.randomUUID(), "legacy.mp4", "Legacy", AssetStatus.TRANSCRIPT_READY,
                 workspace.getId(), "workspace-media", "users/owner-1/assets/legacy.mp4",
                 "video/mp4", 42L, null

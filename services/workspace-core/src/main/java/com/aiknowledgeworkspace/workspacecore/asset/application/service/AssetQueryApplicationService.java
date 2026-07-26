@@ -229,7 +229,13 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
 
     private AssetSummary toSummary(Asset asset) {
         return new AssetSummary(
-                asset.getId(), asset.getTitle(), asset.getStatus(), asset.getWorkspaceId(), asset.getCreatedAt()
+                asset.getId(),
+                asset.getTitle(),
+                asset.getStatus(),
+                asset.getWorkspaceId(),
+                asset.getSourceType(),
+                asset.getYoutubeVideoId(),
+                asset.getCreatedAt()
         );
     }
 

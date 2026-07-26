@@ -302,6 +302,8 @@ Response:
     - `title`
     - `assetStatus`
     - `workspaceId`
+    - `sourceType`
+    - `youtubeVideoId` nullable
     - `createdAt`
   - `page`
   - `size`
@@ -349,6 +351,8 @@ Response:
   - `processingJobId`
   - `assetStatus`
   - `workspaceId`
+  - `sourceType`
+  - `youtubeVideoId` nullable
 
 Current behavior:
 
@@ -361,6 +365,8 @@ Current behavior:
 - The `project3` profile relays this normal request through Kafka. Spring has no alternate direct
   processing/upload path.
 - Spring associates the created asset with one workspace in PostgreSQL product state.
+- The existing endpoint always creates an `UPLOAD` asset. Its additive source metadata is
+  `sourceType = "UPLOAD"` and `youtubeVideoId = null`.
 - If object storage succeeds but database persistence fails, Spring attempts best-effort object
   cleanup and does not intentionally leave an asset row behind.
 - Internal processing correlation is not returned to the client beyond `processingJobId`.
@@ -385,11 +391,23 @@ Reads one persisted asset record.
 Response:
 
 - HTTP `200`
-- Body: the current persisted asset record
+- Body:
+  - `id`
+  - `originalFilename` nullable for non-upload sources
+  - `title`
+  - `status`
+  - `workspaceId`
+  - `sourceType`
+  - `youtubeVideoId` nullable
+  - `contentType` nullable for non-upload sources
+  - `sizeBytes` nullable for non-upload sources
+  - `createdAt`
+  - `updatedAt`
 
 Current behavior:
 
 - This remains a simple product-owned asset read endpoint.
+- Source metadata is additive. This slice does not expose a derived `sourceUrl`.
 - It is useful for debugging and local inspection.
 - Assets without a workspace association are outside the normal Project3 product model and are not exposed through this endpoint.
 
@@ -440,19 +458,26 @@ Response:
 
 Current behavior:
 
-- Deletion is asset-centric and always removes the local `Asset` record.
+- Deletion is asset-centric and removes the local `Asset` record only after required external
+  cleanup succeeds.
 - Deletion also removes any local transcript snapshot rows for that asset.
 - Deletion also removes the linked `ProcessingJob` record in the same local DB transaction when it exists.
 - Spring allows deletion for assets in `PROCESSING`, `TRANSCRIPT_READY`, `SEARCHABLE`, or `FAILED`.
-- If the asset is currently `SEARCHABLE`, Spring first deletes that asset's transcript-row documents from Elasticsearch before deleting local DB records.
+- Spring first asks Elasticsearch to delete that asset's derived transcript-row documents for both
+  source types.
+- For `UPLOAD`, Spring then deletes the owned object-storage object before deleting local DB state.
+- For `YOUTUBE`, this slice owns no persisted MinIO object, so storage cleanup is intentionally
+  skipped based on `sourceType`, not inferred from null bucket/key fields.
 - Workspace records are never deleted by this endpoint.
 - This slice does not call upstream FastAPI delete or cancel APIs.
 
 Common failure cases:
 
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
-- HTTP `503` if Elasticsearch is unavailable while deleting a `SEARCHABLE` asset
-- HTTP `502` if Elasticsearch returns an integration error while deleting a `SEARCHABLE` asset
+- HTTP `503` if Elasticsearch is unavailable during required derived-state cleanup
+- HTTP `502` if Elasticsearch returns an integration error during required derived-state cleanup
+- HTTP `502`/`503` according to the storage adapter contract if required `UPLOAD` object cleanup
+  fails; local DB state is retained
 
 ### `GET /api/assets/{assetId}/status`
 

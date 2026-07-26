@@ -17,10 +17,19 @@ import java.util.UUID;
 @Table(name = "assets")
 public class Asset {
 
+    private static final int MAX_YOUTUBE_VIDEO_ID_LENGTH = 128;
+
     @Id
     private UUID id;
 
-    @Column(nullable = false, length = 255)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false, length = 16)
+    private AssetSourceType sourceType;
+
+    @Column(name = "youtube_video_id", length = MAX_YOUTUBE_VIDEO_ID_LENGTH)
+    private String youtubeVideoId;
+
+    @Column(length = 255)
     private String originalFilename;
 
     @Column(nullable = false, length = 255)
@@ -34,17 +43,17 @@ public class Asset {
     private UUID workspaceId;
 
     @JsonIgnore
-    @Column(name = "storage_bucket", nullable = false, length = 255)
+    @Column(name = "storage_bucket", length = 255)
     private String storageBucket;
 
     @JsonIgnore
-    @Column(name = "object_key", nullable = false, length = 1024)
+    @Column(name = "object_key", length = 1024)
     private String objectKey;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255)
     private String contentType;
 
-    @Column(nullable = false)
+    @Column
     private Long sizeBytes;
 
     @JsonIgnore
@@ -60,14 +69,36 @@ public class Asset {
     protected Asset() {
     }
 
-    public Asset(String originalFilename, String title, AssetStatus status, UUID workspaceId) {
+    private Asset(
+            UUID id,
+            AssetSourceType sourceType,
+            String youtubeVideoId,
+            String originalFilename,
+            String title,
+            AssetStatus status,
+            UUID workspaceId,
+            String storageBucket,
+            String objectKey,
+            String contentType,
+            Long sizeBytes,
+            String eTag
+    ) {
+        this.id = Objects.requireNonNull(id, "id is required");
+        this.sourceType = Objects.requireNonNull(sourceType, "sourceType is required");
+        this.youtubeVideoId = youtubeVideoId;
         this.originalFilename = originalFilename;
-        this.title = title;
-        this.status = status;
+        this.title = requireText(title, "title");
+        this.status = Objects.requireNonNull(status, "status is required");
         this.workspaceId = Objects.requireNonNull(workspaceId, "workspaceId is required");
+        this.storageBucket = storageBucket;
+        this.objectKey = objectKey;
+        this.contentType = contentType;
+        this.sizeBytes = sizeBytes;
+        this.eTag = eTag;
+        validateState();
     }
 
-    public Asset(
+    public static Asset uploaded(
             UUID id,
             String originalFilename,
             String title,
@@ -79,20 +110,48 @@ public class Asset {
             long sizeBytes,
             String eTag
     ) {
-        this(originalFilename, title, status, workspaceId);
-        this.id = id;
-        this.storageBucket = storageBucket;
-        this.objectKey = objectKey;
-        this.contentType = contentType;
-        this.sizeBytes = sizeBytes;
-        this.eTag = eTag;
+        return new Asset(
+                id,
+                AssetSourceType.UPLOAD,
+                null,
+                requireText(originalFilename, "originalFilename"),
+                title,
+                status,
+                workspaceId,
+                requireText(storageBucket, "storageBucket"),
+                requireText(objectKey, "objectKey"),
+                requireText(contentType, "contentType"),
+                sizeBytes,
+                eTag
+        );
+    }
+
+    public static Asset youtube(
+            UUID id,
+            String youtubeVideoId,
+            String title,
+            AssetStatus status,
+            UUID workspaceId
+    ) {
+        return new Asset(
+                id,
+                AssetSourceType.YOUTUBE,
+                normalizeYoutubeVideoId(youtubeVideoId),
+                null,
+                title,
+                status,
+                workspaceId,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     @PrePersist
     void onCreate() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
+        validateState();
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
@@ -100,6 +159,7 @@ public class Asset {
 
     @PreUpdate
     void onUpdate() {
+        validateState();
         updatedAt = Instant.now();
     }
 
@@ -107,12 +167,16 @@ public class Asset {
         return id;
     }
 
-    public String getOriginalFilename() {
-        return originalFilename;
+    public AssetSourceType getSourceType() {
+        return sourceType;
     }
 
-    public void setOriginalFilename(String originalFilename) {
-        this.originalFilename = originalFilename;
+    public String getYoutubeVideoId() {
+        return youtubeVideoId;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
     }
 
     public String getTitle() {
@@ -165,5 +229,67 @@ public class Asset {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    private void validateState() {
+        Objects.requireNonNull(id, "id is required");
+        Objects.requireNonNull(sourceType, "sourceType is required");
+        requireText(title, "title");
+        Objects.requireNonNull(status, "status is required");
+        Objects.requireNonNull(workspaceId, "workspaceId is required");
+
+        switch (sourceType) {
+            case UPLOAD -> validateUploadState();
+            case YOUTUBE -> validateYoutubeState();
+        }
+    }
+
+    private void validateUploadState() {
+        if (youtubeVideoId != null) {
+            throw new IllegalArgumentException("uploaded asset must not have youtubeVideoId");
+        }
+        requireText(originalFilename, "originalFilename");
+        requireText(storageBucket, "storageBucket");
+        requireText(objectKey, "objectKey");
+        requireText(contentType, "contentType");
+        if (sizeBytes == null || sizeBytes < 0) {
+            throw new IllegalArgumentException("sizeBytes must be greater than or equal to 0");
+        }
+    }
+
+    private void validateYoutubeState() {
+        String normalizedVideoId = normalizeYoutubeVideoId(youtubeVideoId);
+        if (!normalizedVideoId.equals(youtubeVideoId)) {
+            throw new IllegalArgumentException("youtubeVideoId must be normalized");
+        }
+        if (originalFilename != null
+                || storageBucket != null
+                || objectKey != null
+                || contentType != null
+                || sizeBytes != null
+                || eTag != null) {
+            throw new IllegalArgumentException("youtube asset must not have upload storage fields");
+        }
+    }
+
+    private static String requireText(String value, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value;
+    }
+
+    private static String normalizeYoutubeVideoId(String youtubeVideoId) {
+        String normalized = requireText(youtubeVideoId, "youtubeVideoId").trim();
+        if (normalized.length() > MAX_YOUTUBE_VIDEO_ID_LENGTH) {
+            throw new IllegalArgumentException(
+                    "youtubeVideoId must be less than or equal to " + MAX_YOUTUBE_VIDEO_ID_LENGTH + " characters"
+            );
+        }
+        if (normalized.chars().anyMatch(Character::isWhitespace)
+                || normalized.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("youtubeVideoId must not contain whitespace or control characters");
+        }
+        return normalized;
     }
 }

@@ -62,7 +62,13 @@ public class AssetController {
         return new AssetListResponse(
                 result.items().stream()
                         .map(item -> new AssetSummaryResponse(
-                                item.id(), item.title(), item.status(), item.workspaceId(), item.createdAt()
+                                item.id(),
+                                item.title(),
+                                item.status(),
+                                item.workspaceId(),
+                                item.sourceType(),
+                                item.youtubeVideoId(),
+                                item.createdAt()
                         ))
                         .toList(),
                 result.page(),
@@ -152,7 +158,12 @@ public class AssetController {
                 file == null ? null : file::getInputStream
         ));
         AssetUploadResponse response = new AssetUploadResponse(
-                result.assetId(), result.processingJobId(), result.status(), result.workspaceId()
+                result.assetId(),
+                result.processingJobId(),
+                result.status(),
+                result.workspaceId(),
+                result.sourceType(),
+                result.youtubeVideoId()
         );
         return ResponseEntity.accepted().body(response);
     }

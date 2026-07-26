@@ -33,7 +33,7 @@ class AssetUploadTransaction {
             String ownerId,
             StoredObjectReference storedObject
     ) {
-        Asset asset = assetStore.save(new Asset(
+        Asset asset = assetStore.save(Asset.uploaded(
                 assetId,
                 originalFilename,
                 title,
@@ -57,6 +57,13 @@ class AssetUploadTransaction {
                         storedObject.sizeBytes()
                 )
         );
-        return new AssetUploadResult(asset.getId(), processingJob.id(), asset.getStatus(), asset.getWorkspaceId());
+        return new AssetUploadResult(
+                asset.getId(),
+                processingJob.id(),
+                asset.getStatus(),
+                asset.getWorkspaceId(),
+                asset.getSourceType(),
+                asset.getYoutubeVideoId()
+        );
     }
 }

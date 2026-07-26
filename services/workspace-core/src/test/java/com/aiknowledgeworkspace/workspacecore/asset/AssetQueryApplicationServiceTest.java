@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.Transc
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -112,6 +113,29 @@ class AssetQueryApplicationServiceTest {
         assertThat(page.totalElements()).isEqualTo(2);
         assertThat(page.hasNext()).isTrue();
         assertThat(page.items()).extracting(item -> item.id()).containsExactly(newer.getId());
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.sourceType()).isEqualTo(AssetSourceType.UPLOAD);
+            assertThat(item.youtubeVideoId()).isNull();
+        });
+    }
+
+    @Test
+    void detailPreservesYoutubeSourceIdentityWithoutUploadFields() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = Asset.youtube(
+                assetId, "video-id", "YouTube lecture", AssetStatus.PROCESSING, workspaceId
+        );
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+
+        var result = service.getAsset(assetId);
+
+        assertThat(result.sourceType()).isEqualTo(AssetSourceType.YOUTUBE);
+        assertThat(result.youtubeVideoId()).isEqualTo("video-id");
+        assertThat(result.originalFilename()).isNull();
+        assertThat(result.contentType()).isNull();
+        assertThat(result.sizeBytes()).isNull();
     }
 
     @Test
@@ -132,8 +156,10 @@ class AssetQueryApplicationServiceTest {
     }
 
     private Asset asset(UUID id, UUID workspaceId, AssetStatus status, Instant createdAt) {
-        Asset asset = new Asset("lecture.mp4", "Lecture", status, workspaceId);
-        ReflectionTestUtils.setField(asset, "id", id);
+        Asset asset = Asset.uploaded(
+                id, "lecture.mp4", "Lecture", status, workspaceId,
+                "workspace-media", "objects/lecture.mp4", "video/mp4", 42L, null
+        );
         ReflectionTestUtils.setField(asset, "createdAt", createdAt);
         ReflectionTestUtils.setField(asset, "updatedAt", createdAt);
         return asset;

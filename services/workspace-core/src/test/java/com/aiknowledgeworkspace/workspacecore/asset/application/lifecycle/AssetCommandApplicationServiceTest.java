@@ -60,8 +60,8 @@ class AssetCommandApplicationServiceTest {
     @Test
     void searchableTitleUpdateSynchronizesDerivedIndexBeforeProductTruth() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Old", AssetStatus.SEARCHABLE, null, null);
-        Asset updated = asset(assetId, "New", AssetStatus.SEARCHABLE, null, null);
+        Asset asset = uploadedAsset(assetId, "Old", AssetStatus.SEARCHABLE);
+        Asset updated = uploadedAsset(assetId, "New", AssetStatus.SEARCHABLE);
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
         when(mutationTransaction.updateTitle(asset, "New")).thenReturn(updated);
 
@@ -76,7 +76,7 @@ class AssetCommandApplicationServiceTest {
     @Test
     void unchangedTitleIsANoOp() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Same", AssetStatus.SEARCHABLE, null, null);
+        Asset asset = uploadedAsset(assetId, "Same", AssetStatus.SEARCHABLE);
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
 
         AssetView result = service.updateTitle(assetId, " Same ");
@@ -96,7 +96,7 @@ class AssetCommandApplicationServiceTest {
     @Test
     void deleteCleansExternalResourcesBeforeDeletingProductTruth() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Asset", AssetStatus.PROCESSING, "media", "raw/video.mp4");
+        Asset asset = uploadedAsset(assetId, "Asset", AssetStatus.PROCESSING);
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
 
         service.delete(assetId);
@@ -110,9 +110,11 @@ class AssetCommandApplicationServiceTest {
     }
 
     @Test
-    void deleteWithoutStoredObjectStillDeletesProductTruth() {
+    void youtubeDeletionSkipsStorageAndStillDeletesProductTruth() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Asset", AssetStatus.FAILED, null, null);
+        Asset asset = Asset.youtube(
+                assetId, "video-id", "Asset", AssetStatus.FAILED, UUID.randomUUID()
+        );
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
 
         service.delete(assetId);
@@ -125,7 +127,7 @@ class AssetCommandApplicationServiceTest {
     @Test
     void externalCleanupFailurePreventsDatabaseDeletion() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Asset", AssetStatus.PROCESSING, "media", "raw/video.mp4");
+        Asset asset = uploadedAsset(assetId, "Asset", AssetStatus.PROCESSING);
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
         org.mockito.Mockito.doThrow(new IllegalStateException("storage unavailable"))
                 .when(objectStorage)
@@ -142,7 +144,7 @@ class AssetCommandApplicationServiceTest {
     @Test
     void searchCleanupFailureStopsStorageAndDatabaseDeletion() {
         UUID assetId = UUID.randomUUID();
-        Asset asset = asset(assetId, "Asset", AssetStatus.SEARCHABLE, "media", "raw/video.mp4");
+        Asset asset = uploadedAsset(assetId, "Asset", AssetStatus.SEARCHABLE);
         when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
         org.mockito.Mockito.doThrow(new IllegalStateException("search unavailable"))
                 .when(searchMaintenance)
@@ -156,21 +158,34 @@ class AssetCommandApplicationServiceTest {
         verify(mutationTransaction, never()).delete(asset);
     }
 
-    private Asset asset(
-            UUID assetId,
-            String title,
-            AssetStatus status,
-            String bucket,
-            String objectKey
-    ) {
-        return new Asset(
+    @Test
+    void youtubeSearchCleanupFailureStillPreventsDatabaseDeletion() {
+        UUID assetId = UUID.randomUUID();
+        Asset asset = Asset.youtube(
+                assetId, "video-id", "Asset", AssetStatus.SEARCHABLE, UUID.randomUUID()
+        );
+        when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
+        org.mockito.Mockito.doThrow(new IllegalStateException("search unavailable"))
+                .when(searchMaintenance)
+                .deleteTranscriptRows(assetId);
+
+        assertThatThrownBy(() -> service.delete(assetId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("search unavailable");
+
+        verifyNoInteractions(objectStorage);
+        verify(mutationTransaction, never()).delete(asset);
+    }
+
+    private Asset uploadedAsset(UUID assetId, String title, AssetStatus status) {
+        return Asset.uploaded(
                 assetId,
                 "lecture.mp4",
                 title,
                 status,
                 UUID.randomUUID(),
-                bucket,
-                objectKey,
+                "media",
+                "raw/video.mp4",
                 "video/mp4",
                 42L,
                 null

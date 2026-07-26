@@ -73,11 +73,13 @@ public class AssetCommandApplicationService implements AssetCommandUseCase {
     }
 
     private void deleteStoredObject(Asset asset) {
-        if (!StringUtils.hasText(asset.getStorageBucket()) || !StringUtils.hasText(asset.getObjectKey())) {
-            return;
+        switch (asset.getSourceType()) {
+            case UPLOAD -> objectStorage.delete(new StoredObjectReference(
+                    asset.getStorageBucket(), asset.getObjectKey(), 0L, null, null
+            ));
+            case YOUTUBE -> {
+                // YouTube assets do not own a persisted object in this slice.
+            }
         }
-        objectStorage.delete(new StoredObjectReference(
-                asset.getStorageBucket(), asset.getObjectKey(), 0L, null, null
-        ));
     }
 }

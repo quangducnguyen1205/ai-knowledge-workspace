@@ -494,7 +494,7 @@ class ProcessingResultApplicationServiceTest {
                 "user-1",
                 false
         ));
-        Asset asset = assetRepository.save(new Asset(
+        Asset asset = assetRepository.save(Asset.uploaded(
                 assetId,
                 "lecture.mp4",
                 "Lecture",

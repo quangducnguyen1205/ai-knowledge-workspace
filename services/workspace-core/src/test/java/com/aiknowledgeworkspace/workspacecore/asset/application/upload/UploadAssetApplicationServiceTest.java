@@ -19,6 +19,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidUploadRequestException;
 import com.aiknowledgeworkspace.workspacecore.storage.api.ObjectStorageUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.api.StoreObjectCommand;
@@ -72,7 +73,9 @@ class UploadAssetApplicationServiceTest {
                 org.mockito.ArgumentMatchers.eq(workspaceId),
                 org.mockito.ArgumentMatchers.eq("owner-1"),
                 org.mockito.ArgumentMatchers.same(stored)
-        )).thenReturn(new AssetUploadResult(assetId, jobId, AssetStatus.PROCESSING, workspaceId));
+        )).thenReturn(new AssetUploadResult(
+                assetId, jobId, AssetStatus.PROCESSING, workspaceId, AssetSourceType.UPLOAD, null
+        ));
 
         AssetUploadResult result = service.upload(command(workspaceId, "Lecture", mp4Bytes()));
 

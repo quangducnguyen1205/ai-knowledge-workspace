@@ -60,10 +60,9 @@ class ProcessingResultAssetPortAdapterTest {
     }
 
     private Asset asset(UUID assetId) {
-        Asset asset = new Asset(
-                "lecture.mp4", "Lecture", AssetStatus.PROCESSING, UUID.randomUUID()
+        return Asset.uploaded(
+                assetId, "lecture.mp4", "Lecture", AssetStatus.PROCESSING, UUID.randomUUID(),
+                "workspace-media", "objects/lecture.mp4", "video/mp4", 42L, null
         );
-        ReflectionTestUtils.setField(asset, "id", assetId);
-        return asset;
     }
 }

@@ -93,7 +93,7 @@ class SearchIndexJobStoreTest {
                 "user-1",
                 false
         ));
-        return new Asset(
+        return Asset.uploaded(
                 assetId,
                 "lecture.mp4",
                 "Lecture",

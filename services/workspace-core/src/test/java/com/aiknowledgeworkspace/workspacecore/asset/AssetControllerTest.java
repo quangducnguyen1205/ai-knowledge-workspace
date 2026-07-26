@@ -7,6 +7,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetApiExcep
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -93,7 +94,7 @@ class AssetControllerTest {
                 "file", "lecture.mp4", "video/mp4", "video-bytes".getBytes()
         );
         when(assetUpload.upload(any())).thenReturn(new AssetUploadResult(
-                assetId, jobId, AssetStatus.PROCESSING, workspaceId
+                assetId, jobId, AssetStatus.PROCESSING, workspaceId, AssetSourceType.UPLOAD, null
         ));
 
         mockMvc.perform(multipart("/api/assets/upload")
@@ -103,7 +104,9 @@ class AssetControllerTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.assetId").value(assetId.toString()))
                 .andExpect(jsonPath("$.processingJobId").value(jobId.toString()))
-                .andExpect(jsonPath("$.assetStatus").value("PROCESSING"));
+                .andExpect(jsonPath("$.assetStatus").value("PROCESSING"))
+                .andExpect(jsonPath("$.sourceType").value("UPLOAD"))
+                .andExpect(jsonPath("$.youtubeVideoId").value(org.hamcrest.Matchers.nullValue()));
 
         verify(assetUpload).upload(argThat(command ->
                 workspaceId.equals(command.workspaceId())
@@ -160,6 +163,8 @@ class AssetControllerTest {
                         "Lecture 1",
                         AssetStatus.SEARCHABLE,
                         workspaceId,
+                        AssetSourceType.UPLOAD,
+                        null,
                         Instant.parse("2026-04-10T03:00:00Z")
                 )),
                 0,
@@ -173,7 +178,9 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].assetId").value(assetId.toString()))
-                .andExpect(jsonPath("$.items[0].assetStatus").value("SEARCHABLE"));
+                .andExpect(jsonPath("$.items[0].assetStatus").value("SEARCHABLE"))
+                .andExpect(jsonPath("$.items[0].sourceType").value("UPLOAD"))
+                .andExpect(jsonPath("$.items[0].youtubeVideoId").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
@@ -186,7 +193,39 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(assetId.toString()))
                 .andExpect(jsonPath("$.title").value("Lecture 1"))
-                .andExpect(jsonPath("$.workspaceId").value(workspaceId.toString()));
+                .andExpect(jsonPath("$.workspaceId").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.sourceType").value("UPLOAD"))
+                .andExpect(jsonPath("$.youtubeVideoId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.originalFilename").value("lecture.mp4"))
+                .andExpect(jsonPath("$.contentType").value("video/mp4"))
+                .andExpect(jsonPath("$.sizeBytes").value(42));
+    }
+
+    @Test
+    void getExposesYoutubeIdentityWhileUploadFieldsRemainNullable() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        when(assetQueries.getAsset(assetId)).thenReturn(new AssetView(
+                assetId,
+                null,
+                "YouTube lecture",
+                AssetStatus.PROCESSING,
+                workspaceId,
+                AssetSourceType.YOUTUBE,
+                "video-id",
+                null,
+                null,
+                Instant.parse("2026-04-10T03:00:00Z"),
+                Instant.parse("2026-04-10T03:05:00Z")
+        ));
+
+        mockMvc.perform(get("/api/assets/{assetId}", assetId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("YOUTUBE"))
+                .andExpect(jsonPath("$.youtubeVideoId").value("video-id"))
+                .andExpect(jsonPath("$.originalFilename").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.contentType").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.sizeBytes").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
@@ -255,6 +294,8 @@ class AssetControllerTest {
                 title,
                 AssetStatus.SEARCHABLE,
                 workspaceId,
+                AssetSourceType.UPLOAD,
+                null,
                 "video/mp4",
                 42L,
                 Instant.parse("2026-04-10T03:00:00Z"),

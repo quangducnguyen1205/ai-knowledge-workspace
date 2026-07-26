@@ -5,18 +5,20 @@ MinIO and Redis are derived, transport, binary or execution infrastructure.
 
 ## Migration policy
 
-The Spring backend uses the immutable clean baseline plus one additive Phase 1 migration:
+The Spring backend uses the immutable clean baseline plus additive Phase 1 and Phase 2 Slice 1
+migrations:
 
 ```text
 services/workspace-core/src/main/resources/db/migration/
 ├── V1__create_product_schema.sql
-└── V2__add_transcript_timing.sql
+├── V2__add_transcript_timing.sql
+└── V3__add_asset_source_identity.sql
 ```
 
 The previous local-development migration chain was consolidated before timestamp-aware transcript
-work. `V1` remains unchanged. Existing clean-V1 databases migrate in place through `V2`; databases
-from the older pre-baseline chain remain outside this compatibility promise. Do not set
-`baseline-on-migrate=true` to disguise an unsupported schema.
+work. `V1` and `V2` remain unchanged. Existing clean-V1 databases migrate in place through `V2`
+and `V3`; databases from the older pre-baseline chain remain outside this compatibility promise.
+Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
 
 `spring.jpa.hibernate.ddl-auto=validate` remains the normal setting, so Flyway creates the schema
 and Hibernate verifies mappings without mutating it.
@@ -27,7 +29,7 @@ and Hibernate verifies mappings without mutating it.
 |---|---|---|
 | `user_accounts` | common identity | server-owned credential/OIDC user identity |
 | `workspaces` | workspace | owner-scoped workspace and default-workspace state |
-| `assets` | asset | product asset metadata, object reference and lifecycle |
+| `assets` | asset | product source identity, optional upload object reference and lifecycle |
 | `processing_jobs` | processing | one durable processing request correlation per asset |
 | `asset_transcript_rows` | asset | canonical ordered transcript snapshot |
 | `outbox_events` | outbox | durable publication intent and recovery state |
@@ -69,10 +71,25 @@ unique constraint that does not exist.
 
 ### `assets`
 
-Assets store `id`, `workspace_id`, filename/title/status, object-storage metadata and creation/
-update metadata. `(storage_bucket, object_key)` is unique. Binary data is never stored in
-PostgreSQL. Asset ownership is inherited through the workspace and enforced by owner-scoped
-application/repository operations.
+Assets store `id`, `workspace_id`, `source_type`, nullable `youtube_video_id`, title/status,
+source-specific metadata and creation/update metadata. `source_type` is required and limited to
+`UPLOAD` or `YOUTUBE`.
+
+- `UPLOAD` requires filename, bucket, object key, content type and a non-negative size; it must not
+  carry a YouTube video ID.
+- `YOUTUBE` requires a trimmed, nonblank video ID of at most 128 characters; upload filename,
+  storage fields, content type, size and ETag must all be null.
+
+`V3` backfills every existing asset to `UPLOAD` before making `source_type` non-null. It does not
+install a runtime default. `(storage_bucket, object_key)` remains unique for retained upload
+objects, while `(workspace_id, youtube_video_id)` prevents duplicate YouTube identity inside one
+workspace. PostgreSQL nullable uniqueness permits any number of upload assets and permits the same
+YouTube video in different workspaces.
+
+Binary data is never stored in PostgreSQL. Asset source identity and lifecycle are Spring product
+truth. FastAPI may later own acquisition execution, but it must not become the authority for
+`source_type` or `youtube_video_id`. Asset ownership is inherited through the workspace and
+enforced by owner-scoped application/repository operations.
 
 ### `processing_jobs`
 
@@ -125,9 +142,11 @@ index does not change product truth.
 
 ## Clean-schema validation
 
-`CleanBaselineMigrationTest` starts from an empty database, migrates to V1, proves timing columns
-are absent, then migrates V1→V2, validates JPA mappings, and exercises valid legacy/zero rows plus
-partial, negative and backwards-timing constraint failures.
+`CleanBaselineMigrationTest` starts from an empty database and migrates V1→V2→V3. It proves that
+V3 preserves and backfills existing upload data, leaves no `source_type` default, accepts both
+valid source shapes, enforces non-negative upload size and rejects mixed shapes. It also verifies
+workspace-scoped YouTube uniqueness, nullable upload identities and the Phase 1 transcript-timing
+constraints. `AssetSourcePersistenceTest` validates JPA round-trips for both source types.
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test

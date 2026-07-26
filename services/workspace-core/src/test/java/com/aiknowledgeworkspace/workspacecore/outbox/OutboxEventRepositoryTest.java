@@ -102,7 +102,7 @@ class OutboxEventRepositoryTest {
                 "user-1",
                 false
         ));
-        assetRepository.save(new Asset(
+        assetRepository.save(Asset.uploaded(
                 assetId,
                 "lecture.mp4",
                 "Lecture",
