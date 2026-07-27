@@ -1,11 +1,13 @@
 package com.aiknowledgeworkspace.workspacecore.asset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.DuplicateYouTubeAssetException;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 import jakarta.persistence.EntityManager;
@@ -95,5 +97,28 @@ class AssetSourcePersistenceTest {
                 .singleElement()
                 .extracting(Asset::getYoutubeVideoId)
                 .isEqualTo("video-id");
+    }
+
+    @Test
+    void workspaceScopedDuplicateRaceIsTranslatedByTheYoutubePersistenceBoundary() {
+        Workspace workspace = workspaceStore.save(new Workspace(
+                UUID.randomUUID(), "Duplicate identity", "owner-1", false
+        ));
+        assetStore.saveYoutube(Asset.youtube(
+                UUID.randomUUID(),
+                "abc_DEF-123",
+                "First",
+                AssetStatus.FAILED,
+                workspace.getId()
+        ));
+
+        assertThatThrownBy(() -> assetStore.saveYoutube(Asset.youtube(
+                UUID.randomUUID(),
+                "abc_DEF-123",
+                "Duplicate",
+                AssetStatus.PROCESSING,
+                workspace.getId()
+        )))
+                .isInstanceOf(DuplicateYouTubeAssetException.class);
     }
 }

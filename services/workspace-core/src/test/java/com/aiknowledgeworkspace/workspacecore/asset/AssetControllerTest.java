@@ -5,6 +5,9 @@ import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetControll
 import com.aiknowledgeworkspace.workspacecore.asset.adapter.in.web.AssetApiExceptionHandler;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidYouTubeUrlException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.DuplicateYouTubeAssetException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetProcessingRetryNotAllowedException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
@@ -21,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,11 +32,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetCommandUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetUploadUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.YouTubeAssetCreationUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetPage;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStatusView;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetSummary;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetUploadResult;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetProcessingResult;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
 import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobStatus;
@@ -60,6 +66,7 @@ class AssetControllerTest {
     private AssetQueryUseCase assetQueries;
     private AssetUploadUseCase assetUpload;
     private AssetCommandUseCase assetCommands;
+    private YouTubeAssetCreationUseCase youtubeAssetCreation;
     private ExplicitIndexingUseCase explicitIndexing;
     private MockMvc mockMvc;
 
@@ -68,8 +75,11 @@ class AssetControllerTest {
         assetQueries = mock(AssetQueryUseCase.class);
         assetUpload = mock(AssetUploadUseCase.class);
         assetCommands = mock(AssetCommandUseCase.class);
+        youtubeAssetCreation = mock(YouTubeAssetCreationUseCase.class);
         explicitIndexing = mock(ExplicitIndexingUseCase.class);
-        AssetController controller = new AssetController(assetQueries, assetUpload, assetCommands, explicitIndexing);
+        AssetController controller = new AssetController(
+                assetQueries, assetUpload, assetCommands, youtubeAssetCreation, explicitIndexing
+        );
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -106,7 +116,8 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$.processingJobId").value(jobId.toString()))
                 .andExpect(jsonPath("$.assetStatus").value("PROCESSING"))
                 .andExpect(jsonPath("$.sourceType").value("UPLOAD"))
-                .andExpect(jsonPath("$.youtubeVideoId").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.youtubeVideoId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.sourceUrl").value(org.hamcrest.Matchers.nullValue()));
 
         verify(assetUpload).upload(argThat(command ->
                 workspaceId.equals(command.workspaceId())
@@ -180,7 +191,8 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$.items[0].assetId").value(assetId.toString()))
                 .andExpect(jsonPath("$.items[0].assetStatus").value("SEARCHABLE"))
                 .andExpect(jsonPath("$.items[0].sourceType").value("UPLOAD"))
-                .andExpect(jsonPath("$.items[0].youtubeVideoId").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.items[0].youtubeVideoId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.items[0].sourceUrl").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
@@ -223,6 +235,7 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("YOUTUBE"))
                 .andExpect(jsonPath("$.youtubeVideoId").value("video-id"))
+                .andExpect(jsonPath("$.sourceUrl").value("https://www.youtube.com/watch?v=video-id"))
                 .andExpect(jsonPath("$.originalFilename").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.contentType").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.sizeBytes").value(org.hamcrest.Matchers.nullValue()));
@@ -233,13 +246,135 @@ class AssetControllerTest {
         UUID assetId = UUID.randomUUID();
         UUID jobId = UUID.randomUUID();
         when(assetQueries.getAssetStatus(assetId)).thenReturn(new AssetStatusView(
-                assetId, jobId, AssetStatus.TRANSCRIPT_READY, ProcessingJobStatus.SUCCEEDED
+                assetId, jobId, AssetStatus.TRANSCRIPT_READY, ProcessingJobStatus.SUCCEEDED, null
         ));
 
         mockMvc.perform(get("/api/assets/{assetId}/status", assetId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assetId").value(assetId.toString()))
                 .andExpect(jsonPath("$.processingJobStatus").value("SUCCEEDED"));
+    }
+
+    @Test
+    void statusExposesOnlyTheSanitizedFailureCode() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        when(assetQueries.getAssetStatus(assetId)).thenReturn(new AssetStatusView(
+                assetId,
+                jobId,
+                AssetStatus.FAILED,
+                ProcessingJobStatus.FAILED,
+                "YOUTUBE_ACQUISITION_TIMEOUT"
+        ));
+
+        mockMvc.perform(get("/api/assets/{assetId}/status", assetId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.failureCode").value("YOUTUBE_ACQUISITION_TIMEOUT"))
+                .andExpect(content().string(not(containsString("stderr"))));
+    }
+
+    @Test
+    void youtubeCreateMapsJsonToTheApplicationBoundaryAndReturnsDerivedSourceUrl() throws Exception {
+        UUID workspaceId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        when(youtubeAssetCreation.create(any())).thenReturn(new AssetProcessingResult(
+                assetId,
+                jobId,
+                AssetStatus.PROCESSING,
+                workspaceId,
+                AssetSourceType.YOUTUBE,
+                "abc_DEF-123"
+        ));
+
+        mockMvc.perform(post("/api/assets/youtube")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "workspaceId": "%s",
+                                  "url": "https://youtu.be/abc_DEF-123?t=42",
+                                  "title": "Lecture"
+                                }
+                                """.formatted(workspaceId)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.assetId").value(assetId.toString()))
+                .andExpect(jsonPath("$.processingJobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.assetStatus").value("PROCESSING"))
+                .andExpect(jsonPath("$.workspaceId").value(workspaceId.toString()))
+                .andExpect(jsonPath("$.sourceType").value("YOUTUBE"))
+                .andExpect(jsonPath("$.youtubeVideoId").value("abc_DEF-123"))
+                .andExpect(jsonPath("$.sourceUrl")
+                        .value("https://www.youtube.com/watch?v=abc_DEF-123"));
+
+        verify(youtubeAssetCreation).create(argThat(command ->
+                workspaceId.equals(command.workspaceId())
+                        && "https://youtu.be/abc_DEF-123?t=42".equals(command.url())
+                        && "Lecture".equals(command.requestedTitle())
+        ));
+    }
+
+    @Test
+    void youtubeCreateMapsInvalidAndDuplicateErrorsToStableCodes() throws Exception {
+        when(youtubeAssetCreation.create(any()))
+                .thenThrow(new InvalidYouTubeUrlException("A supported public YouTube HTTPS URL is required"))
+                .thenThrow(new DuplicateYouTubeAssetException());
+
+        mockMvc.perform(post("/api/assets/youtube")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://example.invalid/video\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_YOUTUBE_URL"));
+
+        mockMvc.perform(post("/api/assets/youtube")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://youtu.be/abc_DEF-123\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_YOUTUBE_ASSET"))
+                .andExpect(content().string(not(containsString("uk_assets_workspace_youtube_video"))));
+    }
+
+    @Test
+    void retryReturnsAcceptedWithSourceSpecificMetadata() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        when(assetCommands.retryProcessing(assetId)).thenReturn(new AssetProcessingResult(
+                assetId,
+                jobId,
+                AssetStatus.PROCESSING,
+                workspaceId,
+                AssetSourceType.YOUTUBE,
+                "abc_DEF-123"
+        ));
+
+        mockMvc.perform(post("/api/assets/{assetId}/retry-processing", assetId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.processingJobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.assetStatus").value("PROCESSING"))
+                .andExpect(jsonPath("$.sourceType").value("YOUTUBE"))
+                .andExpect(jsonPath("$.sourceUrl")
+                        .value("https://www.youtube.com/watch?v=abc_DEF-123"));
+    }
+
+    @Test
+    void retryConflictUsesTheStablePublicErrorCode() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetCommands.retryProcessing(assetId))
+                .thenThrow(new AssetProcessingRetryNotAllowedException());
+
+        mockMvc.perform(post("/api/assets/{assetId}/retry-processing", assetId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ASSET_PROCESSING_RETRY_NOT_ALLOWED"));
+    }
+
+    @Test
+    void unauthorizedRetryUsesTheExistingNotFoundSemantics() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        when(assetCommands.retryProcessing(assetId)).thenThrow(new AssetNotFoundException());
+
+        mockMvc.perform(post("/api/assets/{assetId}/retry-processing", assetId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"));
     }
 
     @Test

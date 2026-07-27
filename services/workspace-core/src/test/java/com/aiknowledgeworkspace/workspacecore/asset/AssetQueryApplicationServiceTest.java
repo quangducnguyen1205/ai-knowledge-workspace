@@ -29,6 +29,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,7 +73,7 @@ class AssetQueryApplicationServiceTest {
         AssetStatusView result = service.getAssetStatus(assetId);
 
         assertThat(result).isEqualTo(new AssetStatusView(
-                assetId, jobId, AssetStatus.TRANSCRIPT_READY, ProcessingJobStatus.SUCCEEDED
+                assetId, jobId, AssetStatus.TRANSCRIPT_READY, ProcessingJobStatus.SUCCEEDED, null
         ));
         verifyNoInteractions(transcripts);
     }
@@ -87,6 +89,55 @@ class AssetQueryApplicationServiceTest {
 
         assertThatThrownBy(() -> service.getAsset(assetId))
                 .isInstanceOf(AssetNotFoundException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "YOUTUBE_UNAVAILABLE",
+            "YOUTUBE_LIVE_NOT_SUPPORTED",
+            "YOUTUBE_DURATION_LIMIT_EXCEEDED",
+            "YOUTUBE_SIZE_LIMIT_EXCEEDED",
+            "YOUTUBE_ACQUISITION_TIMEOUT",
+            "YOUTUBE_ACQUISITION_FAILED"
+    })
+    void failedStatusSurfacesTheSupportedSafeIntegrationFailureCodes(String failureCode) {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, AssetStatus.FAILED, Instant.now());
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+        when(processingRequests.findByAssetId(assetId)).thenReturn(Optional.of(
+                new ProcessingJobView(
+                        jobId,
+                        assetId,
+                        ProcessingJobStatus.FAILED,
+                        failureCode.toLowerCase(java.util.Locale.ROOT)
+                )
+        ));
+
+        AssetStatusView result = service.getAssetStatus(assetId);
+
+        assertThat(result.failureCode()).isEqualTo(failureCode);
+    }
+
+    @Test
+    void failedStatusDoesNotExposeUnsafeUpstreamDiagnosticText() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, AssetStatus.FAILED, Instant.now());
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+        when(processingRequests.findByAssetId(assetId)).thenReturn(Optional.of(
+                new ProcessingJobView(
+                        UUID.randomUUID(),
+                        assetId,
+                        ProcessingJobStatus.FAILED,
+                        "provider stderr with raw url"
+                )
+        ));
+
+        assertThat(service.getAssetStatus(assetId).failureCode()).isEqualTo("PROCESSING_FAILED");
     }
 
     @Test

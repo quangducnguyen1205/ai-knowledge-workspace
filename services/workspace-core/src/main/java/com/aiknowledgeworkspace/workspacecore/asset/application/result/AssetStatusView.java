@@ -8,6 +8,7 @@ public record AssetStatusView(
         UUID assetId,
         UUID processingJobId,
         AssetStatus assetStatus,
-        ProcessingJobStatus processingStatus
+        ProcessingJobStatus processingStatus,
+        String failureCode
 ) {
 }

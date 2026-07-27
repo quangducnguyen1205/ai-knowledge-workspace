@@ -13,6 +13,7 @@ public record AssetSummaryResponse(
         UUID workspaceId,
         AssetSourceType sourceType,
         String youtubeVideoId,
+        String sourceUrl,
         Instant createdAt
 ) {
 }

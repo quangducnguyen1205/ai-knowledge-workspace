@@ -4,6 +4,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.YouTubeUrlPolicy;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -15,6 +16,7 @@ public record AssetResponse(
         UUID workspaceId,
         AssetSourceType sourceType,
         String youtubeVideoId,
+        String sourceUrl,
         String contentType,
         Long sizeBytes,
         Instant createdAt,
@@ -29,6 +31,7 @@ public record AssetResponse(
                 view.workspaceId(),
                 view.sourceType(),
                 view.youtubeVideoId(),
+                YouTubeUrlPolicy.canonicalUrl(view.youtubeVideoId()),
                 view.contentType(),
                 view.sizeBytes(),
                 view.createdAt(),

@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -44,6 +46,7 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
             .thenComparing(Asset::getId, Comparator.reverseOrder());
     private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
     private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
+    private static final Pattern SAFE_FAILURE_CODE = Pattern.compile("[A-Z0-9_.-]{1,64}");
 
     private final AssetStore assetStore;
     private final ProcessingRequestUseCase processingRequestUseCase;
@@ -161,8 +164,21 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
 
     private AssetStatusView statusView(Asset asset, ProcessingJobView processingJob) {
         return new AssetStatusView(
-                asset.getId(), processingJob.id(), asset.getStatus(), processingJob.status()
+                asset.getId(),
+                processingJob.id(),
+                asset.getStatus(),
+                processingJob.status(),
+                failureCode(processingJob)
         );
+    }
+
+    private String failureCode(ProcessingJobView processingJob) {
+        if (processingJob.status() != ProcessingJobStatus.FAILED
+                || !org.springframework.util.StringUtils.hasText(processingJob.rawUpstreamTaskState())) {
+            return null;
+        }
+        String candidate = processingJob.rawUpstreamTaskState().trim().toUpperCase(Locale.ROOT);
+        return SAFE_FAILURE_CODE.matcher(candidate).matches() ? candidate : "PROCESSING_FAILED";
     }
 
     private int resolveTranscriptContextWindow(Integer window) {

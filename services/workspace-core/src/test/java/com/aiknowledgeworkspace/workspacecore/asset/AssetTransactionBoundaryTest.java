@@ -43,6 +43,31 @@ class AssetTransactionBoundaryTest {
     }
 
     @Test
+    void youtubeCreationAndProcessingRetryEachPersistProductTruthAndOutboxInOneTransaction() throws Exception {
+        Class<?> creationClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service.YouTubeAssetCreationTransaction"
+        );
+        Method create = creationClass.getDeclaredMethod(
+                "persist",
+                com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccess.class,
+                String.class,
+                String.class
+        );
+        Class<?> retryClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetProcessingRetryTransaction"
+        );
+        Method retry = retryClass.getDeclaredMethod(
+                "retry",
+                java.util.UUID.class,
+                java.util.UUID.class,
+                String.class
+        );
+
+        assertThat(transactional(create)).isNotNull();
+        assertThat(transactional(retry)).isNotNull();
+    }
+
+    @Test
     void canonicalReplacementAndDatabaseMutationsAreExplicitTransactions() throws Exception {
         Method replace = AssetTranscriptSnapshotService.class.getMethod(
                 "replaceCanonicalSnapshot", Asset.class, java.util.List.class

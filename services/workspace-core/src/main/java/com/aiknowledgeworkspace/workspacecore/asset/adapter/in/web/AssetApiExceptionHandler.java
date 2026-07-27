@@ -9,6 +9,9 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.Transc
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidAssetTitleException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidUploadRequestException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidYouTubeUrlException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.DuplicateYouTubeAssetException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetProcessingRetryNotAllowedException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.TranscriptUnavailableException;
 
@@ -52,6 +55,27 @@ public class AssetApiExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleInvalidUploadRequest(InvalidUploadRequestException exception) {
         return PublicApiErrorResponses.clientError(
                 HttpStatus.BAD_REQUEST, "INVALID_UPLOAD_FILE", exception.getMessage(), exception
+        );
+    }
+
+    @ExceptionHandler(InvalidYouTubeUrlException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidYouTubeUrl(InvalidYouTubeUrlException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_YOUTUBE_URL", exception.getMessage(), exception
+        );
+    }
+
+    @ExceptionHandler(DuplicateYouTubeAssetException.class)
+    ResponseEntity<ApiErrorResponse> handleDuplicateYouTubeAsset(DuplicateYouTubeAssetException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, "DUPLICATE_YOUTUBE_ASSET", exception.getMessage(), exception
+        );
+    }
+
+    @ExceptionHandler(AssetProcessingRetryNotAllowedException.class)
+    ResponseEntity<ApiErrorResponse> handleRetryNotAllowed(AssetProcessingRetryNotAllowedException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.CONFLICT, "ASSET_PROCESSING_RETRY_NOT_ALLOWED", exception.getMessage(), exception
         );
     }
 

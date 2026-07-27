@@ -6,9 +6,12 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.Invali
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetCommandUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetQueryApplicationService;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetProcessingResult;
 import com.aiknowledgeworkspace.workspacecore.search.api.AssetSearchMaintenanceUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.api.ObjectStorageUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccess;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,17 +25,23 @@ public class AssetCommandApplicationService implements AssetCommandUseCase {
     private final AssetMutationTransaction mutationTransaction;
     private final AssetSearchMaintenanceUseCase searchMaintenance;
     private final ObjectStorageUseCase objectStorage;
+    private final WorkspaceAccessUseCase workspaceAccess;
+    private final AssetProcessingRetryTransaction retryTransaction;
 
     public AssetCommandApplicationService(
             AssetQueryApplicationService assetQueryService,
             AssetMutationTransaction mutationTransaction,
             AssetSearchMaintenanceUseCase searchMaintenance,
-            ObjectStorageUseCase objectStorage
+            ObjectStorageUseCase objectStorage,
+            WorkspaceAccessUseCase workspaceAccess,
+            AssetProcessingRetryTransaction retryTransaction
     ) {
         this.assetQueryService = assetQueryService;
         this.mutationTransaction = mutationTransaction;
         this.searchMaintenance = searchMaintenance;
         this.objectStorage = objectStorage;
+        this.workspaceAccess = workspaceAccess;
+        this.retryTransaction = retryTransaction;
     }
 
     @Override
@@ -54,6 +63,19 @@ public class AssetCommandApplicationService implements AssetCommandUseCase {
         searchMaintenance.deleteTranscriptRows(assetId);
         deleteStoredObject(asset);
         mutationTransaction.delete(asset);
+    }
+
+    @Override
+    public AssetProcessingResult retryProcessing(UUID assetId) {
+        Asset authorizedAsset = assetQueryService.loadAuthorizedAsset(assetId);
+        WorkspaceAccess authorizedWorkspace = workspaceAccess.resolveWorkspaceOrDefault(
+                authorizedAsset.getWorkspaceId()
+        );
+        return retryTransaction.retry(
+                authorizedAsset.getId(),
+                authorizedWorkspace.workspaceId(),
+                authorizedWorkspace.ownerId()
+        );
     }
 
     private String normalizeTitle(String requestedTitle) {

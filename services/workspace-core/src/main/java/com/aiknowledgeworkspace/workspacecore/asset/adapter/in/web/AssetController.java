@@ -7,10 +7,13 @@ import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetCommandUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetUploadUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.YouTubeAssetCreationUseCase;
+import com.aiknowledgeworkspace.workspacecore.asset.application.command.CreateYouTubeAssetCommand;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetPage;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetStatusView;
 import com.aiknowledgeworkspace.workspacecore.asset.application.command.AssetUploadCommand;
 import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetUploadResult;
+import com.aiknowledgeworkspace.workspacecore.asset.application.service.YouTubeUrlPolicy;
 
 import java.util.List;
 import java.util.UUID;
@@ -37,17 +40,20 @@ public class AssetController {
     private final AssetQueryUseCase assetQueries;
     private final AssetUploadUseCase assetUpload;
     private final AssetCommandUseCase assetCommands;
+    private final YouTubeAssetCreationUseCase youtubeAssetCreation;
     private final ExplicitIndexingUseCase explicitIndexingApplication;
 
     public AssetController(
             AssetQueryUseCase assetQueries,
             AssetUploadUseCase assetUpload,
             AssetCommandUseCase assetCommands,
+            YouTubeAssetCreationUseCase youtubeAssetCreation,
             ExplicitIndexingUseCase explicitIndexingApplication
     ) {
         this.assetQueries = assetQueries;
         this.assetUpload = assetUpload;
         this.assetCommands = assetCommands;
+        this.youtubeAssetCreation = youtubeAssetCreation;
         this.explicitIndexingApplication = explicitIndexingApplication;
     }
 
@@ -68,6 +74,7 @@ public class AssetController {
                                 item.workspaceId(),
                                 item.sourceType(),
                                 item.youtubeVideoId(),
+                                YouTubeUrlPolicy.canonicalUrl(item.youtubeVideoId()),
                                 item.createdAt()
                         ))
                         .toList(),
@@ -102,7 +109,11 @@ public class AssetController {
     public AssetStatusResponse getAssetStatus(@PathVariable UUID assetId) {
         AssetStatusView result = assetQueries.getAssetStatus(assetId);
         return new AssetStatusResponse(
-                result.assetId(), result.processingJobId(), result.assetStatus(), result.processingStatus()
+                result.assetId(),
+                result.processingJobId(),
+                result.assetStatus(),
+                result.processingStatus(),
+                result.failureCode()
         );
     }
 
@@ -163,8 +174,28 @@ public class AssetController {
                 result.status(),
                 result.workspaceId(),
                 result.sourceType(),
-                result.youtubeVideoId()
+                result.youtubeVideoId(),
+                null
         );
         return ResponseEntity.accepted().body(response);
+    }
+
+    @PostMapping(value = "/youtube", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AssetProcessingResponse> createYouTubeAsset(
+            @RequestBody(required = false) CreateYouTubeAssetRequest request
+    ) {
+        var result = youtubeAssetCreation.create(new CreateYouTubeAssetCommand(
+                request == null ? null : request.workspaceId(),
+                request == null ? null : request.url(),
+                request == null ? null : request.title()
+        ));
+        return ResponseEntity.accepted().body(AssetProcessingResponse.from(result));
+    }
+
+    @PostMapping("/{assetId}/retry-processing")
+    public ResponseEntity<AssetProcessingResponse> retryProcessing(@PathVariable UUID assetId) {
+        return ResponseEntity.accepted().body(AssetProcessingResponse.from(
+                assetCommands.retryProcessing(assetId)
+        ));
     }
 }

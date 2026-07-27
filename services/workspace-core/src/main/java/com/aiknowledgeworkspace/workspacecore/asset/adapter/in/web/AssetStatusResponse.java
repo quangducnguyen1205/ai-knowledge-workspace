@@ -9,6 +9,7 @@ public record AssetStatusResponse(
         UUID assetId,
         UUID processingJobId,
         AssetStatus assetStatus,
-        ProcessingJobStatus processingJobStatus
+        ProcessingJobStatus processingJobStatus,
+        String failureCode
 ) {
 }

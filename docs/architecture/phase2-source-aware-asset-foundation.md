@@ -1,6 +1,7 @@
 # Phase 2 — Source-Aware Asset Foundation
 
-Status: Slice 1 implemented in Spring product core. Phase 2 is not complete.
+Status: Spring Slice 3 implemented. Frontend entry and cross-repository runtime acceptance remain;
+Phase 2 is not complete.
 
 ## Scope delivered
 
@@ -64,15 +65,21 @@ Required cleanup failure still prevents deletion of PostgreSQL product state.
 
 ## Explicitly not delivered
 
-Slice 1 does not add:
+The Spring product core now additionally delivers:
 
-- a public YouTube creation endpoint or URL normalizer;
-- canonical URL persistence or a `sourceUrl` response;
-- Kafka V2 production or routing;
-- FastAPI acquisition, `yt-dlp` or retry/lease behavior;
+- authoritative allowlisted YouTube URL normalization and `POST /api/assets/youtube`;
+- derived, non-persisted `sourceUrl` in public Asset read/create/retry models;
+- exact YouTube processing request V2 production and version-aware topic routing;
+- authorized failed-Asset retry using a fresh request ID and source-appropriate V1/V2 intent;
+- late-result protection through the existing current-request correlation;
+- sanitized nullable processing `failureCode` exposure from the existing ProcessingJob state.
+
+Still not delivered by this Spring slice:
+
 - frontend source selection;
+- cross-repository runtime acceptance of a successful live YouTube acquisition;
 - player, seeking or synchronization behavior.
 
-The next Phase 2 work remains the retry-safe FastAPI lease foundation, YouTube V2 processing and
-acquisition, Spring V2 production plus the public YouTube endpoint, frontend entry, and
-cross-repository runtime acceptance.
+FastAPI V2 must be deployed before Spring publishes V2. Upload production remains request V1 and
+result V1; YouTube production uses request V2 and the same result V1. Phase 2 is not complete until
+frontend source entry and cross-repository runtime acceptance are finished.

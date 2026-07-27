@@ -22,6 +22,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.result.AssetView
 import com.aiknowledgeworkspace.workspacecore.search.api.AssetSearchMaintenanceUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.api.ObjectStorageUseCase;
 import com.aiknowledgeworkspace.workspacecore.storage.api.StoredObjectReference;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
+import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccess;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,12 @@ class AssetCommandApplicationServiceTest {
     @Mock
     private ObjectStorageUseCase objectStorage;
 
+    @Mock
+    private WorkspaceAccessUseCase workspaceAccess;
+
+    @Mock
+    private AssetProcessingRetryTransaction retryTransaction;
+
     private AssetCommandApplicationService service;
 
     @BeforeEach
@@ -53,7 +61,9 @@ class AssetCommandApplicationServiceTest {
                 assetQueryService,
                 mutationTransaction,
                 searchMaintenance,
-                objectStorage
+                objectStorage,
+                workspaceAccess,
+                retryTransaction
         );
     }
 
@@ -175,6 +185,25 @@ class AssetCommandApplicationServiceTest {
 
         verifyNoInteractions(objectStorage);
         verify(mutationTransaction, never()).delete(asset);
+    }
+
+    @Test
+    void retryUsesTheExistingOwnerScopedLookupBeforeEnteringTheRetryTransaction() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = Asset.youtube(
+                assetId, "abc_DEF-123", "Asset", AssetStatus.FAILED, workspaceId
+        );
+        WorkspaceAccess authorizedWorkspace = new WorkspaceAccess(workspaceId, "owner-1");
+        when(assetQueryService.loadAuthorizedAsset(assetId)).thenReturn(asset);
+        when(workspaceAccess.resolveWorkspaceOrDefault(workspaceId)).thenReturn(authorizedWorkspace);
+
+        service.retryProcessing(assetId);
+
+        InOrder order = inOrder(assetQueryService, workspaceAccess, retryTransaction);
+        order.verify(assetQueryService).loadAuthorizedAsset(assetId);
+        order.verify(workspaceAccess).resolveWorkspaceOrDefault(workspaceId);
+        order.verify(retryTransaction).retry(assetId, workspaceId, "owner-1");
     }
 
     private Asset uploadedAsset(UUID assetId, String title, AssetStatus status) {

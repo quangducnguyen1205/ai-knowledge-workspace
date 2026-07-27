@@ -9,11 +9,17 @@ public interface AssetStore {
 
     Optional<Asset> findById(UUID assetId);
 
+    Optional<Asset> findByIdForUpdate(UUID assetId);
+
     List<Asset> findByWorkspaceId(UUID workspaceId);
 
     long countByWorkspaceId(UUID workspaceId);
 
+    boolean existsByWorkspaceIdAndYoutubeVideoId(UUID workspaceId, String youtubeVideoId);
+
     Asset save(Asset asset);
+
+    Asset saveYoutube(Asset asset);
 
     void delete(Asset asset);
 }

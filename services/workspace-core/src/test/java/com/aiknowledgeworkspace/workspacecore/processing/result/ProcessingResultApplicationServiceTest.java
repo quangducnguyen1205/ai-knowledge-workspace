@@ -397,6 +397,73 @@ class ProcessingResultApplicationServiceTest {
     }
 
     @Test
+    void lateResultFromAttemptACannotMutateRetriedAttemptBAndAttemptBCanComplete() {
+        UUID requestA = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, requestA);
+        processingResultEventHandler.handle(failedEvent(
+                UUID.randomUUID(),
+                asset.getId(),
+                requestA,
+                requestA,
+                "YOUTUBE_ACQUISITION_TIMEOUT",
+                "safe failure"
+        ));
+
+        UUID requestB = UUID.randomUUID();
+        Asset retriedAsset = assetRepository.findById(asset.getId()).orElseThrow();
+        retriedAsset.setStatus(AssetStatus.PROCESSING);
+        assetRepository.save(retriedAsset);
+        ProcessingJob retriedJob = processingJobRepository.findByAssetId(asset.getId()).orElseThrow();
+        retriedJob.setProcessingJobStatus(ProcessingJobStatus.PENDING);
+        retriedJob.setRawUpstreamTaskState("processing_request_pending");
+        retriedJob.setProcessingRequestEventId(requestB);
+        processingJobRepository.save(retriedJob);
+
+        ProcessingResultHandleResult lateA = processingResultEventHandler.handle(transcriptReadyEvent(
+                UUID.randomUUID(), asset.getId(), requestA, requestA
+        ));
+
+        assertThat(lateA.applied()).isFalse();
+        assertThat(lateA.status()).isEqualTo(ConsumedProcessingResultEventStatus.FAILED);
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+        ProcessingJob afterLateA = processingJobRepository.findByAssetId(asset.getId()).orElseThrow();
+        assertThat(afterLateA.getProcessingRequestEventId()).isEqualTo(requestB);
+        assertThat(afterLateA.getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
+        verify(transcriptArtifactGateway, never()).loadRows(requestA);
+
+        ProcessingResultHandleResult lateFailureA = processingResultEventHandler.handle(failedEvent(
+                UUID.randomUUID(),
+                asset.getId(),
+                requestA,
+                requestA,
+                "YOUTUBE_UNAVAILABLE",
+                "late failure"
+        ));
+
+        assertThat(lateFailureA.applied()).isFalse();
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.PROCESSING);
+        ProcessingJob afterLateFailureA = processingJobRepository.findByAssetId(asset.getId()).orElseThrow();
+        assertThat(afterLateFailureA.getProcessingRequestEventId()).isEqualTo(requestB);
+        assertThat(afterLateFailureA.getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.PENDING);
+
+        when(transcriptArtifactGateway.loadRows(requestB)).thenReturn(List.of(
+                transcriptRow("row-b", 0, 0L, 1200L, "Current attempt")
+        ));
+        ProcessingResultHandleResult resultB = processingResultEventHandler.handle(transcriptReadyEvent(
+                UUID.randomUUID(), asset.getId(), requestB, requestB
+        ));
+
+        assertThat(resultB.applied()).isTrue();
+        assertThat(assetRepository.findById(asset.getId()).orElseThrow().getStatus())
+                .isEqualTo(AssetStatus.TRANSCRIPT_READY);
+        ProcessingJob completedB = processingJobRepository.findByAssetId(asset.getId()).orElseThrow();
+        assertThat(completedB.getProcessingRequestEventId()).isEqualTo(requestB);
+        assertThat(completedB.getProcessingJobStatus()).isEqualTo(ProcessingJobStatus.SUCCEEDED);
+    }
+
+    @Test
     void malformedOrUnsupportedEventsAreRejectedWithoutConsumptionRecord() {
         UUID eventId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();

@@ -304,6 +304,7 @@ Response:
     - `workspaceId`
     - `sourceType`
     - `youtubeVideoId` nullable
+    - `sourceUrl` nullable; derived for YouTube assets
     - `createdAt`
   - `page`
   - `size`
@@ -353,6 +354,7 @@ Response:
   - `workspaceId`
   - `sourceType`
   - `youtubeVideoId` nullable
+  - `sourceUrl` nullable
 
 Current behavior:
 
@@ -366,7 +368,7 @@ Current behavior:
   processing/upload path.
 - Spring associates the created asset with one workspace in PostgreSQL product state.
 - The existing endpoint always creates an `UPLOAD` asset. Its additive source metadata is
-  `sourceType = "UPLOAD"` and `youtubeVideoId = null`.
+  `sourceType = "UPLOAD"`, `youtubeVideoId = null`, and `sourceUrl = null`.
 - If object storage succeeds but database persistence fails, Spring attempts best-effort object
   cleanup and does not intentionally leave an asset row behind.
 - Internal processing correlation is not returned to the client beyond `processingJobId`.
@@ -380,6 +382,59 @@ Common failure cases:
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
 - HTTP `502` with `code = "OBJECT_STORAGE_ERROR"` if MinIO/S3-compatible object storage fails
 - HTTP `502` or `504` if upstream FastAPI fails
+
+### `POST /api/assets/youtube`
+
+Creates one YouTube-backed product Asset and queues processing without downloading media in
+Spring.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `workspaceId` optional
+  - `url` required
+  - `title` optional
+
+Accepted URLs are HTTPS-only `youtube.com`, `www.youtube.com`, `m.youtube.com` watch URLs,
+`youtu.be/{id}`, and `www.youtube.com/shorts/{id}`. Spring extracts exactly one 11-character
+`[A-Za-z0-9_-]` video ID. Time, fragment, tracking and watch-URL playlist parameters do not become
+product identity. Playlist-only, channel, handle, search, embed, live-path, arbitrary-host,
+userinfo and custom-port URLs are rejected.
+
+Response:
+
+- HTTP `202`
+- Body:
+  - `assetId`
+  - `processingJobId`
+  - `assetStatus = "PROCESSING"`
+  - `workspaceId`
+  - `sourceType = "YOUTUBE"`
+  - `youtubeVideoId`
+  - `sourceUrl`, derived as `https://www.youtube.com/watch?v={youtubeVideoId}`
+
+Current behavior:
+
+- Workspace resolution and ownership authorization run before normalization.
+- Spring uses a trimmed caller title or deterministic fallback `YouTube video {videoId}`; it does
+  not call YouTube for metadata.
+- One transaction persists `Asset(YOUTUBE)`, the one-per-asset `ProcessingJob(PENDING)`, and a V2
+  outbox intent. Kafka publication remains outside that transaction.
+- The V2 request goes only to `asset.processing.requested.v2`; upload requests remain V1.
+- A video ID is unique inside one workspace. A failed Asset still owns that identity and must use
+  the retry endpoint. The same video may exist in another workspace.
+- Submitted and canonical URLs are not persisted. `sourceUrl` is derived from the stored ID.
+- FastAPI V2 consumers must be deployed before Spring V2 request relay is enabled.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_YOUTUBE_URL"` for an unsupported or malformed URL
+- HTTP `400` with `code = "INVALID_ASSET_TITLE"` when a provided normalized title exceeds the
+  current maximum
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` for an absent or non-owned workspace
+- HTTP `409` with `code = "DUPLICATE_YOUTUBE_ASSET"` when the normalized video already exists in
+  the workspace
 
 All asset-by-id endpoints below are ownership-aware through the asset's workspace.
 Spring uses the same ownership-safe HTTP `404` when an asset does not exist or is not owned by the current user.
@@ -399,6 +454,7 @@ Response:
   - `workspaceId`
   - `sourceType`
   - `youtubeVideoId` nullable
+  - `sourceUrl` nullable
   - `contentType` nullable for non-upload sources
   - `sizeBytes` nullable for non-upload sources
   - `createdAt`
@@ -407,7 +463,8 @@ Response:
 Current behavior:
 
 - This remains a simple product-owned asset read endpoint.
-- Source metadata is additive. This slice does not expose a derived `sourceUrl`.
+- Source metadata is additive. `sourceUrl` is null for uploads and is derived from the stored
+  YouTube video ID; it is never persisted.
 - It is useful for debugging and local inspection.
 - Assets without a workspace association are outside the normal Project3 product model and are not exposed through this endpoint.
 
@@ -491,17 +548,52 @@ Response:
   - `processingJobId`
   - `assetStatus`
   - `processingJobStatus`
+  - `failureCode` nullable
 
 Current behavior:
 
 - Status is asset-centric and read from PostgreSQL product state.
 - The query is side-effect free for terminal and non-terminal jobs. Result listeners, not GET
   requests, apply processing state changes.
+- `failureCode` is present only for a failed processing job. Spring surfaces a bounded safe code,
+  including the supported `YOUTUBE_*` acquisition codes, and never provider stderr, raw URLs,
+  HTML or stack traces.
 
 Common failure cases:
 
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 - HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
+
+### `POST /api/assets/{assetId}/retry-processing`
+
+Creates a fresh processing attempt for an owned failed Asset without creating another Asset.
+
+Response:
+
+- HTTP `202`
+- Body:
+  - `assetId`
+  - `processingJobId`
+  - `assetStatus = "PROCESSING"`
+  - `workspaceId`
+  - `sourceType`
+  - `youtubeVideoId` nullable
+  - `sourceUrl` nullable and derived
+
+Current behavior:
+
+- Only `Asset.status = FAILED` is retryable.
+- The existing one-per-asset ProcessingJob is reset with a new processing request event ID.
+- Upload retry emits the unchanged request V1; YouTube retry emits request V2.
+- Asset state, job reset and the source-appropriate outbox intent commit atomically.
+- Results correlated to an older request ID cannot mutate the current attempt.
+- Upload storage identity and YouTube identity are unchanged.
+
+Common failure cases:
+
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current
+  user
+- HTTP `409` with `code = "ASSET_PROCESSING_RETRY_NOT_ALLOWED"` unless the Asset is failed
 
 ### `GET /api/assets/{assetId}/transcript`
 

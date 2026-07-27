@@ -57,7 +57,8 @@ If a complete Project3 integration reset is required, inventory and reset only:
 - Spring `workspace_core` PostgreSQL state;
 - Elasticsearch index `asset-transcript-rows` (or the configured project index);
 - MinIO bucket `workspace-media` (or the configured project bucket);
-- Kafka topics `asset.processing.requested.v1`, `asset.processing.result.v1`, and
+- Kafka topics `asset.processing.requested.v1`, `asset.processing.requested.v2`,
+  `asset.processing.result.v1`, and
   `asset.indexing.requested.v1`;
 - related FastAPI/Redis state only when its repository runbook confirms the exact project scope.
 
@@ -76,6 +77,10 @@ The coherent profile enables request relay, Kafka publication/result listening, 
 indexing request/relay/listening, bounded outbox recovery and legacy-session local authentication.
 The profile validator fails startup if one of these controls is accidentally disabled.
 
+Deploy the FastAPI consumer that accepts `asset.processing.requested.v2` before enabling this
+Spring producer against a shared runtime. Upload processing continues to use V1. YouTube creation
+and retry use V2, while both source types continue to consume result V1.
+
 ## Normal processing flow
 
 ```text
@@ -87,6 +92,16 @@ multipart upload to Spring
 -> Spring inbox applies canonical transcript atomically
 -> indexing outbox/relay/listener writes Elasticsearch
 -> asset becomes SEARCHABLE
+```
+
+The YouTube entry converges after product intent creation:
+
+```text
+authorized YouTube URL create in Spring
+-> one DB transaction writes YouTube asset + processing job + V2 processing-request outbox
+-> Spring relay publishes asset.processing.requested.v2
+-> FastAPI acquires/processes media and publishes the unchanged result V1
+-> the canonical transcript, indexing, search and assistant path remains source-neutral
 ```
 
 Spring does not call a direct FastAPI upload/status endpoint. GET status and transcript operations

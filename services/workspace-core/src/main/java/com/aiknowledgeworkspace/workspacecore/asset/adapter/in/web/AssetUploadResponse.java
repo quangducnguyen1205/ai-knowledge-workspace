@@ -11,6 +11,7 @@ public record AssetUploadResponse(
         AssetStatus assetStatus,
         UUID workspaceId,
         AssetSourceType sourceType,
-        String youtubeVideoId
+        String youtubeVideoId,
+        String sourceUrl
 ) {
 }
