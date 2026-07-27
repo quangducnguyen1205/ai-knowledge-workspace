@@ -3,6 +3,8 @@ package com.aiknowledgeworkspace.workspacecore.processing.adapter.out.messaging;
 import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestCommand;
+import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestedEventContract;
 import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingRequestEventFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,6 +45,28 @@ public class ProcessingRequestedEventCodec implements ProcessingRequestEventFact
                 command.contentType(),
                 command.sizeBytes()
         ));
+    }
+
+    @Override
+    public OutboxDraft create(YouTubeProcessingRequestCommand command) {
+        Instant requestedAt = Instant.now(clock);
+        YouTubeProcessingRequestedPayload payload = new YouTubeProcessingRequestedPayload(
+                command.assetId(),
+                command.workspaceId(),
+                command.ownerId(),
+                YouTubeProcessingRequestedEventContract.SOURCE_TYPE,
+                command.youtubeVideoId(),
+                requestedAt.toString()
+        );
+        return new OutboxDraft(
+                eventIdSupplier.get(),
+                YouTubeProcessingRequestedEventContract.EVENT_TYPE,
+                YouTubeProcessingRequestedEventContract.EVENT_VERSION,
+                YouTubeProcessingRequestedEventContract.AGGREGATE_TYPE,
+                command.assetId(),
+                command.assetId().toString(),
+                serialize(payload)
+        );
     }
 
     public OutboxDraft encode(ProcessingRequestedEventData data) {
@@ -86,6 +110,16 @@ public class ProcessingRequestedEventCodec implements ProcessingRequestEventFact
             String contentType,
             long sizeBytes,
             Instant requestedAt
+    ) {
+    }
+
+    private record YouTubeProcessingRequestedPayload(
+            UUID assetId,
+            UUID workspaceId,
+            String ownerId,
+            String sourceType,
+            String youtubeVideoId,
+            String requestedAt
     ) {
     }
 }

@@ -9,6 +9,7 @@ public class WorkspaceKafkaProperties {
     private boolean enabled = false;
     private String bootstrapServers = "localhost:9092";
     private String processingRequestedTopic = "asset.processing.requested.v1";
+    private String processingRequestedV2Topic = "asset.processing.requested.v2";
     private String processingResultTopic = "asset.processing.result.v1";
     private String indexingRequestedTopic = "asset.indexing.requested.v1";
     private boolean processingResultListenerEnabled = false;
@@ -42,6 +43,14 @@ public class WorkspaceKafkaProperties {
 
     public void setProcessingRequestedTopic(String processingRequestedTopic) {
         this.processingRequestedTopic = processingRequestedTopic;
+    }
+
+    public String getProcessingRequestedV2Topic() {
+        return processingRequestedV2Topic;
+    }
+
+    public void setProcessingRequestedV2Topic(String processingRequestedV2Topic) {
+        this.processingRequestedV2Topic = processingRequestedV2Topic;
     }
 
     public String getProcessingResultTopic() {

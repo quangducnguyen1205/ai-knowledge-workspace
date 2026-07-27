@@ -16,6 +16,8 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestedEventContract;
+import com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.messaging.PermanentOutboxPublishException;
 import com.aiknowledgeworkspace.workspacecore.search.application.model.IndexingRequestedEventContract;
 import java.time.Duration;
 import java.time.Instant;
@@ -105,6 +107,79 @@ class KafkaOutboxMessagePublisherTest {
     }
 
     @Test
+    void publishesStrictV2EnvelopeToItsOwnTopicWithoutTheInternalEventKeyField() throws Exception {
+        KafkaOutboxMessagePublisher.KafkaSender kafkaSender = mock(KafkaOutboxMessagePublisher.KafkaSender.class);
+        when(kafkaSender.send(eq("asset.processing.requested.v2"), eq("asset-key"), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        WorkspaceKafkaProperties properties = kafkaProperties();
+        properties.setProcessingRequestedV2Topic("asset.processing.requested.v2");
+        KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(properties, objectMapper, kafkaSender);
+        OutboxEvent event = youtubeV2Event();
+
+        publisher.publish(event);
+
+        ArgumentCaptor<String> envelopeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(kafkaSender).send(eq("asset.processing.requested.v2"), eq("asset-key"), envelopeCaptor.capture());
+        JsonNode envelope = objectMapper.readTree(envelopeCaptor.getValue());
+        assertThat(envelope.fieldNames()).toIterable().containsExactlyInAnyOrder(
+                "eventId", "eventType", "eventVersion", "aggregateType", "aggregateId", "occurredAt", "payload"
+        );
+        assertThat(envelope.has("eventKey")).isFalse();
+        assertThat(envelope.path("eventVersion").asInt()).isEqualTo(2);
+        assertThat(envelope.path("aggregateType").asText()).isEqualTo("ASSET");
+        assertThat(envelope.path("payload").path("sourceType").asText()).isEqualTo("YOUTUBE");
+        assertThat(envelope.path("payload").path("youtubeVideoId").asText()).isEqualTo("abc_DEF-123");
+        assertThat(envelope).isEqualTo(objectMapper.readTree("""
+                {
+                  "eventId": "44444444-4444-4444-4444-444444444444",
+                  "eventType": "asset.processing.requested",
+                  "eventVersion": 2,
+                  "aggregateType": "ASSET",
+                  "aggregateId": "11111111-1111-1111-1111-111111111111",
+                  "occurredAt": "2026-07-27T00:00:00Z",
+                  "payload": {
+                    "assetId": "11111111-1111-1111-1111-111111111111",
+                    "workspaceId": "22222222-2222-2222-2222-222222222222",
+                    "ownerId": "owner-1",
+                    "sourceType": "YOUTUBE",
+                    "youtubeVideoId": "abc_DEF-123",
+                    "requestedAt": "2026-07-27T00:00:00Z"
+                  }
+                }
+                """));
+    }
+
+    @Test
+    void unsupportedProcessingRequestVersionFailsRatherThanRoutingToV1() {
+        KafkaOutboxMessagePublisher.KafkaSender kafkaSender = mock(KafkaOutboxMessagePublisher.KafkaSender.class);
+        KafkaOutboxMessagePublisher publisher = new KafkaOutboxMessagePublisher(
+                kafkaProperties(), objectMapper, kafkaSender
+        );
+        OutboxEvent event = new OutboxEvent(
+                ProcessingRequestedEventContract.EVENT_TYPE,
+                3,
+                "ASSET",
+                UUID.randomUUID(),
+                "asset-key",
+                "{}"
+        );
+        ReflectionTestUtils.setField(event, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(event, "createdAt", Instant.parse("2026-07-27T00:00:00Z"));
+
+        assertThatThrownBy(() -> publisher.publish(event))
+                .isInstanceOf(PermanentOutboxPublishException.class)
+                .hasMessageContaining("version 3");
+    }
+
+    @Test
+    void v2TopicHasAStableDefaultWithoutChangingTheV1Default() {
+        WorkspaceKafkaProperties properties = new WorkspaceKafkaProperties();
+
+        assertThat(properties.getProcessingRequestedTopic()).isEqualTo("asset.processing.requested.v1");
+        assertThat(properties.getProcessingRequestedV2Topic()).isEqualTo("asset.processing.requested.v2");
+    }
+
+    @Test
     void failedKafkaSendThrowsOutboxPublishException() {
         KafkaOutboxMessagePublisher.KafkaSender kafkaSender = mock(KafkaOutboxMessagePublisher.KafkaSender.class);
         when(kafkaSender.send(eq("asset.processing.requested.v1"), eq("asset-key"), anyString()))
@@ -151,6 +226,30 @@ class KafkaOutboxMessagePublisherTest {
         ReflectionTestUtils.setField(event, "id", UUID.randomUUID());
         ReflectionTestUtils.setField(event, "createdAt", Instant.parse("2026-06-20T00:00:00Z"));
         ReflectionTestUtils.setField(event, "updatedAt", Instant.parse("2026-06-20T00:00:00Z"));
+        return event;
+    }
+
+    private OutboxEvent youtubeV2Event() {
+        UUID assetId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        OutboxEvent event = new OutboxEvent(
+                YouTubeProcessingRequestedEventContract.EVENT_TYPE,
+                YouTubeProcessingRequestedEventContract.EVENT_VERSION,
+                YouTubeProcessingRequestedEventContract.AGGREGATE_TYPE,
+                assetId,
+                "asset-key",
+                """
+                        {
+                          "assetId": "11111111-1111-1111-1111-111111111111",
+                          "workspaceId": "22222222-2222-2222-2222-222222222222",
+                          "ownerId": "owner-1",
+                          "sourceType": "YOUTUBE",
+                          "youtubeVideoId": "abc_DEF-123",
+                          "requestedAt": "2026-07-27T00:00:00Z"
+                        }
+                        """
+        );
+        ReflectionTestUtils.setField(event, "id", UUID.fromString("44444444-4444-4444-4444-444444444444"));
+        ReflectionTestUtils.setField(event, "createdAt", Instant.parse("2026-07-27T00:00:00Z"));
         return event;
     }
 }

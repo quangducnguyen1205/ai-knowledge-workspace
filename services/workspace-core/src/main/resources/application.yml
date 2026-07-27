@@ -62,6 +62,7 @@ workspace:
     enabled: ${WORKSPACE_CORE_KAFKA_ENABLED:false}
     bootstrap-servers: ${WORKSPACE_CORE_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     processing-requested-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:asset.processing.requested.v1}
+    processing-requested-v2-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_V2_TOPIC:asset.processing.requested.v2}
     processing-result-topic: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:asset.processing.result.v1}
     indexing-requested-topic: ${WORKSPACE_CORE_KAFKA_INDEXING_REQUESTED_TOPIC:asset.indexing.requested.v1}
     processing-result-listener-enabled: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_LISTENER_ENABLED:false}

@@ -10,6 +10,7 @@ import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestCommand;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobView;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUseCase;
+import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestCommand;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -38,12 +39,41 @@ public class ProcessingRequestApplicationService implements ProcessingRequestUse
 
     @Override
     public ProcessingJobView createKafkaJobAndRequest(ProcessingRequestCommand command) {
-        OutboxDraft draft = eventFactory.create(command);
+        return createJobAndRequest(command.assetId(), eventFactory.create(command));
+    }
+
+    @Override
+    public ProcessingJobView createYouTubeKafkaJobAndRequest(YouTubeProcessingRequestCommand command) {
+        return createJobAndRequest(command.assetId(), eventFactory.create(command));
+    }
+
+    @Override
+    public ProcessingJobView retryKafkaJobAndRequest(ProcessingRequestCommand command) {
+        return resetJobAndRequest(command.assetId(), eventFactory.create(command));
+    }
+
+    @Override
+    public ProcessingJobView retryYouTubeKafkaJobAndRequest(YouTubeProcessingRequestCommand command) {
+        return resetJobAndRequest(command.assetId(), eventFactory.create(command));
+    }
+
+    private ProcessingJobView createJobAndRequest(UUID assetId, OutboxDraft draft) {
         ProcessingJob job = new ProcessingJob(
-                command.assetId(),
+                assetId,
                 ProcessingJobStatus.PENDING,
                 "processing_request_pending"
         );
+        job.setProcessingRequestEventId(draft.eventId());
+        ProcessingJob savedJob = processingJobStore.save(job);
+        outboxWriter.enqueue(draft);
+        return toView(savedJob);
+    }
+
+    private ProcessingJobView resetJobAndRequest(UUID assetId, OutboxDraft draft) {
+        ProcessingJob job = processingJobStore.findByAssetId(assetId)
+                .orElseThrow(() -> new IllegalStateException("Processing job was not found for retry"));
+        job.setProcessingJobStatus(ProcessingJobStatus.PENDING);
+        job.setRawUpstreamTaskState("processing_request_pending");
         job.setProcessingRequestEventId(draft.eventId());
         ProcessingJob savedJob = processingJobStore.save(job);
         outboxWriter.enqueue(draft);

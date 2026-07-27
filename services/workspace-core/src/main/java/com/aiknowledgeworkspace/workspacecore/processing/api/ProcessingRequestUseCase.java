@@ -8,5 +8,11 @@ public interface ProcessingRequestUseCase {
 
     ProcessingJobView createKafkaJobAndRequest(ProcessingRequestCommand command);
 
+    ProcessingJobView createYouTubeKafkaJobAndRequest(YouTubeProcessingRequestCommand command);
+
+    ProcessingJobView retryKafkaJobAndRequest(ProcessingRequestCommand command);
+
+    ProcessingJobView retryYouTubeKafkaJobAndRequest(YouTubeProcessingRequestCommand command);
+
     void deleteForAsset(UUID assetId);
 }

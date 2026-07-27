@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestCommand;
 
 class ProcessingRequestedEventCodecTest {
 
@@ -77,6 +78,39 @@ class ProcessingRequestedEventCodecTest {
         assertThat(payload.path("originalFilename").isNull()).isTrue();
         assertThat(payload.has("contentType")).isTrue();
         assertThat(payload.path("contentType").isNull()).isTrue();
+    }
+
+    @Test
+    void producesTheExactFastApiSupportedYouTubeV2Draft() throws Exception {
+        OutboxDraft draft = codec().create(new YouTubeProcessingRequestCommand(
+                ASSET_ID,
+                WORKSPACE_ID,
+                "learner-1",
+                "abc_DEF-123"
+        ));
+
+        assertThat(draft.eventId()).isEqualTo(EVENT_ID);
+        assertThat(draft.eventType()).isEqualTo("asset.processing.requested");
+        assertThat(draft.eventVersion()).isEqualTo(2);
+        assertThat(draft.aggregateType()).isEqualTo("ASSET");
+        assertThat(draft.aggregateId()).isEqualTo(ASSET_ID);
+        assertThat(draft.eventKey()).isEqualTo(ASSET_ID.toString());
+
+        JsonNode payload = objectMapper.readTree(draft.payload());
+        assertThat(fieldNames(payload)).containsExactlyInAnyOrder(
+                "assetId",
+                "workspaceId",
+                "ownerId",
+                "sourceType",
+                "youtubeVideoId",
+                "requestedAt"
+        );
+        assertThat(payload.path("assetId").asText()).isEqualTo(ASSET_ID.toString());
+        assertThat(payload.path("workspaceId").asText()).isEqualTo(WORKSPACE_ID.toString());
+        assertThat(payload.path("ownerId").asText()).isEqualTo("learner-1");
+        assertThat(payload.path("sourceType").asText()).isEqualTo("YOUTUBE");
+        assertThat(payload.path("youtubeVideoId").asText()).isEqualTo("abc_DEF-123");
+        assertThat(payload.path("requestedAt").asText()).isEqualTo(REQUESTED_AT.toString());
     }
 
     private ProcessingRequestedEventCodec codec() {

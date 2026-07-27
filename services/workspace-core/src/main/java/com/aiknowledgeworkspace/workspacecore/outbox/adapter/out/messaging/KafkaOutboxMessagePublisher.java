@@ -80,7 +80,9 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
         envelope.put("eventVersion", event.getEventVersion());
         envelope.put("aggregateType", event.getAggregateType());
         envelope.put("aggregateId", requireId(event.getAggregateId()));
-        envelope.put("eventKey", event.getEventKey());
+        if (!isStrictYouTubeV2Event(event)) {
+            envelope.put("eventKey", event.getEventKey());
+        }
         envelope.put("occurredAt", resolveOccurredAt(event).toString());
         envelope.set("payload", readPayload(event));
 
@@ -93,12 +95,37 @@ public class KafkaOutboxMessagePublisher implements OutboxMessagePublisher, Auto
 
     private String topicFor(OutboxEvent event) {
         return switch (event.getEventType()) {
-            case PROCESSING_REQUESTED_EVENT_TYPE -> properties.getProcessingRequestedTopic();
-            case INDEXING_REQUESTED_EVENT_TYPE -> properties.getIndexingRequestedTopic();
+            case PROCESSING_REQUESTED_EVENT_TYPE -> processingRequestedTopic(event);
+            case INDEXING_REQUESTED_EVENT_TYPE -> {
+                if (event.getEventVersion() != 1) {
+                    throw unsupportedVersion(event);
+                }
+                yield properties.getIndexingRequestedTopic();
+            }
             default -> throw new PermanentOutboxPublishException(
                     "No Kafka topic configured for event type " + event.getEventType()
             );
         };
+    }
+
+    private String processingRequestedTopic(OutboxEvent event) {
+        return switch (event.getEventVersion()) {
+            case 1 -> properties.getProcessingRequestedTopic();
+            case 2 -> properties.getProcessingRequestedV2Topic();
+            default -> throw unsupportedVersion(event);
+        };
+    }
+
+    private PermanentOutboxPublishException unsupportedVersion(OutboxEvent event) {
+        return new PermanentOutboxPublishException(
+                "No Kafka topic configured for event type %s version %d"
+                        .formatted(event.getEventType(), event.getEventVersion())
+        );
+    }
+
+    private boolean isStrictYouTubeV2Event(OutboxEvent event) {
+        return PROCESSING_REQUESTED_EVENT_TYPE.equals(event.getEventType())
+                && event.getEventVersion() == 2;
     }
 
     private JsonNode readPayload(OutboxEvent event) {

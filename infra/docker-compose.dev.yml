@@ -143,12 +143,16 @@ services:
         condition: service_healthy
     environment:
       WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}
+      WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_V2_TOPIC: ${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_V2_TOPIC:-asset.processing.requested.v2}
       WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC: ${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:-asset.processing.result.v1}
       WORKSPACE_CORE_KAFKA_INDEXING_REQUESTED_TOPIC: ${WORKSPACE_CORE_KAFKA_INDEXING_REQUESTED_TOPIC:-asset.indexing.requested.v1}
     entrypoint: >
       /bin/sh -c "
       if ! /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}\" >/dev/null 2>&1; then
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_TOPIC:-asset.processing.requested.v1}\" --partitions 1 --replication-factor 1;
+      fi;
+      if ! /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_V2_TOPIC:-asset.processing.requested.v2}\" >/dev/null 2>&1; then
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_REQUESTED_V2_TOPIC:-asset.processing.requested.v2}\" --partitions 1 --replication-factor 1;
       fi;
       if ! /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:-asset.processing.result.v1}\" >/dev/null 2>&1; then
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --topic \"${WORKSPACE_CORE_KAFKA_PROCESSING_RESULT_TOPIC:-asset.processing.result.v1}\" --partitions 1 --replication-factor 1;
