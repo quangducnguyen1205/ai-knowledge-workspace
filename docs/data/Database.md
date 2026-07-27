@@ -12,13 +12,14 @@ migrations:
 services/workspace-core/src/main/resources/db/migration/
 ├── V1__create_product_schema.sql
 ├── V2__add_transcript_timing.sql
-└── V3__add_asset_source_identity.sql
+├── V3__add_asset_source_identity.sql
+└── V4__strengthen_youtube_video_id_constraint.sql
 ```
 
 The previous local-development migration chain was consolidated before timestamp-aware transcript
-work. `V1` and `V2` remain unchanged. Existing clean-V1 databases migrate in place through `V2`
-and `V3`; databases from the older pre-baseline chain remain outside this compatibility promise.
-Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
+work. `V1`, `V2` and `V3` remain unchanged. Existing clean-V1 databases migrate in place through
+`V2`, `V3` and `V4`; databases from the older pre-baseline chain remain outside this compatibility
+promise. Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
 
 `spring.jpa.hibernate.ddl-auto=validate` remains the normal setting, so Flyway creates the schema
 and Hibernate verifies mappings without mutating it.
@@ -77,14 +78,16 @@ source-specific metadata and creation/update metadata. `source_type` is required
 
 - `UPLOAD` requires filename, bucket, object key, content type and a non-negative size; it must not
   carry a YouTube video ID.
-- `YOUTUBE` requires a trimmed, nonblank video ID of at most 128 characters; upload filename,
-  storage fields, content type, size and ETag must all be null.
+- `YOUTUBE` requires a nonblank video ID of at most 128 characters using only
+  `[A-Za-z0-9_-]`; upload filename, storage fields, content type, size and ETag must all be null.
 
 `V3` backfills every existing asset to `UPLOAD` before making `source_type` non-null. It does not
-install a runtime default. `(storage_bucket, object_key)` remains unique for retained upload
-objects, while `(workspace_id, youtube_video_id)` prevents duplicate YouTube identity inside one
-workspace. PostgreSQL nullable uniqueness permits any number of upload assets and permits the same
-YouTube video in different workspaces.
+install a runtime default. `V4` preserves the V3 checksum and strengthens
+`ck_assets_youtube_video_id_valid` to the domain-safe bounded character set. Exact 11-character
+YouTube validation remains application policy for the public creation slice. `(storage_bucket,
+object_key)` remains unique for retained upload objects, while `(workspace_id, youtube_video_id)`
+prevents duplicate YouTube identity inside one workspace. PostgreSQL nullable uniqueness permits
+any number of upload assets and permits the same YouTube video in different workspaces.
 
 Binary data is never stored in PostgreSQL. Asset source identity and lifecycle are Spring product
 truth. FastAPI may later own acquisition execution, but it must not become the authority for

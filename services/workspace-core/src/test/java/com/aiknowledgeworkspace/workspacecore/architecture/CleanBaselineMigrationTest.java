@@ -16,7 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class CleanBaselineMigrationTest {
 
     @Test
-    void immutableV1ThenV2ThenV3PreserveUploadsAndEnforceSourceShapes() {
+    void immutableV1ThenV2ThenV3ThenV4PreserveUploadsAndEnforceSourceShapes() {
         JdbcDataSource dataSource = dataSource();
 
         assertThat(flyway(dataSource, "1").migrate().migrationsExecuted).isEqualTo(1);
@@ -35,7 +35,7 @@ class CleanBaselineMigrationTest {
         insertLegacyUpload(jdbc, legacyAssetId, legacyWorkspaceId);
         Map<String, Object> legacyBeforeV3 = loadUploadFields(jdbc, legacyAssetId);
 
-        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(dataSource, "3").migrate().migrationsExecuted).isEqualTo(1);
 
         assertThat(columns(jdbc, "assets")).contains("source_type", "youtube_video_id");
         assertThat(nullable(jdbc, "source_type")).isEqualTo("NO");
@@ -59,6 +59,8 @@ class CleanBaselineMigrationTest {
                 String.class,
                 legacyAssetId
         )).isNull();
+
+        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
 
         UUID workspaceOne = insertWorkspace(jdbc, "Workspace one");
         UUID workspaceTwo = insertWorkspace(jdbc, "Workspace two");
@@ -117,10 +119,38 @@ class CleanBaselineMigrationTest {
         assertInvalidTiming(jdbc, legacyAssetId, "backward", 4, 100L, 99L);
     }
 
+    @Test
+    void v4RejectsEveryYoutubeVideoIdOutsideTheDomainSafeCharacterSet() {
+        JdbcDataSource dataSource = dataSource();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        assertThat(flyway(dataSource, "3").migrate().migrationsExecuted).isEqualTo(3);
+
+        UUID workspaceId = insertWorkspace(jdbc, "Constraint closure");
+        UUID preV4UnsafeAssetId = UUID.randomUUID();
+        insertYoutubeAsset(jdbc, preV4UnsafeAssetId, workspaceId, "video id");
+        assertThat(jdbc.queryForObject(
+                "select youtube_video_id from assets where id = ?",
+                String.class,
+                preV4UnsafeAssetId
+        )).isEqualTo("video id");
+        jdbc.update("delete from assets where id = ?", preV4UnsafeAssetId);
+
+        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+
+        assertInvalidYoutubeVideoId(jdbc, workspaceId, "video id");
+        assertInvalidYoutubeVideoId(jdbc, workspaceId, " video-id ");
+        assertInvalidYoutubeVideoId(jdbc, workspaceId, "video\u0001id");
+        assertInvalidYoutubeVideoId(jdbc, workspaceId, "   ");
+        assertInvalidYoutubeVideoId(jdbc, workspaceId, "a".repeat(129));
+
+        insertYoutubeAsset(jdbc, UUID.randomUUID(), workspaceId, "Safe_ID-123");
+    }
+
     private JdbcDataSource dataSource() {
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL(
-                "jdbc:h2:mem:workspace-core-clean-baseline;"
+                "jdbc:h2:mem:workspace-core-clean-baseline-" + UUID.randomUUID() + ";"
                         + "MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
         );
         dataSource.setUser("sa");
@@ -208,6 +238,27 @@ class CleanBaselineMigrationTest {
         );
     }
 
+    private void insertYoutubeAsset(
+            JdbcTemplate jdbc,
+            UUID assetId,
+            UUID workspaceId,
+            String youtubeVideoId
+    ) {
+        insertSourceAwareAsset(
+                jdbc,
+                assetId,
+                workspaceId,
+                "YOUTUBE",
+                youtubeVideoId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
     private Map<String, Object> loadUploadFields(JdbcTemplate jdbc, UUID assetId) {
         return jdbc.queryForMap(
                 "select original_filename, title, status, workspace_id, storage_bucket, object_key, "
@@ -253,6 +304,19 @@ class CleanBaselineMigrationTest {
     private void assertInvalidAsset(Runnable insert) {
         assertThatThrownBy(insert::run)
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void assertInvalidYoutubeVideoId(
+            JdbcTemplate jdbc,
+            UUID workspaceId,
+            String youtubeVideoId
+    ) {
+        assertInvalidAsset(() -> insertYoutubeAsset(
+                jdbc,
+                UUID.randomUUID(),
+                workspaceId,
+                youtubeVideoId
+        ));
     }
 
     private void assertInvalidTiming(
