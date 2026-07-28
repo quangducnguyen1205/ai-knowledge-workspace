@@ -18,11 +18,14 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.Transc
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidTranscriptContextWindowException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetMediaNotAvailableException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetMediaReadException;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.api.ApiErrorResponse;
 import com.aiknowledgeworkspace.workspacecore.common.web.api.PublicApiErrorResponses;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -107,6 +110,37 @@ public class AssetApiExceptionHandler {
         return PublicApiErrorResponses.clientError(
                 HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage(), exception
         );
+    }
+
+    @ExceptionHandler(AssetMediaNotAvailableException.class)
+    ResponseEntity<ApiErrorResponse> handleAssetMediaNotAvailable(AssetMediaNotAvailableException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.NOT_FOUND,
+                "ASSET_MEDIA_NOT_AVAILABLE",
+                "Asset media is not available",
+                exception
+        );
+    }
+
+    @ExceptionHandler(AssetMediaRangeNotSatisfiableException.class)
+    ResponseEntity<ApiErrorResponse> handleAssetMediaRangeNotSatisfiable(
+            AssetMediaRangeNotSatisfiableException exception
+    ) {
+        ResponseEntity<ApiErrorResponse> response = PublicApiErrorResponses.clientError(
+                HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE,
+                "ASSET_MEDIA_RANGE_NOT_SATISFIABLE",
+                "Requested media range is not satisfiable",
+                exception
+        );
+        return ResponseEntity.status(response.getStatusCode())
+                .headers(response.getHeaders())
+                .header(HttpHeaders.CONTENT_RANGE, "bytes */" + exception.getTotalSizeBytes())
+                .body(response.getBody());
+    }
+
+    @ExceptionHandler(AssetMediaReadException.class)
+    ResponseEntity<ApiErrorResponse> handleAssetMediaRead(AssetMediaReadException exception) {
+        return PublicApiErrorResponses.serviceUnavailable("ASSET_MEDIA_READ_FAILED", exception);
     }
 
 }

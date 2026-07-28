@@ -16,10 +16,11 @@ For the current Spring product-core baseline, this is the fastest useful reading
 8. `architecture/deprecations.md`
 9. `architecture/phase1-timestamp-aware-transcript-foundation.md`
 10. `architecture/phase1-implemented-product-flow.md`
-11. `api/API.md`
-12. `data/Database.md`
-13. `runbooks/local-dev.md`
-14. `testing/integration-smoke-checklist.md`
+11. `architecture/phase4-authorized-upload-media-streaming.md`
+12. `api/API.md`
+13. `data/Database.md`
+14. `runbooks/local-dev.md`
+15. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -62,6 +63,8 @@ These are the main current-source-of-truth docs for understanding how the backen
 - `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
 - `architecture/phase1-timestamp-aware-transcript-foundation.md`: Phase 1 impact map,
   compatibility decisions, boundary proof, migration, indexing and validation evidence
+- `architecture/phase4-authorized-upload-media-streaming.md`: authorized Upload media GET/HEAD,
+  single-range behavior, storage confidentiality and frontend/runtime limitations
 
 ## Submission Documents
 

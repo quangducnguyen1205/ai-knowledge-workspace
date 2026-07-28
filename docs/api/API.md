@@ -472,6 +472,66 @@ Common failure cases:
 
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
 
+### `GET /api/assets/{assetId}/media`
+
+Streams the original object owned by one authorized `UPLOAD` Asset. Media availability depends on
+the retained source object, not transcript-processing status, so a failed-processing upload remains
+streamable while its object exists.
+
+Request:
+
+- Use the same authenticated session cookie or bearer token as other Spring product endpoints.
+- Optional single `Range` header:
+  - `bytes=0-999`
+  - `bytes=1000-`
+  - `bytes=-1000`
+
+Response:
+
+- HTTP `200` for a full response.
+- HTTP `206` for one satisfiable byte range.
+- Headers:
+  - `Content-Type`, using the safe persisted media type or `application/octet-stream`
+  - exact `Content-Length`
+  - `Accept-Ranges: bytes`
+  - `Content-Disposition: inline` with a sanitized filename
+  - `Cache-Control: private, no-store`
+  - `Content-Range` for HTTP `206`
+
+Current behavior:
+
+- Spring resolves the Asset and its workspace ownership before any object-storage metadata or body
+  request.
+- `YOUTUBE` Assets are not proxied or redirected through this endpoint.
+- Spring does not expose a bucket, object key, storage ETag, internal endpoint, presigned URL or
+  storage credential.
+- Full and partial responses use bounded S3/MinIO range reads and an 8 KiB transfer buffer; Spring
+  does not materialize the complete object as a byte array or temporary file.
+- Only one byte range is supported. Malformed, multiple, overflowing and unsatisfiable ranges are
+  rejected deterministically with HTTP `416` and `Content-Range: bytes */{totalSizeBytes}`.
+- If deletion races an already opened response, that transfer may finish or fail safely. A later
+  request follows the normal ownership-safe not-found behavior. Streaming failure never changes
+  Asset or ProcessingJob state.
+
+Common failure cases:
+
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current user
+- HTTP `404` with `code = "ASSET_MEDIA_NOT_AVAILABLE"` for `YOUTUBE`, a missing source object,
+  empty/inconsistent upload metadata or another unavailable upload source
+- HTTP `416` with `code = "ASSET_MEDIA_RANGE_NOT_SATISFIABLE"` for an unsupported or
+  unsatisfiable range
+- HTTP `503` with `code = "ASSET_MEDIA_READ_FAILED"` when object storage cannot be read before
+  transfer begins
+
+### `HEAD /api/assets/{assetId}/media`
+
+Runs the same authorization, source eligibility and object-availability checks as the full media
+GET, then returns the full-object `Content-Type`, `Content-Length`, `Accept-Ranges`,
+`Content-Disposition` and private cache headers without opening the object body.
+
+`Range` on HEAD is intentionally ignored in this slice: Spring returns the authorized full-object
+metadata with HTTP `200` and no body.
+
 ### `PATCH /api/assets/{assetId}`
 
 Updates the product-owned asset title.
@@ -910,5 +970,8 @@ Current structured error codes:
 - `TRANSCRIPT_NOT_READY`
 - `TRANSCRIPT_NOT_USABLE`
 - `TRANSCRIPT_ROW_NOT_FOUND`
+- `ASSET_MEDIA_NOT_AVAILABLE`
+- `ASSET_MEDIA_RANGE_NOT_SATISFIABLE`
+- `ASSET_MEDIA_READ_FAILED`
 - `INVALID_REQUEST_PARAMETER`
 - `INVALID_REQUEST_BODY`
