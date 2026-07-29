@@ -457,7 +457,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `DELETE /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `DELETE /api/assets/{assetId}` for a `SEARCHABLE` asset.
-- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] Expect HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"`.
 - [ ] Confirm the local asset still exists after the failed delete attempt.
 
 ## 6B. Product Asset Title Update Checks
@@ -489,7 +489,7 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Call `PATCH /api/assets/{assetId}` for an asset created under one user, but first re-establish the auth session as a different user.
 - [ ] Expect the same ownership-safe HTTP `404`.
 - [ ] If possible, stop Elasticsearch and call `PATCH /api/assets/{assetId}` for a `SEARCHABLE` asset.
-- [ ] Expect HTTP `503` or `502` depending on the failure mode.
+- [ ] Expect HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"`.
 - [ ] Confirm the persisted asset title is unchanged after the failed patch attempt.
 
 ## 7. Product Transcript Fetch Checks
@@ -594,9 +594,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 
 - [ ] Stop Elasticsearch or point Repo B at an unavailable Elasticsearch host.
 - [ ] Call `POST /api/assets/{assetId}/index` for an asset with usable transcript rows.
-- [ ] Expect HTTP `503` or `502` depending on the failure mode.
-- [ ] If a structured integration error body is returned, confirm:
-  - [ ] `code = "ELASTICSEARCH_UNAVAILABLE"` or `ELASTICSEARCH_INTEGRATION_ERROR`
+- [ ] Expect HTTP `503`.
+- [ ] Confirm the structured integration error body contains:
+  - [ ] `code = "SEARCH_SERVICE_UNAVAILABLE"`
   - [ ] non-empty `message`
 - [ ] Call `GET /api/assets/{assetId}/status` after the failed indexing attempt.
 - [ ] Confirm the asset is not incorrectly marked `SEARCHABLE`.
@@ -621,9 +621,16 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
   - [ ] `assetTitle`
   - [ ] `transcriptRowId`
   - [ ] `segmentIndex`
+  - [ ] `startMs`
+  - [ ] `endMs`
   - [ ] `text`
   - [ ] `createdAt`
   - [ ] `score`
+- [ ] Confirm `resultCount` equals the number of returned `results` after Spring policy, not
+  Elasticsearch total hits.
+- [ ] Confirm the response contains at most `12` results and no Asset contributes more than
+  `3` rows during workspace-wide search.
+- [ ] Confirm the endpoint exposes no pagination and no client-controlled result limit.
 - [ ] Confirm results come from Spring's product response shape, not a FastAPI search response.
 - [ ] Confirm `workspaceIdFilter` matches the requested workspace or the current user's default workspace when omitted.
 - [ ] Confirm search only returns results inside the resolved workspace scope.
@@ -710,9 +717,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 
 - [ ] Stop Elasticsearch or point Repo B at an unavailable Elasticsearch host.
 - [ ] Call `GET /api/search?q=test`.
-- [ ] Expect HTTP `503` or `502` depending on the failure mode.
-- [ ] If a structured integration error body is returned, confirm:
-  - [ ] `code = "ELASTICSEARCH_UNAVAILABLE"` or `ELASTICSEARCH_INTEGRATION_ERROR`
+- [ ] Expect HTTP `503`.
+- [ ] Confirm the structured integration error body contains:
+  - [ ] `code = "SEARCH_SERVICE_UNAVAILABLE"`
   - [ ] non-empty `message`
 
 ## 12. Not-Yet-In-Scope Checks

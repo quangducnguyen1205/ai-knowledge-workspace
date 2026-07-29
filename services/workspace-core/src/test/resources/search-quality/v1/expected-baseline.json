@@ -1,0 +1,329 @@
+{
+  "version": "v1",
+  "scenarios": [
+    {
+      "id": "exact-phrase",
+      "classification": "HARD_INVARIANT",
+      "query": "vector clocks",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "vector-exact",
+      "orderedRowIds": [
+        "vector-exact",
+        "vector-bag"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The exact phrase must rank before the same terms in reverse order."
+    },
+    {
+      "id": "bag-of-words",
+      "classification": "HARD_INVARIANT",
+      "query": "replicated state convergence",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "bag-reordered",
+      "orderedRowIds": [
+        "bag-reordered"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "All meaningful terms remain retrievable when natural sentence order differs from query order."
+    },
+    {
+      "id": "adjacent-hits",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "causal delivery",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "adjacent-020",
+      "orderedRowIds": [
+        "adjacent-020",
+        "adjacent-021",
+        "adjacent-022"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002"
+      ],
+      "adjacentClusterCount": 1,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Three consecutive duplicate rows consume the complete per-Asset workspace quota; Slice 7.1 records but does not fix this."
+    },
+    {
+      "id": "candidate-dominance",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "distributed tracing",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "dominant-000",
+      "orderedRowIds": [
+        "dominant-000",
+        "dominant-001",
+        "dominant-002"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000003",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000003",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000003"
+      ],
+      "adjacentClusterCount": 1,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The globally ranked top-60 candidate pool is exhausted by one strongly matching Asset, so two weaker relevant Assets are absent before the Java per-Asset cap runs."
+    },
+    {
+      "id": "deterministic-ties",
+      "classification": "HARD_INVARIANT",
+      "query": "consensus quorum",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "tie-a",
+      "orderedRowIds": [
+        "tie-a",
+        "tie-b"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000006",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000007"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 2,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Identical title, text, and segment metadata leaves Asset ID as the deterministic tie-break."
+    },
+    {
+      "id": "single-meaningful-token",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "kubernetes",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "short-kubernetes",
+      "orderedRowIds": [
+        "short-kubernetes"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000008"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "A single meaningful word is accepted and searched."
+    },
+    {
+      "id": "one-character-query",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "x",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "short-one-character",
+      "orderedRowIds": [
+        "short-one-character"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000008"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "There is no minimum token length; a one-character token is searchable and preserves nullable timing."
+    },
+    {
+      "id": "numeric-only-query",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "2024",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "short-numeric",
+      "orderedRowIds": [
+        "short-numeric"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000008"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Numeric-only input is accepted as a meaningful token."
+    },
+    {
+      "id": "typo-query",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "kubernets",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "short-kubernetes",
+      "orderedRowIds": [],
+      "orderedAssetIds": [],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 0,
+      "targetInTop1": false,
+      "targetInTop3": false,
+      "targetInTop6": false,
+      "notes": "The current query has no fuzziness; a one-character deletion does not retrieve the intended row."
+    },
+    {
+      "id": "prefix-query",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "kubernet",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "short-kubernetes",
+      "orderedRowIds": [],
+      "orderedAssetIds": [],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 0,
+      "targetInTop1": false,
+      "targetInTop3": false,
+      "targetInTop6": false,
+      "notes": "The current query has no prefix matching; an incomplete token does not retrieve the intended row."
+    },
+    {
+      "id": "vietnamese-accented",
+      "classification": "HARD_INVARIANT",
+      "query": "thuật toán tìm kiếm",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "vi-accented",
+      "orderedRowIds": [
+        "vi-accented"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000009"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Fully accented Vietnamese query and transcript text are retrievable with the current standard analyzer and Java Unicode tokenization."
+    },
+    {
+      "id": "vietnamese-unaccented",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "thuat toan tim kiem",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "vi-accented",
+      "orderedRowIds": [],
+      "orderedAssetIds": [],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 0,
+      "targetInTop1": false,
+      "targetInTop3": false,
+      "targetInTop6": false,
+      "notes": "The baseline does not fold Vietnamese accents; this exploratory query intentionally records no match."
+    },
+    {
+      "id": "workspace-isolation",
+      "classification": "HARD_INVARIANT",
+      "query": "isolation beacon",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "isolation-local",
+      "orderedRowIds": [
+        "isolation-local"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "An identically relevant row in the control Workspace must never be returned."
+    },
+    {
+      "id": "asset-scope",
+      "classification": "HARD_INVARIANT",
+      "query": "vector clocks",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+      "targetRowId": "vector-exact",
+      "orderedRowIds": [
+        "vector-exact",
+        "vector-bag"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The optional Asset scope preserves ranking while excluding all other Assets."
+    },
+    {
+      "id": "public-and-per-asset-caps",
+      "classification": "HARD_INVARIANT",
+      "query": "shared retrieval",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "shared-a1-000",
+      "orderedRowIds": [
+        "shared-a1-000",
+        "shared-a2-000",
+        "shared-a4-000",
+        "shared-a5-000",
+        "shared-a6-000",
+        "shared-a1-001",
+        "shared-a2-001",
+        "shared-a4-001",
+        "shared-a5-001",
+        "shared-a6-001",
+        "shared-a1-002",
+        "shared-a2-002"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000004",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000006",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000004",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000006",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002"
+      ],
+      "adjacentClusterCount": 5,
+      "distinctAssetCount": 5,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The response is capped at twelve, and no Asset contributes more than three rows."
+    }
+  ]
+}

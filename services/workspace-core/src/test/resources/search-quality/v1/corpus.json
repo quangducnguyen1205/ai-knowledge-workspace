@@ -1,0 +1,296 @@
+{
+  "version": "v1",
+  "workspaces": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "label": "Primary learning workspace"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "label": "Isolation control workspace"
+    }
+  ],
+  "assets": [
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Distributed Systems Lecture",
+      "rows": [
+        {
+          "id": "vector-exact",
+          "segmentIndex": 0,
+          "startMs": 0,
+          "endMs": 3000,
+          "text": "Vector clocks capture causality between distributed events.",
+          "createdAt": "2026-07-01T00:00:00Z"
+        },
+        {
+          "id": "vector-bag",
+          "segmentIndex": 5,
+          "startMs": 15000,
+          "endMs": 18000,
+          "text": "Clocks organized with a vector represent causal histories in distributed systems.",
+          "createdAt": "2026-07-01T00:00:05Z"
+        },
+        {
+          "id": "bag-reordered",
+          "segmentIndex": 10,
+          "startMs": 30000,
+          "endMs": 34000,
+          "text": "Convergence emerges when replicated services exchange state after a partition.",
+          "createdAt": "2026-07-01T00:00:10Z"
+        },
+        {
+          "id": "isolation-local",
+          "segmentIndex": 15,
+          "startMs": 45000,
+          "endMs": 48000,
+          "text": "The isolation beacon confirms workspace boundaries during retrieval.",
+          "createdAt": "2026-07-01T00:00:15Z"
+        }
+      ],
+      "series": [
+        {
+          "idPrefix": "shared-a1-",
+          "count": 4,
+          "segmentIndexStart": 200,
+          "startMsStart": 200000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Shared retrieval baseline demonstrates common lexical ranking.",
+          "createdAt": "2026-07-01T00:03:20Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Causal Messaging Workshop",
+      "rows": [
+        {
+          "id": "adjacent-020",
+          "segmentIndex": 20,
+          "startMs": 60000,
+          "endMs": 63000,
+          "text": "Causal delivery preserves message order across replicas.",
+          "createdAt": "2026-07-02T00:00:20Z"
+        },
+        {
+          "id": "adjacent-021",
+          "segmentIndex": 21,
+          "startMs": 63000,
+          "endMs": 66000,
+          "text": "Causal delivery preserves message order across replicas.",
+          "createdAt": "2026-07-02T00:00:21Z"
+        },
+        {
+          "id": "adjacent-022",
+          "segmentIndex": 22,
+          "startMs": 66000,
+          "endMs": 69000,
+          "text": "Causal delivery preserves message order across replicas.",
+          "createdAt": "2026-07-02T00:00:22Z"
+        }
+      ],
+      "series": [
+        {
+          "idPrefix": "shared-a2-",
+          "count": 4,
+          "segmentIndexStart": 200,
+          "startMsStart": 200000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Shared retrieval baseline demonstrates common lexical ranking.",
+          "createdAt": "2026-07-02T00:03:20Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000003",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Distributed Tracing Masterclass",
+      "rows": [],
+      "series": [
+        {
+          "idPrefix": "dominant-",
+          "count": 65,
+          "segmentIndexStart": 1000,
+          "startMsStart": 1000000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Distributed tracing follows one request across service boundaries and records correlated spans.",
+          "createdAt": "2026-07-03T00:16:40Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000004",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Observability Field Notes",
+      "rows": [
+        {
+          "id": "dominance-alternative-a",
+          "segmentIndex": 40,
+          "startMs": 120000,
+          "endMs": 124000,
+          "text": "Tracing distributed requests across service boundaries reveals latency.",
+          "createdAt": "2026-07-04T00:00:40Z"
+        }
+      ],
+      "series": [
+        {
+          "idPrefix": "shared-a4-",
+          "count": 4,
+          "segmentIndexStart": 200,
+          "startMsStart": 200000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Shared retrieval baseline demonstrates common lexical ranking.",
+          "createdAt": "2026-07-04T00:03:20Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Service Reliability Review",
+      "rows": [
+        {
+          "id": "dominance-alternative-b",
+          "segmentIndex": 41,
+          "startMs": 123000,
+          "endMs": 127000,
+          "text": "A practical overview explains distributed tracing after introducing logs, metrics, and spans.",
+          "createdAt": "2026-07-05T00:00:41Z"
+        }
+      ],
+      "series": [
+        {
+          "idPrefix": "shared-a5-",
+          "count": 4,
+          "segmentIndexStart": 200,
+          "startMsStart": 200000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Shared retrieval baseline demonstrates common lexical ranking.",
+          "createdAt": "2026-07-05T00:03:20Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000006",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Consensus Seminar",
+      "rows": [
+        {
+          "id": "tie-a",
+          "segmentIndex": 30,
+          "startMs": 90000,
+          "endMs": 93000,
+          "text": "Consensus quorum decisions require a majority of replicas.",
+          "createdAt": "2026-07-06T00:00:30Z"
+        }
+      ],
+      "series": [
+        {
+          "idPrefix": "shared-a6-",
+          "count": 4,
+          "segmentIndexStart": 200,
+          "startMsStart": 200000,
+          "stepMs": 2000,
+          "durationMs": 1500,
+          "text": "Shared retrieval baseline demonstrates common lexical ranking.",
+          "createdAt": "2026-07-06T00:03:20Z"
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000007",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Consensus Seminar",
+      "rows": [
+        {
+          "id": "tie-b",
+          "segmentIndex": 30,
+          "startMs": 90000,
+          "endMs": 93000,
+          "text": "Consensus quorum decisions require a majority of replicas.",
+          "createdAt": "2026-07-07T00:00:30Z"
+        }
+      ],
+      "series": []
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000008",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Platform Engineering Notes",
+      "rows": [
+        {
+          "id": "short-kubernetes",
+          "segmentIndex": 50,
+          "startMs": 150000,
+          "endMs": 153000,
+          "text": "Kubernetes schedules containers across a cluster.",
+          "createdAt": "2026-07-08T00:00:50Z"
+        },
+        {
+          "id": "short-one-character",
+          "segmentIndex": 60,
+          "startMs": null,
+          "endMs": null,
+          "text": "The standalone token x marks the selected coordinate.",
+          "createdAt": "2026-07-08T00:01:00Z"
+        },
+        {
+          "id": "short-numeric",
+          "segmentIndex": 70,
+          "startMs": 210000,
+          "endMs": 213000,
+          "text": "The 2024 architecture review established this baseline.",
+          "createdAt": "2026-07-08T00:01:10Z"
+        }
+      ],
+      "series": []
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000009",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "title": "Bài giảng cấu trúc dữ liệu",
+      "rows": [
+        {
+          "id": "vi-accented",
+          "segmentIndex": 80,
+          "startMs": 240000,
+          "endMs": 244000,
+          "text": "Thuật toán tìm kiếm nhị phân giảm một nửa không gian sau mỗi bước.",
+          "createdAt": "2026-07-09T00:01:20Z"
+        }
+      ],
+      "series": []
+    },
+    {
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-000000000001",
+      "workspaceId": "22222222-2222-2222-2222-222222222222",
+      "title": "Foreign Workspace Exact Matches",
+      "rows": [
+        {
+          "id": "foreign-vector-exact",
+          "segmentIndex": 0,
+          "startMs": 0,
+          "endMs": 2000,
+          "text": "Vector clocks capture causality between distributed events.",
+          "createdAt": "2026-07-10T00:00:00Z"
+        },
+        {
+          "id": "isolation-foreign",
+          "segmentIndex": 1,
+          "startMs": 2000,
+          "endMs": 4000,
+          "text": "The isolation beacon confirms workspace boundaries during retrieval.",
+          "createdAt": "2026-07-10T00:00:01Z"
+        }
+      ],
+      "series": []
+    }
+  ]
+}

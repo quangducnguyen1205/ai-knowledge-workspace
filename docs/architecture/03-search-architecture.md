@@ -65,8 +65,16 @@ The current implemented search path is deliberately small:
 - When `assetId` is provided, Spring validates that the asset is owned by the current user and belongs to the resolved workspace before sending the Elasticsearch query.
 - Results are returned as transcript-row hits, not chatbot answers.
 - Tie-breaking stays deterministic when scores are equal.
+- Elasticsearch supplies a fixed candidate pool of `60`.
+- Spring returns at most `12` rows and, for workspace-wide search, at most `3` rows per Asset.
+- `resultCount` is the post-policy result size. There is no pagination or client-controlled
+  result limit.
 
 This means the current search layer is product-owned and usable, but it is not a hybrid, vector, or answer-generation system.
+
+The measured Phase 7 baseline, corpus ownership, integration command, hard invariants and
+known quality gaps are recorded in
+[`phase7-search-quality-baseline.md`](phase7-search-quality-baseline.md).
 
 ## Transitional Role Of FAISS
 

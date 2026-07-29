@@ -663,8 +663,8 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_ASSET_TITLE"` if `title` is missing, blank after trim, or longer than the current max length
 - HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
-- HTTP `503` if Elasticsearch is unavailable while syncing title metadata for a `SEARCHABLE` asset
-- HTTP `502` if Elasticsearch returns an integration error while syncing title metadata for a `SEARCHABLE` asset
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails while syncing title metadata for a `SEARCHABLE` asset
 
 ### `DELETE /api/assets/{assetId}`
 
@@ -692,8 +692,8 @@ Current behavior:
 Common failure cases:
 
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the asset does not exist or is not owned by the current user
-- HTTP `503` if Elasticsearch is unavailable during required derived-state cleanup
-- HTTP `502` if Elasticsearch returns an integration error during required derived-state cleanup
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails during required derived-state cleanup
 - HTTP `502`/`503` according to the storage adapter contract if required `UPLOAD` object cleanup
   fails; local DB state is retained
 
@@ -870,8 +870,8 @@ Common failure cases:
 - HTTP `404` with `code = "PROCESSING_JOB_NOT_FOUND"` if the asset exists but its local processing job record is missing
 - HTTP `409` with `code = "TRANSCRIPT_NOT_READY"` if transcript data is not ready
 - HTTP `409` with `code = "TRANSCRIPT_NOT_USABLE"` if transcript data is empty or unusable
-- HTTP `503` if Elasticsearch is unavailable
-- HTTP `502` if Elasticsearch returns an integration error
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails
 
 ### `GET /api/search?q=...`
 
@@ -890,7 +890,8 @@ Response:
   - `query`
   - `workspaceIdFilter`
   - `assetIdFilter`
-  - `resultCount`
+  - `resultCount`: number of results returned after Spring relevance policy, not Elasticsearch
+    total hits
   - `results[]`
 
 Each result currently contains:
@@ -916,6 +917,10 @@ Current behavior:
 - The current search baseline is still lexical search over transcript text and asset title.
 - Spring keeps the baseline `multi_match` query and adds a small phrase-style boost layer so clearer exact or phrase-like matches can rise more appropriately.
 - Search ordering is deterministic on score ties: `_score desc`, then `segmentIndex`, `assetId`, and `transcriptRowId`.
+- Elasticsearch returns at most `60` ranked candidates to Spring.
+- The public response contains at most `12` results. Workspace-wide search accepts at most
+  `3` rows from one Asset; an Asset-scoped search may use the full public limit.
+- The endpoint has no pagination and no client-controlled result limit.
 
 Common failure cases:
 
@@ -926,8 +931,8 @@ Common failure cases:
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if a provided `assetId` does not exist, is not owned by the current user, or does not belong to the resolved workspace
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
-- HTTP `503` if Elasticsearch is unavailable
-- HTTP `502` if Elasticsearch returns an integration error
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails
 
 ### `POST /api/assistant/context`
 
@@ -977,8 +982,8 @@ Common failure cases:
 - HTTP `400` with `code = "INVALID_ASSISTANT_CONTEXT_WINDOW"` if `contextWindow` is outside `0..5`
 - HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if `workspaceId` does not exist or is not owned by the current user
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if `assetId` does not exist, is not owned by the current user, or is outside the workspace
-- HTTP `503` if Elasticsearch is unavailable
-- HTTP `502` if Elasticsearch returns an integration error
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails
 
 ### `POST /api/assistant/answer`
 
@@ -1034,8 +1039,8 @@ Common failure cases:
 - HTTP `400` with existing assistant context validation codes if context-selection inputs are invalid
 - HTTP `404` with existing workspace/asset not-found codes if scope validation fails
 - HTTP `503` with `code = "ASSISTANT_PROVIDER_UNAVAILABLE"` if FastAPI/Ollama is disabled, unavailable, returns a non-2xx response, times out, or returns an invalid answer contract
-- HTTP `503` if Elasticsearch is unavailable while retrieving context
-- HTTP `502` if Elasticsearch returns an integration error while retrieving context
+- HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
+  operation fails while retrieving context
 
 ## Error Shape Notes
 
@@ -1054,8 +1059,7 @@ Current structured error codes:
 - `FASTAPI_CONNECTIVITY_ERROR`
 - `FASTAPI_INTEGRATION_ERROR`
 - `ASSISTANT_PROVIDER_UNAVAILABLE`
-- `ELASTICSEARCH_UNAVAILABLE`
-- `ELASTICSEARCH_INTEGRATION_ERROR`
+- `SEARCH_SERVICE_UNAVAILABLE`
 - `INVALID_WORKSPACE_NAME`
 - `WORKSPACE_NOT_FOUND`
 - `ASSET_NOT_FOUND`

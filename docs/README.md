@@ -18,10 +18,11 @@ For the current Spring product-core baseline, this is the fastest useful reading
 10. `architecture/phase1-implemented-product-flow.md`
 11. `architecture/phase4-authorized-upload-media-streaming.md`
 12. `architecture/phase5-user-playback-progress.md`
-13. `api/API.md`
-14. `data/Database.md`
-15. `runbooks/local-dev.md`
-16. `testing/integration-smoke-checklist.md`
+13. `architecture/phase7-search-quality-baseline.md`
+14. `api/API.md`
+15. `data/Database.md`
+16. `runbooks/local-dev.md`
+17. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -68,6 +69,8 @@ These are the main current-source-of-truth docs for understanding how the backen
   single-range behavior, storage confidentiality and frontend/runtime limitations
 - `architecture/phase5-user-playback-progress.md`: per-user playback-progress ownership, frozen
   GET/PUT contract, source/status independence, last-write-wins limit and deletion cleanup
+- `architecture/phase7-search-quality-baseline.md`: versioned lexical evaluation corpus,
+  measured Elasticsearch 8.11.1 behavior, hard invariants and known search-quality gaps
 
 ## Submission Documents
 
