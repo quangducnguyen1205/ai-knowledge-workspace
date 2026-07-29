@@ -55,11 +55,18 @@ class SearchQualityBaselineIT {
     private static final String CORPUS_RESOURCE = "/search-quality/v1/corpus.json";
     private static final String EXPECTED_RESOURCE = "/search-quality/v1/expected-baseline.json";
     private static final String INDEX_NAME = "search-quality-v1";
+    private static final String UNICODE_FIDELITY_INDEX_NAME = "search-quality-unicode-fidelity";
+    private static final String BULK_FAILURE_INDEX_NAME = "search-quality-bulk-failure";
     private static final String ELASTICSEARCH_IMAGE =
             "docker.elastic.co/elasticsearch/elasticsearch:8.11.1";
     private static final int EXPECTED_DOCUMENT_COUNT = 102;
     private static final UUID DEFAULT_WORKSPACE_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID VIETNAMESE_ASSET_ID =
+            UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000009");
+    private static final String VIETNAMESE_ROW_ID = "vi-accented";
+    private static final String VIETNAMESE_TEXT =
+            "Thuật toán tìm kiếm nhị phân giảm một nửa không gian sau mỗi bước.";
 
     @Container
     private static final ElasticsearchContainer ELASTICSEARCH =
@@ -97,15 +104,7 @@ class SearchQualityBaselineIT {
         elasticsearchAdapter = new ElasticsearchTranscriptAdapter(restClient, properties, OBJECT_MAPPER);
 
         elasticsearchAdapter.ensureTranscriptIndexExists();
-        List<TranscriptIndexWriteOperation> operations = indexOperations(corpus);
-        TranscriptIndexWriteOperation unicodeOperation = operations.stream()
-                .filter(operation -> operation.documentId().endsWith("-vi-accented"))
-                .findFirst()
-                .orElseThrow();
-        elasticsearchAdapter.indexTranscriptRows(operations.stream()
-                .filter(operation -> !operation.equals(unicodeOperation))
-                .toList());
-        indexUnicodeEvaluationDocument(unicodeOperation);
+        elasticsearchAdapter.indexTranscriptRows(indexOperations(corpus));
         elasticsearchAdapter.refreshTranscriptIndex();
 
         searchApplicationService = new SearchApplicationService(
@@ -163,15 +162,133 @@ class SearchQualityBaselineIT {
     }
 
     @Test
-    void productionBulkNdjsonUnicodeRegressionRemainsExplicit() {
-        TranscriptIndexWriteOperation unicodeOperation = indexOperations(corpus).stream()
-                .filter(operation -> operation.documentId().endsWith("-vi-accented"))
-                .findFirst()
-                .orElseThrow();
+    void fullCorpusUsesProductionBulkAndPreservesAccentedVietnameseIdentityTimingAndRank() {
+        String documentId = VIETNAMESE_ASSET_ID + "-" + VIETNAMESE_ROW_ID;
+        JsonNode storedDocument = restClient.get()
+                .uri("/{indexName}/_doc/{documentId}", INDEX_NAME, documentId)
+                .retrieve()
+                .body(JsonNode.class);
 
-        assertThatThrownBy(() -> elasticsearchAdapter.indexTranscriptRows(List.of(unicodeOperation)))
-                .isInstanceOf(SearchIndexOperationException.class)
-                .hasMessageContaining("vi-accented");
+        assertThat(storedDocument).isNotNull();
+        assertThat(storedDocument.path("found").asBoolean()).isTrue();
+        assertThat(storedDocument.path("_id").asText()).isEqualTo(documentId);
+        JsonNode source = storedDocument.path("_source");
+        assertThat(source.path("transcriptRowId").asText()).isEqualTo(VIETNAMESE_ROW_ID);
+        assertThat(source.path("text").asText()).isEqualTo(VIETNAMESE_TEXT);
+        assertThat(source.path("startMs").asLong()).isEqualTo(240000L);
+        assertThat(source.path("endMs").asLong()).isEqualTo(244000L);
+
+        SearchResult result = search("thuật toán tìm kiếm", DEFAULT_WORKSPACE_ID, null);
+        assertThat(result.hits()).isNotEmpty();
+        SearchHit first = result.hits().getFirst();
+        assertThat(first.transcriptRowId()).isEqualTo(VIETNAMESE_ROW_ID);
+        assertThat(first.text()).isEqualTo(VIETNAMESE_TEXT);
+        assertThat(first.startMs()).isEqualTo(240000L);
+        assertThat(first.endMs()).isEqualTo(244000L);
+    }
+
+    @Test
+    void mixedAsciiAndUnicodeBatchRoundTripsThroughProductionMapperAndBulkAdapter() {
+        ElasticsearchTranscriptAdapter unicodeAdapter = newAdapter(UNICODE_FIDELITY_INDEX_NAME);
+        List<IndexingTranscriptRow> rows = List.of(
+                unicodeRow("ascii", 0, "ASCII transcript"),
+                unicodeRow("vietnamese", 1, VIETNAMESE_TEXT),
+                unicodeRow("decomposed", 2, "Cafe\u0301 uses a decomposed combining accent."),
+                unicodeRow("cjk", 3, "二分探索は検索範囲を半分にします。"),
+                unicodeRow("emoji", 4, "Search checkpoint 🔎✅"),
+                unicodeRow(
+                        "json-sensitive",
+                        5,
+                        "Unicode “quoted” text with \\\\path and a logical line break:\nsecond line."
+                )
+        );
+        IndexingAssetSource source = new IndexingAssetSource(
+                UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                DEFAULT_WORKSPACE_ID,
+                "Unicode mixed batch",
+                rows
+        );
+        List<TranscriptIndexWriteOperation> operations = indexOperations(source);
+        boolean indexCreated = false;
+
+        try {
+            unicodeAdapter.ensureTranscriptIndexExists();
+            indexCreated = true;
+            unicodeAdapter.indexTranscriptRows(operations);
+            unicodeAdapter.refreshTranscriptIndex();
+
+            JsonNode count = restClient.get()
+                    .uri("/{indexName}/_count", UNICODE_FIDELITY_INDEX_NAME)
+                    .retrieve()
+                    .body(JsonNode.class);
+            assertThat(count).isNotNull();
+            assertThat(count.path("count").asInt()).isEqualTo(operations.size());
+
+            for (TranscriptIndexWriteOperation operation : operations) {
+                JsonNode storedDocument = restClient.get()
+                        .uri(
+                                "/{indexName}/_doc/{documentId}",
+                                UNICODE_FIDELITY_INDEX_NAME,
+                                operation.documentId()
+                        )
+                        .retrieve()
+                        .body(JsonNode.class);
+                assertThat(storedDocument).isNotNull();
+                assertThat(storedDocument.path("_id").asText()).isEqualTo(operation.documentId());
+                assertThat(storedDocument.path("_source").path("transcriptRowId").asText())
+                        .isEqualTo(operation.document().transcriptRowId());
+                assertThat(storedDocument.path("_source").path("text").asText())
+                        .isEqualTo(operation.document().text());
+            }
+        } finally {
+            if (indexCreated) {
+                restClient.delete()
+                        .uri("/{indexName}", UNICODE_FIDELITY_INDEX_NAME)
+                        .retrieve()
+                        .toBodilessEntity();
+            }
+        }
+    }
+
+    @Test
+    void realElasticsearchBulkItemFailureStillRaisesBoundedOperationError() {
+        String privateTranscriptText = "this text must not appear in the integration exception";
+        ElasticsearchTranscriptAdapter failureAdapter = newAdapter(BULK_FAILURE_INDEX_NAME);
+        TranscriptIndexWriteOperation rejected = new TranscriptIndexWriteOperation(
+                "rejected-document",
+                new TranscriptIndexDocumentMapper().toDocument(
+                        new IndexingAssetSource(
+                                UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                                DEFAULT_WORKSPACE_ID,
+                                "Rejected operation",
+                                List.of()
+                        ),
+                        unicodeRow("rejected", 0, privateTranscriptText)
+                )
+        );
+
+        restClient.put()
+                .uri("/{indexName}", BULK_FAILURE_INDEX_NAME)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "settings", Map.of("number_of_shards", 1, "number_of_replicas", 0),
+                        "mappings", Map.of(
+                                "properties", Map.of("startMs", Map.of("type", "ip"))
+                        )
+                ))
+                .retrieve()
+                .toBodilessEntity();
+        try {
+            assertThatThrownBy(() -> failureAdapter.indexTranscriptRows(List.of(rejected)))
+                    .isInstanceOf(SearchIndexOperationException.class)
+                    .hasMessageContaining("with status 400")
+                    .hasMessageNotContaining(privateTranscriptText);
+        } finally {
+            restClient.delete()
+                    .uri("/{indexName}", BULK_FAILURE_INDEX_NAME)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
     }
 
     @TestFactory
@@ -304,15 +421,6 @@ class SearchQualityBaselineIT {
                 .orElseThrow(() -> new AssertionError("Missing transcript row " + transcriptRowId));
     }
 
-    private static void indexUnicodeEvaluationDocument(TranscriptIndexWriteOperation operation) {
-        restClient.put()
-                .uri("/{indexName}/_doc/{documentId}", INDEX_NAME, operation.documentId())
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .body(operation.document())
-                .retrieve()
-                .toBodilessEntity();
-    }
-
     private static int adjacentClusterCount(List<SearchHit> hits) {
         Map<UUID, List<Integer>> segmentIndexesByAsset = new LinkedHashMap<>();
         hits.forEach(hit -> {
@@ -360,6 +468,36 @@ class SearchQualityBaselineIT {
             }
         }
         return List.copyOf(operations);
+    }
+
+    private static List<TranscriptIndexWriteOperation> indexOperations(IndexingAssetSource source) {
+        TranscriptIndexDocumentMapper mapper = new TranscriptIndexDocumentMapper();
+        return source.transcriptRows().stream()
+                .map(row -> new TranscriptIndexWriteOperation(
+                        source.assetId() + "-" + row.id(),
+                        mapper.toDocument(source, row)
+                ))
+                .toList();
+    }
+
+    private static IndexingTranscriptRow unicodeRow(String id, int segmentIndex, String text) {
+        long startMs = segmentIndex * 1000L;
+        return new IndexingTranscriptRow(
+                id,
+                "unicode-fixture",
+                segmentIndex,
+                startMs,
+                startMs + 999L,
+                text,
+                "2026-07-29T00:00:00Z"
+        );
+    }
+
+    private static ElasticsearchTranscriptAdapter newAdapter(String indexName) {
+        ElasticsearchProperties properties = new ElasticsearchProperties();
+        properties.setBaseUrl("http://" + ELASTICSEARCH.getHttpHostAddress());
+        properties.setTranscriptIndexName(indexName);
+        return new ElasticsearchTranscriptAdapter(restClient, properties, OBJECT_MAPPER);
     }
 
     private static List<IndexingTranscriptRow> expandRows(CorpusAsset asset) {

@@ -7,6 +7,9 @@ production ranking. The baseline answers which canonical transcript rows the cur
 query adapter and Java relevance policy return, and in which order, for representative
 Workspace video searches.
 
+Slice 7.1A closes the Unicode transport regression discovered by that baseline. It does not
+change search ranking, query clauses, mapping analyzers or public contracts.
+
 FastAPI is not involved. PostgreSQL remains the product and authorization authority;
 Elasticsearch remains derived state.
 
@@ -59,7 +62,8 @@ API version. `commons-lang3` `3.18.0` is also test-scoped to match Testcontainer
 - `ElasticsearchClientConfig` for the production HTTP client;
 - `ElasticsearchTranscriptAdapter.ensureTranscriptIndexExists()` for the production mapping;
 - `TranscriptIndexDocumentMapper` for the production document shape;
-- `ElasticsearchTranscriptAdapter.indexTranscriptRows()` for normal corpus ingestion;
+- `ElasticsearchTranscriptAdapter.indexTranscriptRows()` for all `102` corpus documents,
+  including the accented Vietnamese row;
 - `ElasticsearchTranscriptAdapter.search()` for the production query and hit parser;
 - `SearchApplicationService` and `SearchRelevancePolicy` for authorization scope, the searchable
   Asset allowlist, post-filtering, the public cap and per-Asset cap;
@@ -118,22 +122,35 @@ Slice 7.1 deliberately records these current limitations:
 
 The corpus is intentionally not weakened around these gaps.
 
-## Existing Unicode Bulk-Indexing Regression
+## Unicode Bulk-Indexing Closure
 
-The production NDJSON bulk path currently rejects documents containing non-ASCII text because
-the manually serialized NDJSON body is not delivered with a safe UTF-8 contract. The suite
-locks this as a characterized regression. To measure the current Elasticsearch analyzer
-without changing production in Slice 7.1, the Vietnamese evaluation document is built by the
-production `TranscriptIndexDocumentMapper` and seeded into the disposable index through the
-same production `RestClient` as an `application/json` document. All query construction,
-mapping and hit parsing remain production paths.
+Slice 7.1 exposed that the production adapter passed the manually serialized
+`application/x-ndjson` payload to Spring as a Java `String`. Without an explicit charset,
+Spring's string HTTP converter encoded that media type with its non-JSON default instead of
+UTF-8. Elasticsearch therefore rejected non-ASCII JSON fields even though each line had been
+serialized correctly by Jackson.
 
-This is an indexing transport defect, not evidence that Vietnamese production ingestion is
-supported. It must be fixed separately before claiming end-to-end Vietnamese search support.
+Slice 7.1A converts the complete NDJSON payload to UTF-8 bytes before handing it to the HTTP
+client. Metadata and document lines remain Jackson-serialized, every record retains its
+newline, and the payload retains the final newline required by the Bulk API. The byte-array
+HTTP converter also derives `Content-Length` from the encoded byte length.
+
+The direct `application/json` seed and the expected-failure characterization have been
+removed. All `102` v1 corpus documents now enter Elasticsearch through the production mapper,
+write operation and bulk adapter. The suite additionally proves exact source fidelity for
+Vietnamese, decomposed combining code points, CJK, emoji, JSON-sensitive text and mixed
+ASCII/Unicode batches.
+
+An exact accented query, `thuật toán tìm kiếm`, is now proven end to end through production
+bulk indexing and production search, with canonical row ID and timing preserved at rank 1.
+This is transport fidelity plus the behavior of the existing standard analyzer; it is not
+accent folding, Vietnamese stemming or accent-insensitive search. The unaccented query
+`thuat toan tim kiem` remains unsupported.
 
 ## Why Ranking Is Unchanged
 
-Slice 7.1 adds only test infrastructure, corpus data and documentation. It does not change
-mapping analyzers, query clauses, boosts, candidate size, post-filtering, result caps or public
-response fields. Later quality work must first demonstrate improvement against this baseline
-while retaining its hard authorization, identity, timing and deterministic-order invariants.
+Slice 7.1 adds only test infrastructure, corpus data and documentation. Slice 7.1A changes only
+the bulk request byte encoding. Neither slice changes mapping analyzers, query clauses, boosts,
+candidate size, post-filtering, result caps or public response fields. Later quality work must
+first demonstrate improvement against this baseline while retaining its hard authorization,
+identity, timing and deterministic-order invariants.

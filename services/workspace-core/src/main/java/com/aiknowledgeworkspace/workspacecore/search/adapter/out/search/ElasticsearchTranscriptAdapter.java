@@ -13,6 +13,7 @@ import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.Elastics
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -443,7 +444,7 @@ public class ElasticsearchTranscriptAdapter implements
         return Map.of(field, options);
     }
 
-    private String buildBulkRequestBody(List<TranscriptIndexWriteOperation> operations) {
+    byte[] buildBulkRequestBody(List<TranscriptIndexWriteOperation> operations) {
         StringBuilder body = new StringBuilder();
 
         try {
@@ -457,7 +458,7 @@ public class ElasticsearchTranscriptAdapter implements
             throw new SearchIndexOperationException("Failed to serialize Elasticsearch bulk request", exception);
         }
 
-        return body.toString();
+        return body.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     private void validateBulkResponse(JsonNode bulkResponse) {
