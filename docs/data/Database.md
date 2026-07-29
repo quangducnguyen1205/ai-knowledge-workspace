@@ -120,7 +120,19 @@ depend on the database cascade alone.
 Playback progress is user interaction state, not processing state. It is deliberately outside the
 Asset aggregate: it never participates in status transitions, transcript replacement, indexing or
 media availability, and it is readable and writable in every Asset status and for both source
-types. Concurrency is deterministic last-write-wins for this slice; there is no version column.
+types.
+
+Writes use one atomic statement, `INSERT ... ON CONFLICT (asset_id, user_id) DO UPDATE SET ...`,
+with the composite primary key as the conflict target. The database therefore owns the concurrency
+boundary: two concurrent first writes for the same user and Asset both succeed because the losing
+insert becomes an update, so no primary-key violation escapes. Concurrency is deterministic
+last-write-wins — the write PostgreSQL applies last determines `position_ms`, `completed` and
+`updated_at`. There is no version column, no lock and no retry loop.
+
+H2 cannot parse `ON CONFLICT ... DO UPDATE`, so the production statement is never downgraded for
+the default test profile. `AssetPlaybackProgressConcurrencyPostgresTest` proves it against a real
+PostgreSQL server in a throwaway database, and `AssetPlaybackProgressUpsertContractTest` guards the
+statement shape in every build.
 
 ### `processing_jobs`
 
@@ -181,8 +193,22 @@ constraints. For V5 it proves the new table is additive, that existing asset row
 that composite identity, the non-negative check and the Asset foreign key all hold, and that
 deleting an Asset removes only its own progress rows. `AssetSourcePersistenceTest` validates JPA
 round-trips for both source types, and `AssetPlaybackProgressPersistenceTest` validates the
-playback-progress upsert, isolation, timestamp refresh and deletion behavior against the migrated
-schema with `ddl-auto=validate`.
+playback-progress mapping, composite identity, constraints and deletion behavior against the
+migrated schema with `ddl-auto=validate`.
+
+Playback-progress upsert and concurrency behavior additionally run against a real PostgreSQL
+server. The test is skipped unless the server is offered through the environment, so the default
+suite stays portable:
+
+```bash
+WORKSPACE_CORE_IT_POSTGRES_URL=jdbc:postgresql://localhost:5434/postgres \
+WORKSPACE_CORE_IT_POSTGRES_USER=workspace_core \
+WORKSPACE_CORE_IT_POSTGRES_PASSWORD=workspace_core \
+mvn -f services/workspace-core/pom.xml test -Dtest=AssetPlaybackProgressConcurrencyPostgresTest
+```
+
+It creates a throwaway database, migrates it with Flyway, and drops it afterwards; product data is
+never touched.
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test

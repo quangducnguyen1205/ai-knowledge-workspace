@@ -21,6 +21,16 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Portable schema, mapping, read and deletion coverage for playback progress.
+ *
+ * <p>The production write is one atomic PostgreSQL {@code INSERT ... ON CONFLICT DO UPDATE}
+ * statement, which H2 cannot parse. Upsert behavior and concurrency are therefore proven against a
+ * real PostgreSQL server in {@code AssetPlaybackProgressConcurrencyPostgresIT}, and the statement
+ * itself is guarded in every build by {@code AssetPlaybackProgressUpsertContractTest}. Rows here
+ * are seeded with portable SQL so this test keeps validating the Hibernate mapping, the composite
+ * identity, the database constraints and the deletion boundary.
+ */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-playback-progress;"
                 + "MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -61,46 +71,31 @@ class AssetPlaybackProgressPersistenceTest {
     }
 
     @Test
-    void upsertCreatesThenReplacesOneRowPerUserAndAsset() {
+    void storedProgressIsMappedBackThroughTheCompositeIdentity() {
         UUID assetId = persistUpload();
+        seedProgress(assetId, "user-1", 12345L, false, FIRST_WRITE);
 
-        AssetPlaybackProgressSnapshot created = progressStore.upsert(assetId, "user-1", 12345L, false, FIRST_WRITE);
-        flush();
-
-        assertThat(created).isEqualTo(new AssetPlaybackProgressSnapshot(12345L, false, FIRST_WRITE));
-        assertThat(rowCount(assetId)).isEqualTo(1);
-
-        AssetPlaybackProgressSnapshot replaced = progressStore.upsert(assetId, "user-1", 250L, true, SECOND_WRITE);
-        flush();
-
-        assertThat(replaced).isEqualTo(new AssetPlaybackProgressSnapshot(250L, true, SECOND_WRITE));
-        assertThat(rowCount(assetId)).isEqualTo(1);
         assertThat(progressStore.find(assetId, "user-1"))
-                .contains(new AssetPlaybackProgressSnapshot(250L, true, SECOND_WRITE));
+                .contains(new AssetPlaybackProgressSnapshot(12345L, false, FIRST_WRITE));
+        assertThat(progressStore.find(assetId, "user-2")).isEmpty();
     }
 
     @Test
-    void repeatingAnIdenticalWriteKeepsExactlyOneRow() {
+    void completedProgressKeepsItsLastPosition() {
         UUID assetId = persistUpload();
+        seedProgress(assetId, "user-1", 53480L, true, SECOND_WRITE);
 
-        progressStore.upsert(assetId, "user-1", 12345L, false, FIRST_WRITE);
-        progressStore.upsert(assetId, "user-1", 12345L, false, FIRST_WRITE);
-        flush();
-
-        assertThat(rowCount(assetId)).isEqualTo(1);
         assertThat(progressStore.find(assetId, "user-1"))
-                .contains(new AssetPlaybackProgressSnapshot(12345L, false, FIRST_WRITE));
+                .contains(new AssetPlaybackProgressSnapshot(53480L, true, SECOND_WRITE));
     }
 
     @Test
     void compositeIdentityKeepsUsersAndAssetsIsolated() {
         UUID firstAsset = persistUpload();
         UUID secondAsset = persistYoutube();
-
-        progressStore.upsert(firstAsset, "user-1", 100L, false, FIRST_WRITE);
-        progressStore.upsert(firstAsset, "user-2", 200L, true, FIRST_WRITE);
-        progressStore.upsert(secondAsset, "user-1", 300L, false, FIRST_WRITE);
-        flush();
+        seedProgress(firstAsset, "user-1", 100L, false, FIRST_WRITE);
+        seedProgress(firstAsset, "user-2", 200L, true, FIRST_WRITE);
+        seedProgress(secondAsset, "user-1", 300L, false, FIRST_WRITE);
 
         assertThat(progressStore.find(firstAsset, "user-1"))
                 .contains(new AssetPlaybackProgressSnapshot(100L, false, FIRST_WRITE));
@@ -113,57 +108,42 @@ class AssetPlaybackProgressPersistenceTest {
     }
 
     @Test
-    void aLaterWriteRefreshesTheStoredTimestamp() {
-        UUID assetId = persistUpload();
-
-        progressStore.upsert(assetId, "user-1", 10L, false, FIRST_WRITE);
-        flush();
-        progressStore.upsert(assetId, "user-1", 20L, false, SECOND_WRITE);
-        flush();
-
-        assertThat(progressStore.find(assetId, "user-1"))
-                .get()
-                .extracting(AssetPlaybackProgressSnapshot::updatedAt)
-                .isEqualTo(SECOND_WRITE);
-    }
-
-    @Test
     void youtubeAssetsPersistProgressWithoutAnyUploadObjectMetadata() {
         UUID assetId = persistYoutube();
-
-        progressStore.upsert(assetId, "user-1", 4200L, false, FIRST_WRITE);
-        flush();
+        seedProgress(assetId, "user-1", 4200L, false, FIRST_WRITE);
 
         assertThat(progressStore.find(assetId, "user-1"))
                 .contains(new AssetPlaybackProgressSnapshot(4200L, false, FIRST_WRITE));
     }
 
     @Test
+    void aSecondRowForTheSameUserAndAssetIsRejectedByTheCompositePrimaryKey() {
+        UUID assetId = persistUpload();
+        seedProgress(assetId, "user-1", 100L, false, FIRST_WRITE);
+
+        assertThatThrownBy(() -> seedProgress(assetId, "user-1", 200L, false, SECOND_WRITE))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void theDatabaseRejectsANegativePositionAsDefenceInDepth() {
         UUID assetId = persistUpload();
 
-        assertThatThrownBy(() -> jdbcTemplate.update(
-                "insert into asset_playback_progress (asset_id, user_id, position_ms, completed, updated_at) "
-                        + "values (?, ?, ?, false, current_timestamp)",
-                assetId, "user-1", -1L
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> seedProgress(assetId, "user-1", -1L, false, FIRST_WRITE))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void progressCannotReferenceAnAssetThatDoesNotExist() {
-        assertThatThrownBy(() -> jdbcTemplate.update(
-                "insert into asset_playback_progress (asset_id, user_id, position_ms, completed, updated_at) "
-                        + "values (?, ?, ?, false, current_timestamp)",
-                UUID.randomUUID(), "user-1", 10L
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> seedProgress(UUID.randomUUID(), "user-1", 10L, false, FIRST_WRITE))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void deletingTheAssetRowCascadesProgressAway() {
         UUID assetId = persistUpload();
-        progressStore.upsert(assetId, "user-1", 12345L, false, FIRST_WRITE);
-        progressStore.upsert(assetId, "user-2", 6789L, true, FIRST_WRITE);
-        flush();
+        seedProgress(assetId, "user-1", 12345L, false, FIRST_WRITE);
+        seedProgress(assetId, "user-2", 6789L, true, FIRST_WRITE);
         assertThat(rowCount(assetId)).isEqualTo(2);
 
         jdbcTemplate.update("delete from assets where id = ?", assetId);
@@ -175,16 +155,23 @@ class AssetPlaybackProgressPersistenceTest {
     void theStoreCanRemoveEveryProgressRowForOneAssetThroughTheDeletionBoundary() {
         UUID assetId = persistUpload();
         UUID otherAssetId = persistYoutube();
-        progressStore.upsert(assetId, "user-1", 1L, false, FIRST_WRITE);
-        progressStore.upsert(assetId, "user-2", 2L, false, FIRST_WRITE);
-        progressStore.upsert(otherAssetId, "user-1", 3L, false, FIRST_WRITE);
-        flush();
+        seedProgress(assetId, "user-1", 1L, false, FIRST_WRITE);
+        seedProgress(assetId, "user-2", 2L, false, FIRST_WRITE);
+        seedProgress(otherAssetId, "user-1", 3L, false, FIRST_WRITE);
 
         progressStore.deleteForAsset(assetId);
         flush();
 
         assertThat(rowCount(assetId)).isZero();
         assertThat(rowCount(otherAssetId)).isEqualTo(1);
+    }
+
+    private void seedProgress(UUID assetId, String userId, long positionMs, boolean completed, Instant updatedAt) {
+        jdbcTemplate.update(
+                "insert into asset_playback_progress (asset_id, user_id, position_ms, completed, updated_at) "
+                        + "values (?, ?, ?, ?, ?)",
+                assetId, userId, positionMs, completed, java.sql.Timestamp.from(updatedAt)
+        );
     }
 
     private void flush() {

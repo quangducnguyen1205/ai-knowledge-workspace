@@ -152,6 +152,62 @@ class AssetPlaybackProgressControllerTest {
     }
 
     @Test
+    void missingOrNullCompletedIsRejectedWithTheValidationErrorConvention() throws Exception {
+        when(playbackProgress.saveProgress(eq(assetId), any()))
+                .thenThrow(new InvalidPlaybackProgressException("completed is required"));
+
+        for (String body : new String[]{"{\"positionMs\":12345}", "{\"positionMs\":12345,\"completed\":null}"}) {
+            mockMvc.perform(put("/api/assets/{assetId}/playback-progress", assetId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_PLAYBACK_PROGRESS"))
+                    .andExpect(jsonPath("$.message").value("completed is required"));
+        }
+
+        ArgumentCaptor<SaveAssetPlaybackProgressCommand> command =
+                ArgumentCaptor.forClass(SaveAssetPlaybackProgressCommand.class);
+        org.mockito.Mockito.verify(playbackProgress, org.mockito.Mockito.times(2))
+                .saveProgress(eq(assetId), command.capture());
+        assertThat(command.getAllValues()).allSatisfy(value -> assertThat(value.completed()).isNull());
+    }
+
+    @Test
+    void bothCompletionValuesAreBoundAndAccepted() throws Exception {
+        when(playbackProgress.saveProgress(eq(assetId), any()))
+                .thenReturn(new AssetPlaybackProgressView(assetId, 12345L, true, SAVED_AT));
+
+        mockMvc.perform(put("/api/assets/{assetId}/playback-progress", assetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionMs\":12345,\"completed\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(put("/api/assets/{assetId}/playback-progress", assetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionMs\":12345,\"completed\":false}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SaveAssetPlaybackProgressCommand> command =
+                ArgumentCaptor.forClass(SaveAssetPlaybackProgressCommand.class);
+        org.mockito.Mockito.verify(playbackProgress, org.mockito.Mockito.times(2))
+                .saveProgress(eq(assetId), command.capture());
+        assertThat(command.getAllValues()).extracting(SaveAssetPlaybackProgressCommand::completed)
+                .containsExactly(true, false);
+    }
+
+    @Test
+    void aWrongCompletedTypeFollowsTheExistingMalformedBodyConvention() throws Exception {
+        mockMvc.perform(put("/api/assets/{assetId}/playback-progress", assetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionMs\":12345,\"completed\":\"sometimes\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"));
+
+        verifyNoInteractions(playbackProgress);
+    }
+
+    @Test
     void nonNumericPositionIsRejectedBeforeReachingTheApplicationLayer() throws Exception {
         mockMvc.perform(put("/api/assets/{assetId}/playback-progress", assetId)
                         .contentType(MediaType.APPLICATION_JSON)

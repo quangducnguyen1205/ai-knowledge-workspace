@@ -591,7 +591,7 @@ Request:
 - Content type: `application/json`
 - Body:
   - `positionMs` required, an integer number of milliseconds greater than or equal to zero
-  - `completed` optional boolean, defaulting to `false` when absent
+  - `completed` required boolean
 
 ```json
 {
@@ -607,11 +607,17 @@ Response:
 
 Current behavior:
 
-- Spring validates `positionMs` before authorizing the Asset and before any persistence.
-- The write is an upsert keyed by current user plus Asset, so exactly one row exists per pair.
-- Concurrency is deterministic last-write-wins for this slice: a request that completes later
-  replaces an earlier position. There is no version field, no distributed lock, no event
-  publication and no cross-device conflict resolution.
+- Spring validates `positionMs` and `completed` before authorizing the Asset and before any
+  persistence. A missing or null `completed` is rejected; it is never defaulted to `false`.
+- The write is one atomic database upsert keyed by current user plus Asset, so exactly one row
+  exists per pair. Two concurrent first writes for the same user and Asset both succeed: the
+  database converts the losing insert into an update, so a primary-key violation never reaches the
+  API and there is no retry loop.
+- Concurrency is deterministic last-write-wins for this slice: the write the database applies last
+  determines `positionMs`, `completed` and `updatedAt`. There is no version field, no distributed
+  lock, no event publication and no cross-device conflict resolution. Each response reports the
+  values that request persisted, so a request whose values are later replaced by a concurrent write
+  still reports its own write.
 - Repeating an identical request is safe and returns the persisted representation again.
 - Saving progress never changes Asset status, ProcessingJob state, transcript rows, the search
   index or the stored media object.
@@ -620,8 +626,9 @@ Current behavior:
 Common failure cases:
 
 - HTTP `400` with `code = "INVALID_PLAYBACK_PROGRESS"` for a missing, negative, non-integer or
-  out-of-range `positionMs`
-- HTTP `400` with `code = "INVALID_REQUEST_BODY"` for a missing, malformed or non-numeric body
+  out-of-range `positionMs`, or for a missing or null `completed`
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` for a missing or malformed body, or for a
+  `positionMs`/`completed` value of the wrong JSON type
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current user
 
 There is no watch-history or progress-list endpoint yet.

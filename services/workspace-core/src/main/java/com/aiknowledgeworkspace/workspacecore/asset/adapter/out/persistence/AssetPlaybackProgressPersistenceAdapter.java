@@ -19,7 +19,11 @@ class AssetPlaybackProgressPersistenceAdapter implements AssetPlaybackProgressSt
     @Override
     public Optional<AssetPlaybackProgressSnapshot> find(UUID assetId, String userId) {
         return progressRepository.findById(new AssetPlaybackProgressEntryId(assetId, userId))
-                .map(this::toSnapshot);
+                .map(entry -> new AssetPlaybackProgressSnapshot(
+                        entry.getPositionMs(),
+                        entry.isCompleted(),
+                        entry.getUpdatedAt()
+                ));
     }
 
     @Override
@@ -30,25 +34,12 @@ class AssetPlaybackProgressPersistenceAdapter implements AssetPlaybackProgressSt
             boolean completed,
             Instant updatedAt
     ) {
-        AssetPlaybackProgressEntry entry = progressRepository
-                .findById(new AssetPlaybackProgressEntryId(assetId, userId))
-                .orElseGet(() -> new AssetPlaybackProgressEntry(
-                        assetId, userId, positionMs, completed, updatedAt
-                ));
-        entry.apply(positionMs, completed, updatedAt);
-        return toSnapshot(progressRepository.save(entry));
+        progressRepository.upsert(assetId, userId, positionMs, completed, updatedAt);
+        return new AssetPlaybackProgressSnapshot(positionMs, completed, updatedAt);
     }
 
     @Override
     public void deleteForAsset(UUID assetId) {
         progressRepository.deleteByAssetId(assetId);
-    }
-
-    private AssetPlaybackProgressSnapshot toSnapshot(AssetPlaybackProgressEntry entry) {
-        return new AssetPlaybackProgressSnapshot(
-                entry.getPositionMs(),
-                entry.isCompleted(),
-                entry.getUpdatedAt()
-        );
     }
 }

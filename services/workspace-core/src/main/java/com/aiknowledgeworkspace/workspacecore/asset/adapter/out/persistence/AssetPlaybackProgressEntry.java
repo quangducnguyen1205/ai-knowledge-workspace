@@ -8,6 +8,11 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Read mapping for one user's playback progress. Writes never go through this entity: the store
+ * uses one atomic {@code INSERT ... ON CONFLICT DO UPDATE} statement so that concurrent first
+ * writes cannot collide on the composite primary key.
+ */
 @Entity
 @Table(name = "asset_playback_progress")
 @IdClass(AssetPlaybackProgressEntryId.class)
@@ -31,27 +36,6 @@ public class AssetPlaybackProgressEntry {
     private Instant updatedAt;
 
     protected AssetPlaybackProgressEntry() {
-    }
-
-    AssetPlaybackProgressEntry(
-            UUID assetId,
-            String userId,
-            long positionMs,
-            boolean completed,
-            Instant updatedAt
-    ) {
-        this.assetId = assetId;
-        this.userId = userId;
-        this.positionMs = positionMs;
-        this.completed = completed;
-        this.updatedAt = updatedAt;
-    }
-
-    /** Last write wins: the newest request replaces position, completion and timestamp. */
-    void apply(long positionMs, boolean completed, Instant updatedAt) {
-        this.positionMs = positionMs;
-        this.completed = completed;
-        this.updatedAt = updatedAt;
     }
 
     public UUID getAssetId() {

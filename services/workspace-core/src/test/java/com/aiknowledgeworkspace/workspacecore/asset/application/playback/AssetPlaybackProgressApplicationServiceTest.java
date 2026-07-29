@@ -310,14 +310,24 @@ class AssetPlaybackProgressApplicationServiceTest {
     }
 
     @Test
-    void aMissingCompletionFlagDefaultsToNotCompleted() {
+    void aMissingCompletionFlagIsRejectedInsteadOfDefaultingToFalse() {
+        assertThatThrownBy(() -> service.saveProgress(
+                assetId, new SaveAssetPlaybackProgressCommand(BigDecimal.valueOf(10), null)
+        ))
+                .isInstanceOf(InvalidPlaybackProgressException.class)
+                .hasMessage("completed is required");
+
+        verifyNoInteractions(assetQueries, progressStore, progressTransaction);
+    }
+
+    @Test
+    void bothCompletionValuesAreAccepted() {
         authorize(uploadAsset(AssetStatus.SEARCHABLE));
         when(currentUser.getCurrentUserId()).thenReturn(CURRENT_USER);
         whenUpsertEchoes();
 
-        assertThat(service.saveProgress(
-                assetId, new SaveAssetPlaybackProgressCommand(BigDecimal.valueOf(10), null)
-        ).completed()).isFalse();
+        assertThat(service.saveProgress(assetId, command(10, false)).completed()).isFalse();
+        assertThat(service.saveProgress(assetId, command(10, true)).completed()).isTrue();
     }
 
     // --------------------------------------------------------------- helpers

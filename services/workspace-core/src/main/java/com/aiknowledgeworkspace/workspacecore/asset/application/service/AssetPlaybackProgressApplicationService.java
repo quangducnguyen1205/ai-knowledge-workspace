@@ -50,7 +50,7 @@ public class AssetPlaybackProgressApplicationService implements AssetPlaybackPro
     @Override
     public AssetPlaybackProgressView saveProgress(UUID assetId, SaveAssetPlaybackProgressCommand command) {
         long positionMs = validatePositionMs(command == null ? null : command.positionMs());
-        boolean completed = command != null && Boolean.TRUE.equals(command.completed());
+        boolean completed = validateCompleted(command == null ? null : command.completed());
         UUID authorizedAssetId = assetQueries.loadAuthorizedAsset(assetId).getId();
         AssetPlaybackProgressSnapshot saved = progressTransaction.upsert(
                 authorizedAssetId,
@@ -77,6 +77,18 @@ public class AssetPlaybackProgressApplicationService implements AssetPlaybackPro
         } catch (ArithmeticException exception) {
             throw new InvalidPlaybackProgressException("positionMs is outside the supported range");
         }
+    }
+
+    /**
+     * {@code completed} is a required part of the frozen request. A missing or null flag is a
+     * client error rather than an implicit {@code false}, so a partial body can never silently
+     * clear a completion that the user already reached.
+     */
+    private boolean validateCompleted(Boolean completed) {
+        if (completed == null) {
+            throw new InvalidPlaybackProgressException("completed is required");
+        }
+        return completed;
     }
 
     private AssetPlaybackProgressView toView(UUID assetId, AssetPlaybackProgressSnapshot snapshot) {
