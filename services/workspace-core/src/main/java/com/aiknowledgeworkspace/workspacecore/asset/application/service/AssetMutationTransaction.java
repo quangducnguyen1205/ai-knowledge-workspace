@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.service;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetPlaybackProgressStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUseCase;
@@ -12,15 +13,18 @@ class AssetMutationTransaction {
 
     private final AssetStore assetStore;
     private final CanonicalTranscriptStore transcriptStore;
+    private final AssetPlaybackProgressStore playbackProgressStore;
     private final ProcessingRequestUseCase processingRequestUseCase;
 
     AssetMutationTransaction(
             AssetStore assetStore,
             CanonicalTranscriptStore transcriptStore,
+            AssetPlaybackProgressStore playbackProgressStore,
             ProcessingRequestUseCase processingRequestUseCase
     ) {
         this.assetStore = assetStore;
         this.transcriptStore = transcriptStore;
+        this.playbackProgressStore = playbackProgressStore;
         this.processingRequestUseCase = processingRequestUseCase;
     }
 
@@ -33,6 +37,7 @@ class AssetMutationTransaction {
     @Transactional
     void delete(Asset asset) {
         transcriptStore.delete(asset.getId());
+        playbackProgressStore.deleteForAsset(asset.getId());
         processingRequestUseCase.deleteForAsset(asset.getId());
         assetStore.delete(asset);
     }

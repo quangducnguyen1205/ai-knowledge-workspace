@@ -18,6 +18,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.Transc
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidTranscriptContextWindowException;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.InvalidPlaybackProgressException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetMediaNotAvailableException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetMediaReadException;
 
@@ -88,6 +89,13 @@ public class AssetApiExceptionHandler {
     ) {
         return PublicApiErrorResponses.clientError(
                 HttpStatus.BAD_REQUEST, "INVALID_TRANSCRIPT_CONTEXT_WINDOW", exception.getMessage(), exception
+        );
+    }
+
+    @ExceptionHandler(InvalidPlaybackProgressException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidPlaybackProgress(InvalidPlaybackProgressException exception) {
+        return PublicApiErrorResponses.clientError(
+                HttpStatus.BAD_REQUEST, "INVALID_PLAYBACK_PROGRESS", exception.getMessage(), exception
         );
     }
 

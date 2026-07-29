@@ -532,6 +532,100 @@ GET, then returns the full-object `Content-Type`, `Content-Length`, `Accept-Rang
 `Range` on HEAD is intentionally ignored in this slice: Spring returns the authorized full-object
 metadata with HTTP `200` and no body.
 
+### `GET /api/assets/{assetId}/playback-progress`
+
+Reads the current user's saved playback position for one authorized Asset.
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `assetId`
+  - `positionMs`
+  - `completed`
+  - `updatedAt`
+
+```json
+{
+  "assetId": "0f2f2d5c-2d0a-4f4a-9a1e-1c4d8f2b6a11",
+  "positionMs": 12345,
+  "completed": false,
+  "updatedAt": "2026-07-29T08:00:00Z"
+}
+```
+
+When the current user has never saved progress for this Asset, Spring returns the frozen default
+representation and does not create a row:
+
+```json
+{
+  "assetId": "0f2f2d5c-2d0a-4f4a-9a1e-1c4d8f2b6a11",
+  "positionMs": 0,
+  "completed": false,
+  "updatedAt": null
+}
+```
+
+Current behavior:
+
+- Progress is owned by the pair of current authenticated user and Asset. The owning user identifier
+  is never present in the response.
+- Both `UPLOAD` and `YOUTUBE` Assets are supported; playback progress is source-neutral.
+- Progress is independent of processing, transcript, indexing and media-object availability. It is
+  readable in `PROCESSING`, `FAILED`, `TRANSCRIPT_READY` and `SEARCHABLE`.
+- Workspace ownership is resolved through the existing authorized Asset lookup before any progress
+  read, so a foreign Asset is indistinguishable from a missing one.
+- A `completed` record keeps its last position. Spring does not decide resume behavior; a client
+  must not silently resume a completed record.
+
+Common failure cases:
+
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current user
+
+### `PUT /api/assets/{assetId}/playback-progress`
+
+Saves the current user's playback position for one authorized Asset.
+
+Request:
+
+- Content type: `application/json`
+- Body:
+  - `positionMs` required, an integer number of milliseconds greater than or equal to zero
+  - `completed` optional boolean, defaulting to `false` when absent
+
+```json
+{
+  "positionMs": 12345,
+  "completed": false
+}
+```
+
+Response:
+
+- HTTP `200`
+- Body: the same representation as the GET endpoint, using the persisted values and timestamp
+
+Current behavior:
+
+- Spring validates `positionMs` before authorizing the Asset and before any persistence.
+- The write is an upsert keyed by current user plus Asset, so exactly one row exists per pair.
+- Concurrency is deterministic last-write-wins for this slice: a request that completes later
+  replaces an earlier position. There is no version field, no distributed lock, no event
+  publication and no cross-device conflict resolution.
+- Repeating an identical request is safe and returns the persisted representation again.
+- Saving progress never changes Asset status, ProcessingJob state, transcript rows, the search
+  index or the stored media object.
+- Deleting the Asset removes its playback-progress records.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_PLAYBACK_PROGRESS"` for a missing, negative, non-integer or
+  out-of-range `positionMs`
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` for a missing, malformed or non-numeric body
+- HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current user
+
+There is no watch-history or progress-list endpoint yet.
+
 ### `PATCH /api/assets/{assetId}`
 
 Updates the product-owned asset title.

@@ -17,10 +17,11 @@ For the current Spring product-core baseline, this is the fastest useful reading
 9. `architecture/phase1-timestamp-aware-transcript-foundation.md`
 10. `architecture/phase1-implemented-product-flow.md`
 11. `architecture/phase4-authorized-upload-media-streaming.md`
-12. `api/API.md`
-13. `data/Database.md`
-14. `runbooks/local-dev.md`
-15. `testing/integration-smoke-checklist.md`
+12. `architecture/phase5-user-playback-progress.md`
+13. `api/API.md`
+14. `data/Database.md`
+15. `runbooks/local-dev.md`
+16. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -65,6 +66,8 @@ These are the main current-source-of-truth docs for understanding how the backen
   compatibility decisions, boundary proof, migration, indexing and validation evidence
 - `architecture/phase4-authorized-upload-media-streaming.md`: authorized Upload media GET/HEAD,
   single-range behavior, storage confidentiality and frontend/runtime limitations
+- `architecture/phase5-user-playback-progress.md`: per-user playback-progress ownership, frozen
+  GET/PUT contract, source/status independence, last-write-wins limit and deletion cleanup
 
 ## Submission Documents
 

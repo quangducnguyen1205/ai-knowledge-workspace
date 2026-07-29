@@ -58,6 +58,7 @@ collaboration platform, or unrestricted RAG product.
 - [Service Boundaries](02-service-boundaries.md)
 - [Current Implemented Product Flow](phase1-implemented-product-flow.md)
 - [Phase 2 Source-Aware Asset Foundation](phase2-source-aware-asset-foundation.md)
+- [Phase 5 User Playback Progress](phase5-user-playback-progress.md)
 - [API Summary](../api/API.md)
 - [Database](../data/Database.md)
 - [Local Development](../runbooks/local-dev.md)

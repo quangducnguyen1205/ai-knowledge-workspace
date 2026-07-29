@@ -60,7 +60,7 @@ class CleanBaselineMigrationTest {
                 legacyAssetId
         )).isNull();
 
-        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(dataSource, "4").migrate().migrationsExecuted).isEqualTo(1);
 
         UUID workspaceOne = insertWorkspace(jdbc, "Workspace one");
         UUID workspaceTwo = insertWorkspace(jdbc, "Workspace two");
@@ -136,7 +136,7 @@ class CleanBaselineMigrationTest {
         )).isEqualTo("video id");
         jdbc.update("delete from assets where id = ?", preV4UnsafeAssetId);
 
-        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(dataSource, "4").migrate().migrationsExecuted).isEqualTo(1);
 
         assertInvalidYoutubeVideoId(jdbc, workspaceId, "video id");
         assertInvalidYoutubeVideoId(jdbc, workspaceId, " video-id ");
@@ -145,6 +145,73 @@ class CleanBaselineMigrationTest {
         assertInvalidYoutubeVideoId(jdbc, workspaceId, "a".repeat(129));
 
         insertYoutubeAsset(jdbc, UUID.randomUUID(), workspaceId, "Safe_ID-123");
+    }
+
+    @Test
+    void v5AddsUserScopedPlaybackProgressWithoutTouchingExistingProductTables() {
+        JdbcDataSource dataSource = dataSource();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        assertThat(flyway(dataSource, "4").migrate().migrationsExecuted).isEqualTo(4);
+
+        UUID workspaceId = insertWorkspace(jdbc, "Playback progress");
+        UUID uploadAssetId = UUID.randomUUID();
+        insertSourceAwareAsset(
+                jdbc, uploadAssetId, workspaceId, "UPLOAD", null,
+                "fixture.mp4", "workspace-media", "objects/fixture.mp4", "video/mp4", 42L, "legacy-etag"
+        );
+        Map<String, Object> uploadBeforeV5 = loadUploadFields(jdbc, uploadAssetId);
+        assertThat(columns(jdbc, "assets")).doesNotContain("position_ms", "completed");
+
+        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+
+        assertThat(columns(jdbc, "asset_playback_progress"))
+                .containsExactlyInAnyOrder("asset_id", "user_id", "position_ms", "completed", "updated_at");
+        assertThat(constraints(jdbc, "asset_playback_progress")).contains(
+                "pk_asset_playback_progress",
+                "ck_asset_playback_progress_position_non_negative",
+                "fk_asset_playback_progress_asset"
+        );
+        assertThat(loadUploadFields(jdbc, uploadAssetId)).isEqualTo(uploadBeforeV5);
+
+        UUID youtubeAssetId = UUID.randomUUID();
+        insertYoutubeAsset(jdbc, youtubeAssetId, workspaceId, "Safe_ID-123");
+
+        insertPlaybackProgress(jdbc, uploadAssetId, "user-1", 12345L, false);
+        insertPlaybackProgress(jdbc, uploadAssetId, "user-2", 0L, true);
+        insertPlaybackProgress(jdbc, youtubeAssetId, "user-1", 6789L, false);
+
+        assertInvalidAsset(() -> insertPlaybackProgress(jdbc, uploadAssetId, "user-1", 1L, false));
+        assertInvalidAsset(() -> insertPlaybackProgress(jdbc, uploadAssetId, "user-3", -1L, false));
+        assertInvalidAsset(() -> insertPlaybackProgress(jdbc, UUID.randomUUID(), "user-1", 1L, false));
+
+        assertThat(progressRowCount(jdbc, uploadAssetId)).isEqualTo(2);
+        jdbc.update("delete from assets where id = ?", uploadAssetId);
+        assertThat(progressRowCount(jdbc, uploadAssetId)).isZero();
+        assertThat(progressRowCount(jdbc, youtubeAssetId)).isEqualTo(1);
+    }
+
+    private void insertPlaybackProgress(
+            JdbcTemplate jdbc,
+            UUID assetId,
+            String userId,
+            long positionMs,
+            boolean completed
+    ) {
+        jdbc.update(
+                "insert into asset_playback_progress (asset_id, user_id, position_ms, completed, updated_at) "
+                        + "values (?, ?, ?, ?, current_timestamp)",
+                assetId, userId, positionMs, completed
+        );
+    }
+
+    private int progressRowCount(JdbcTemplate jdbc, UUID assetId) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from asset_playback_progress where asset_id = ?",
+                Integer.class,
+                assetId
+        );
+        return count == null ? 0 : count;
     }
 
     private JdbcDataSource dataSource() {

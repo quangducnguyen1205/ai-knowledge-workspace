@@ -5,21 +5,25 @@ MinIO and Redis are derived, transport, binary or execution infrastructure.
 
 ## Migration policy
 
-The Spring backend uses the immutable clean baseline plus additive Phase 1 and Phase 2 Slice 1
-migrations:
+The Spring backend uses the immutable clean baseline plus additive Phase 1, Phase 2 Slice 1 and
+Phase 5 Slice 5A migrations:
 
 ```text
 services/workspace-core/src/main/resources/db/migration/
 ├── V1__create_product_schema.sql
 ├── V2__add_transcript_timing.sql
 ├── V3__add_asset_source_identity.sql
-└── V4__strengthen_youtube_video_id_constraint.sql
+├── V4__strengthen_youtube_video_id_constraint.sql
+└── V5__add_asset_playback_progress.sql
 ```
 
 The previous local-development migration chain was consolidated before timestamp-aware transcript
-work. `V1`, `V2` and `V3` remain unchanged. Existing clean-V1 databases migrate in place through
-`V2`, `V3` and `V4`; databases from the older pre-baseline chain remain outside this compatibility
-promise. Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
+work. `V1`, `V2`, `V3` and `V4` remain unchanged. Existing clean-V1 databases migrate in place
+through `V2`, `V3`, `V4` and `V5`; databases from the older pre-baseline chain remain outside this
+compatibility promise. Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
+
+`V5` is purely additive: it creates one new table and changes no existing table, column, constraint
+or index.
 
 `spring.jpa.hibernate.ddl-auto=validate` remains the normal setting, so Flyway creates the schema
 and Hibernate verifies mappings without mutating it.
@@ -33,6 +37,7 @@ and Hibernate verifies mappings without mutating it.
 | `assets` | asset | product source identity, optional upload object reference and lifecycle |
 | `processing_jobs` | processing | one durable processing request correlation per asset |
 | `asset_transcript_rows` | asset | canonical ordered transcript snapshot |
+| `asset_playback_progress` | asset | per-user playback position and completion state |
 | `outbox_events` | outbox | durable publication intent and recovery state |
 | `consumed_processing_result_events` | processing | result inbox/idempotency and bounded recovery envelope |
 | `asset_search_index_jobs` | search | derived-indexing intent, attempt and fingerprint state |
@@ -46,6 +51,7 @@ user_accounts                  workspaces
                                                    1 ---- 0..1 processing_jobs
                                                    1 ---- * asset_transcript_rows
                                                    1 ---- * asset_search_index_jobs
+                                                   1 ---- * asset_playback_progress
 
 outbox_events                         generic durable intent
 consumed_processing_result_events     processing-result inbox
@@ -93,6 +99,28 @@ Binary data is never stored in PostgreSQL. Asset source identity and lifecycle a
 truth. FastAPI may later own acquisition execution, but it must not become the authority for
 `source_type` or `youtube_video_id`. Asset ownership is inherited through the workspace and
 enforced by owner-scoped application/repository operations.
+
+### `asset_playback_progress`
+
+Rows store `asset_id`, `user_id`, `position_ms`, `completed` and `updated_at`. The composite primary
+key `(asset_id, user_id)` guarantees exactly one row per user and Asset, and also serves the only
+two access paths this slice needs: an exact per-user lookup and asset-scoped deletion. No secondary
+index is created because there is no watch-history or progress-list read.
+
+`user_id` is the resolved product identity string and reuses the `workspaces.owner_id` type and
+rationale: it intentionally supports the explicit local-development identity path and is therefore
+not foreign-keyed to `user_accounts`. `ck_asset_playback_progress_position_non_negative` keeps
+`position_ms >= 0` as defence in depth behind application validation, `completed` is non-null and
+`updated_at` is a timezone-aware application-controlled timestamp.
+
+`fk_asset_playback_progress_asset` cascades on Asset deletion. The application deletion boundary
+also removes progress explicitly inside the same product-truth transaction, so cleanup does not
+depend on the database cascade alone.
+
+Playback progress is user interaction state, not processing state. It is deliberately outside the
+Asset aggregate: it never participates in status transitions, transcript replacement, indexing or
+media availability, and it is readable and writable in every Asset status and for both source
+types. Concurrency is deterministic last-write-wins for this slice; there is no version column.
 
 ### `processing_jobs`
 
@@ -145,11 +173,16 @@ index does not change product truth.
 
 ## Clean-schema validation
 
-`CleanBaselineMigrationTest` starts from an empty database and migrates V1→V2→V3. It proves that
-V3 preserves and backfills existing upload data, leaves no `source_type` default, accepts both
+`CleanBaselineMigrationTest` starts from an empty database and migrates V1→V2→V3→V4→V5. It proves
+that V3 preserves and backfills existing upload data, leaves no `source_type` default, accepts both
 valid source shapes, enforces non-negative upload size and rejects mixed shapes. It also verifies
 workspace-scoped YouTube uniqueness, nullable upload identities and the Phase 1 transcript-timing
-constraints. `AssetSourcePersistenceTest` validates JPA round-trips for both source types.
+constraints. For V5 it proves the new table is additive, that existing asset rows are untouched,
+that composite identity, the non-negative check and the Asset foreign key all hold, and that
+deleting an Asset removes only its own progress rows. `AssetSourcePersistenceTest` validates JPA
+round-trips for both source types, and `AssetPlaybackProgressPersistenceTest` validates the
+playback-progress upsert, isolation, timestamp refresh and deletion behavior against the migrated
+schema with `ddl-auto=validate`.
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test

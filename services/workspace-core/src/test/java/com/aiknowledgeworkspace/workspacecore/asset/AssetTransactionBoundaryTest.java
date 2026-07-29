@@ -83,6 +83,36 @@ class AssetTransactionBoundaryTest {
         assertThat(transactional(delete)).isNotNull();
     }
 
+    @Test
+    void playbackProgressWritesAreTransactionalWhileReadsAndOrchestrationAreNot() throws Exception {
+        Class<?> progressTransactionClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service.AssetPlaybackProgressTransaction"
+        );
+        Method upsert = progressTransactionClass.getDeclaredMethod(
+                "upsert",
+                java.util.UUID.class,
+                String.class,
+                long.class,
+                boolean.class,
+                java.time.Instant.class
+        );
+        Class<?> progressServiceClass = Class.forName(
+                "com.aiknowledgeworkspace.workspacecore.asset.application.service"
+                        + ".AssetPlaybackProgressApplicationService"
+        );
+        Method getProgress = progressServiceClass.getMethod("getProgress", java.util.UUID.class);
+        Method saveProgress = progressServiceClass.getMethod(
+                "saveProgress",
+                java.util.UUID.class,
+                com.aiknowledgeworkspace.workspacecore.asset.application.command
+                        .SaveAssetPlaybackProgressCommand.class
+        );
+
+        assertThat(transactional(upsert)).isNotNull();
+        assertThat(transactional(getProgress)).isNull();
+        assertThat(transactional(saveProgress)).isNull();
+    }
+
     private Transactional transactional(Method method) {
         return AnnotatedElementUtils.findMergedAnnotation(method, Transactional.class);
     }
