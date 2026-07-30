@@ -2,9 +2,18 @@ package com.aiknowledgeworkspace.workspacecore.search.application.service;
 
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContext;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextRow;
+import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
+/**
+ * Section budgets are counted in Unicode code points, but every cut position is moved to a
+ * complete grapheme-cluster boundary first, so truncation can never emit half of a
+ * user-perceived character. Moving the cut only ever drops content, so the code-point budgets
+ * stay hard limits. Retained text is an exact slice of the input: no composition, folding or
+ * other semantic normalization is applied here.
+ */
 final class SearchContextSnippetPolicy {
 
     static final int MAX_CODE_POINTS = 600;
@@ -81,7 +90,7 @@ final class SearchContextSnippetPolicy {
             return value;
         }
         int end = value.offsetByCodePoints(0, budget - 1);
-        return value.substring(0, end) + ELLIPSIS;
+        return value.substring(0, graphemeBoundaryAtOrBefore(value, end)) + ELLIPSIS;
     }
 
     private static String suffix(String value, int budget) {
@@ -90,6 +99,30 @@ final class SearchContextSnippetPolicy {
             return value;
         }
         int start = value.offsetByCodePoints(0, codePointCount - budget + 1);
-        return ELLIPSIS + value.substring(start);
+        return ELLIPSIS + value.substring(graphemeBoundaryAtOrAfter(value, start));
+    }
+
+    private static int graphemeBoundaryAtOrBefore(String value, int offset) {
+        BreakIterator graphemes = graphemesOf(value);
+        if (graphemes.isBoundary(offset)) {
+            return offset;
+        }
+        int previous = graphemes.preceding(offset);
+        return previous == BreakIterator.DONE ? 0 : previous;
+    }
+
+    private static int graphemeBoundaryAtOrAfter(String value, int offset) {
+        BreakIterator graphemes = graphemesOf(value);
+        if (graphemes.isBoundary(offset)) {
+            return offset;
+        }
+        int next = graphemes.following(offset);
+        return next == BreakIterator.DONE ? value.length() : next;
+    }
+
+    private static BreakIterator graphemesOf(String value) {
+        BreakIterator graphemes = BreakIterator.getCharacterInstance(Locale.ROOT);
+        graphemes.setText(value);
+        return graphemes;
     }
 }

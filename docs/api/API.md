@@ -944,6 +944,14 @@ Current behavior:
   either side and a maximum of `600` Unicode code points. It is additive and nullable so
   older clients may continue to render `text`; the matching identity, timing, score and
   ordering are unchanged.
+- Truncation is bounded in Unicode code points, and every cut position is adjusted to a
+  complete grapheme-cluster boundary. A snippet therefore never begins or ends with part of a
+  user-perceived character: an isolated combining mark, variation selector, zero-width joiner,
+  emoji modifier or half of a surrogate pair cannot be returned. A cluster that does not fit
+  completely into its section is excluded, so the code-point maximum is still a hard limit.
+- Unicode composition is preserved. The retained text is an exact code-point slice of the
+  canonical transcript row: decomposed input is not composed, and no accent folding,
+  transliteration or case change is applied.
 - A derived Elasticsearch hit is discarded if its row identity, segment, timing, normalized
   text or creation identity no longer matches PostgreSQL. Remaining hits keep their order,
   no replacement candidate is fetched, and `resultCount` is recalculated.

@@ -104,6 +104,10 @@ The current implemented search path is deliberately small:
   `600` Unicode code points. The matching row remains the navigation, timing, score and ranking
   identity. Assistant retrieval opts out because it already owns a separate canonical context
   flow.
+- Section budgets are counted in Unicode code points, but each cut position is resolved to a
+  complete grapheme-cluster boundary, so a combining mark, variation selector, joiner or emoji
+  modifier is never separated from its base. The retained text is an exact slice of the
+  canonical row: no Unicode normalization, accent folding or case change is applied.
 
 This candidate-diversity change requires no mapping change or reindex. The current search
 layer remains lexical and product-owned; it is not hybrid, vector, paginated, or an

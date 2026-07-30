@@ -24,6 +24,10 @@ Slice 7.4 adds browser-only canonical context after final selection. It does not
 Elasticsearch query, scoring, mapping, adjacent deduplication, diversity ordering or result
 caps.
 
+Slice 7.4A closes the truncation gap that Slice 7.4 left open: snippet cut positions are now
+resolved to complete grapheme-cluster boundaries. It changes no budget, contract, query,
+ranking or hydration behavior.
+
 FastAPI is not involved. PostgreSQL remains the product and authorization authority;
 Elasticsearch remains derived state.
 
@@ -351,7 +355,8 @@ Snippet policy is deliberately structural rather than semantic:
   separators;
 - previous truncation retains the suffix nearest the match and prefixes `…`; matching and next
   truncation retain their prefixes and append `…`;
-- total length is at most `600` Unicode code points and never splits a surrogate pair.
+- total length is at most `600` Unicode code points and never splits a surrogate pair;
+- every cut position is resolved to a complete grapheme-cluster boundary.
 
 The existing `text`, `transcriptRowId`, timing, score and ordering remain unchanged.
 `contextSnippet` is nullable and additive so a frontend can fall back to `text`. The assistant
@@ -363,6 +368,41 @@ order, and accented Vietnamese identity/timing through the production Elasticsea
 The PostgreSQL profile separately proves the production LATERAL query. There is no Flyway
 migration, Elasticsearch mapping change or reindex.
 
+## Slice 7.4A Grapheme-Safe Truncation
+
+Slice 7.4 bounded each section by Unicode code points and protected surrogate pairs, but a raw
+code-point offset can still fall inside one user-perceived character — between `e` and a
+following `U+0301`, between an emoji and its skin-tone modifier, or on either side of a
+`U+200D` joiner. Slice 7.4A resolves every cut position to a complete grapheme-cluster boundary
+using `java.text.BreakIterator.getCharacterInstance(Locale.ROOT)`. A prefix cut moves backwards
+to the boundary at or before the raw offset; a suffix cut moves forwards to the boundary at or
+after it.
+
+The budgets are unchanged and remain counted in Unicode code points: `149` previous, `300`
+matching, `149` next and `600` in total. Because the adjustment only ever drops content, they
+stay hard limits; unused budget is never transferred to another section, and a grapheme cluster
+that does not fit completely into its section is excluded rather than partially included. The
+ellipsis is still one code point. In the degenerate case where one cluster is larger than the
+whole section, the section becomes the ellipsis alone rather than a split cluster.
+
+Truncation therefore cannot emit an isolated combining mark, variation selector, zero-width
+joiner, emoji modifier or half of a surrogate pair. `SearchContextSnippetPolicyTest` locks that
+at both the prefix and the suffix boundary for decomposed accents, several combining marks on
+one base, decomposed Vietnamese, an emoji skin-tone sequence, ZWJ family and profession
+sequences, a variation-selector sequence, astral emoji, CJK and ASCII. It also asserts that the
+retained text is boundary-aligned and maximal — keeping one more cluster would break the budget
+— and includes a negative control proving the former raw code-point offset fell inside each
+chosen cluster. Purely ASCII, CJK and astral-emoji sections produce byte-identical output to the
+previous implementation.
+
+The retained text stays an exact code-point slice of the canonical row. No Unicode
+normalization form is applied: NFD input is not composed to NFC, combining marks are not
+removed, and nothing is transliterated, lowercased or accent-folded. Emoji sequences are
+unchanged, and whitespace collapsing behaves exactly as before. This is grapheme-cluster
+boundary detection only — it is not language-aware word, line or sentence segmentation, and it
+adds no accent-insensitive matching. The JDK boundary rules were verified against every fixture
+above, so no production dependency was added.
+
 ## Ranking And Retrieval Boundaries
 
 Slice 7.1 adds only test infrastructure, corpus data and documentation. Slice 7.1A changes only
@@ -370,6 +410,7 @@ the bulk request byte encoding. Slice 7.2 changes application post-ranking selec
 Slice 7.3 changes the Workspace-wide request shape, grouped response parsing, authorized-hit
 defense and deterministic product ordering. Slice 7.4 changes only browser response hydration
 and adds the nullable `contextSnippet`; it does not change mappings, analyzers, boosts,
-configuration or reindex requirements. Later quality work must
+configuration or reindex requirements. Slice 7.4A changes only where a snippet section is cut
+and touches no query, ranking, hydration or contract behavior. Later quality work must
 demonstrate improvement against this baseline while retaining its hard authorization,
 identity, timing and deterministic-order invariants.
