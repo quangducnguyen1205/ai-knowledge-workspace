@@ -1,5 +1,9 @@
 # Deployable-Demo Baseline
 
+> **Superseded.** The authoritative startup, shutdown, health-check and resource policy is
+> [`../runbooks/deployment.md`](../runbooks/deployment.md). This note is kept for the reasoning
+> behind the original run-mode decision.
+
 ## Purpose
 
 This note records the current supported run mode for the minimal usable web product after the authenticated golden path milestone.

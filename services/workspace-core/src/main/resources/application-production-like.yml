@@ -1,0 +1,16 @@
+# Production-like runtime profile.
+#
+# This profile exists to make one invariant enforceable rather than merely documented: outside an
+# explicit local development environment there is no implicit current user. The development
+# fallback that resolves an anonymous request to `local-dev-user` is switched off here, so an
+# unauthenticated request is rejected with 401 instead of silently acting as somebody.
+#
+# It intentionally configures nothing else. Datasource, Kafka, storage and search settings stay in
+# the environment so this profile can be combined with `project3` or any future deployment profile.
+spring:
+  config:
+    activate:
+      on-profile: production-like
+
+current-user:
+  dev-fallback-enabled: false

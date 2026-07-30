@@ -209,7 +209,7 @@ class CleanBaselineMigrationTest {
         insertPlaybackProgress(jdbc, uploadAssetId, "user-1", 12345L, false);
         Map<String, Object> uploadBeforeV6 = loadUploadFields(jdbc, uploadAssetId);
 
-        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(dataSource, "6").migrate().migrationsExecuted).isEqualTo(1);
 
         assertThat(columns(jdbc, "saved_moments")).containsExactlyInAnyOrder(
                 "id", "user_id", "workspace_id", "asset_id", "transcript_row_id", "saved_at"
@@ -237,6 +237,48 @@ class CleanBaselineMigrationTest {
         jdbc.update("delete from assets where id = ?", uploadAssetId);
         assertThat(savedMomentRowCount(jdbc, uploadAssetId)).isZero();
         assertThat(savedMomentRowCount(jdbc, youtubeAssetId)).isEqualTo(1);
+    }
+
+    @Test
+    void v7AddsTheResumablePlaybackIndexWithoutChangingAnyTableOrConstraint() {
+        JdbcDataSource dataSource = dataSource();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        assertThat(flyway(dataSource, "6").migrate().migrationsExecuted).isEqualTo(6);
+
+        UUID workspaceId = insertWorkspace(jdbc, "Resumable index");
+        UUID assetId = UUID.randomUUID();
+        insertSourceAwareAsset(
+                jdbc, assetId, workspaceId, "UPLOAD", null,
+                "fixture.mp4", "workspace-media", "objects/fixture.mp4", "video/mp4", 42L, "legacy-etag"
+        );
+        insertPlaybackProgress(jdbc, assetId, "user-1", 12345L, false);
+        insertPlaybackProgress(jdbc, assetId, "user-2", 0L, false);
+        insertPlaybackProgress(jdbc, assetId, "user-3", 999L, true);
+        Map<String, Object> uploadBeforeV7 = loadUploadFields(jdbc, assetId);
+        List<String> progressColumnsBeforeV7 = columns(jdbc, "asset_playback_progress");
+        List<String> progressConstraintsBeforeV7 = constraints(jdbc, "asset_playback_progress");
+
+        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+
+        assertThat(columns(jdbc, "asset_playback_progress")).isEqualTo(progressColumnsBeforeV7);
+        assertThat(constraints(jdbc, "asset_playback_progress")).isEqualTo(progressConstraintsBeforeV7);
+        assertThat(loadUploadFields(jdbc, assetId)).isEqualTo(uploadBeforeV7);
+        assertThat(progressRowCount(jdbc, assetId)).isEqualTo(3);
+
+        // Existing writes stay valid: the index is additive and carries no uniqueness.
+        UUID secondAssetId = UUID.randomUUID();
+        insertSourceAwareAsset(
+                jdbc, secondAssetId, workspaceId, "UPLOAD", null,
+                "second.mp4", "workspace-media", "objects/second.mp4", "video/mp4", 42L, null
+        );
+        insertPlaybackProgress(jdbc, secondAssetId, "user-1", 777L, false);
+        jdbc.update("update asset_playback_progress set position_ms = 0 where asset_id = ? and user_id = ?",
+                secondAssetId, "user-1");
+        jdbc.update("delete from asset_playback_progress where asset_id = ? and user_id = ?",
+                secondAssetId, "user-1");
+        assertThat(progressRowCount(jdbc, secondAssetId)).isZero();
+        assertThat(progressRowCount(jdbc, assetId)).isEqualTo(3);
     }
 
     private void insertSavedMoment(

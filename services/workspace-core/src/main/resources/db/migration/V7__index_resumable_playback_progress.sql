@@ -1,0 +1,32 @@
+-- Continue watching reads one user's started, unfinished playback progress, newest first.
+--
+-- The only pre-existing structure on this table is the composite primary key (asset_id, user_id).
+-- Its leading column is asset_id, so a user-scoped read cannot use it. Measured on a disposable
+-- PostgreSQL 15 database, a larger Workspace made the planner fall back to a sequential scan of
+-- asset_playback_progress plus a hash join: 79 609 rows removed by filter, 1 009 shared buffers,
+-- 6.9-26.2 ms. This index removes that cliff.
+--
+-- Column order:
+--   user_id     the only equality predicate on this table, and always supplied;
+--   updated_at  DESC matches the leading ORDER BY key, so the bounded read stops early instead of
+--               sorting every matching row.
+-- The Asset-id tie break is deliberately not part of the index: it only orders rows that share an
+-- identical updated_at, and the residual incremental sort is negligible at a bound of 12 rows.
+--
+-- A partial index restricted to (completed = false AND position_ms > 0) measured slightly better
+-- and smaller, but H2 cannot parse a partial index and the test profile runs this same migration
+-- chain. Splitting the chain per vendor would mean the portable tests no longer validate the
+-- production schema, so the portable composite index is used instead and the difference is
+-- accepted.
+--
+-- Measured effect of this index:
+--   realistic shape (200 Workspaces x 60 Assets, 2 000 users x ~25 rows):
+--     249 buffers / 0.28-0.41 ms  ->  49 buffers / 0.16-0.30 ms
+--   larger-Workspace stress (9 000 Assets, 82 462 progress rows):
+--     1 009 buffers / 6.9-26.2 ms ->  143 buffers / 0.24-0.91 ms
+--   size: 1 984 kB index against a 4 112 kB table.
+--
+-- This migration is purely additive: it creates no table, changes no column and adds no
+-- constraint, so every existing write remains valid.
+CREATE INDEX idx_asset_playback_progress_resumable
+    ON asset_playback_progress (user_id, updated_at DESC);

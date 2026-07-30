@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Overridden by the build with -Dbuild.git.commit=$(git rev-parse HEAD). -->
+        <build.git.commit>unknown</build.git.commit>
         <aws.sdk.version>2.29.52</aws.sdk.version>
         <spring-modulith.version>1.2.5</spring-modulith.version>
         <testcontainers.version>2.0.5</testcontainers.version>
@@ -138,6 +140,23 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--
+                          Generates META-INF/build-info.properties so the running service can report
+                          which revision it is. Only bounded, non-sensitive fields are written.
+                        -->
+                        <id>build-info</id>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                        <configuration>
+                            <additionalProperties>
+                                <commit>${build.git.commit}</commit>
+                            </additionalProperties>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

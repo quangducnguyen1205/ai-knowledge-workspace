@@ -1,6 +1,10 @@
 # Project3 Validation Matrix
 
-Status: current validation expectations for the pre-Phase-1 Spring baseline. Historical submission
+> **Historical.** Validation expectations for the pre-Phase-1 Spring baseline. Phases 1–10 added
+> their own evidence, and the current validation commands live in
+> [`../runbooks/deployment.md`](../runbooks/deployment.md).
+
+Status: validation expectations for the pre-Phase-1 Spring baseline. Historical submission
 runs and browser campaigns remain available in Git history; this matrix does not reinterpret them
 as evidence for changed code.
 

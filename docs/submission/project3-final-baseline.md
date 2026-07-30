@@ -1,6 +1,11 @@
 # Project3 — AI Knowledge Workspace Baseline
 
-Status: concise current baseline after the pre-Phase-1 Spring architecture overhaul. Historical
+> **Historical.** This describes the baseline immediately after the pre-Phase-1 Spring architecture
+> overhaul and does not include Phases 1–10. For the current system, read
+> [`../architecture/system-inventory.md`](../architecture/system-inventory.md). Where the two
+> disagree, the inventory is correct.
+
+Status: concise baseline after the pre-Phase-1 Spring architecture overhaul. Historical
 submission evidence remains in Git history and the immutable `project3-submission-v1` tag.
 
 ## Product and repository roles

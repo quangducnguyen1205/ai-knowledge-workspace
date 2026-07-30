@@ -1,116 +1,121 @@
-# Documentation Index
+# Project3 Documentation
 
-This directory is the docs-as-code home for current product behavior, architecture decisions, API notes, runbooks, and historical planning artifacts.
+Single entrypoint for the Project3 documentation set. Everything current is linked from this page.
+Anything not linked here is historical.
 
-## Start Here
+## Start here
 
-For the current Spring product-core baseline, this is the fastest useful reading order:
+| Question | Document |
+|---|---|
+| What is this product and what problem does it solve? | [Product overview](#product-overview) |
+| What actually exists, and where does each thing live? | [`architecture/system-inventory.md`](architecture/system-inventory.md) |
+| Why is it built this way, and what is wrong with it? | [`architecture/architecture-review.md`](architecture/architecture-review.md) |
+| How do I run it? | [`runbooks/deployment.md`](runbooks/deployment.md) |
+| What are the endpoints? | [`api/API.md`](api/API.md) |
+| What is in the database? | [`data/Database.md`](data/Database.md) |
+| How is it verified? | [`testing/integration-smoke-checklist.md`](testing/integration-smoke-checklist.md) |
+| What does it *not* do? | [`known-limitations.md`](known-limitations.md) |
 
-1. `submission/project3-final-baseline.md`
-2. `submission/project3-validation-matrix.md`
-3. `architecture/backend-modularity-baseline.md`
-4. `architecture/00-reviewer-overview.md`
-5. `architecture/05-end-to-end-diagram-pack.md`
-6. `architecture/01-system-context.md`
-7. `architecture/02-service-boundaries.md`
-8. `architecture/deprecations.md`
-9. `architecture/phase1-timestamp-aware-transcript-foundation.md`
-10. `architecture/phase1-implemented-product-flow.md`
-11. `architecture/phase4-authorized-upload-media-streaming.md`
-12. `architecture/phase5-user-playback-progress.md`
-13. `architecture/phase7-search-quality-baseline.md`
-14. `architecture/phase8-saved-moments.md`
-15. `architecture/phase9-continue-watching.md`
-16. `api/API.md`
-17. `data/Database.md`
-18. `runbooks/local-dev.md`
-19. `testing/integration-smoke-checklist.md`
+Shortest useful path for a new reader: **system inventory → architecture review → deployment
+runbook**. Three documents, and you can run and explain the system.
 
-These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
+## Current documentation
 
-## Sections
+### Product overview
 
-- `project-history/`: historical journey and project evolution summaries
-- `product/`: problem framing, vision, and MVP definition
-- `submission/`: final cross-repository baseline and validation evidence
-- `architecture/`: system-level design and service boundaries
-- `adr/`: architectural decision records
-- `api/`: API contracts and interface notes
-- `data/`: current persistence notes for the Spring product core
-- `planning/`: execution plans and early delivery milestones
-- `testing/`: smoke and verification checklists
-- `runbooks/`: local setup and operational notes
+- [`product/01-problem-statement.md`](product/01-problem-statement.md) — why the problem matters
+- [`product/02-product-vision.md`](product/02-product-vision.md) — target user, value, boundaries
+- [`product/03-mvp-scope.md`](product/03-mvp-scope.md) — first-release scope and success criteria
+- [`product/00-discovery-summary.md`](product/00-discovery-summary.md) — discovery baseline
 
-## Historical Journey
+### Architecture
 
-- `project-history/project2-to-project3-evolution.md`: authoritative history of the engineering evolution from Project2 to the current Project3 architecture
+- [`architecture/system-inventory.md`](architecture/system-inventory.md) — **authoritative
+  current state**: components, ownership, boundaries, flows, truth versus derived, ports,
+  required versus optional dependencies
+- [`architecture/architecture-review.md`](architecture/architecture-review.md) — critical review;
+  findings classified as accepted strength / known trade-off / technical debt / future scaling
+  trigger
+- [`architecture/backend-modularity-baseline.md`](architecture/backend-modularity-baseline.md) —
+  module ownership, API/port rules, package convention, architecture gate
+- [`architecture/00-reviewer-overview.md`](architecture/00-reviewer-overview.md) — short reviewer
+  onboarding note
+- [`architecture/05-end-to-end-diagram-pack.md`](architecture/05-end-to-end-diagram-pack.md) —
+  topology, flow, write, search and state-transition diagrams
+- [`architecture/03-search-architecture.md`](architecture/03-search-architecture.md) — retrieval
+  model and the Elasticsearch role
+- [`architecture/deprecations.md`](architecture/deprecations.md) — removed surfaces and retained
+  recovery decisions
 
-## Product Documents
+### Deployment and operations
 
-- `product/00-discovery-summary.md`: concise discovery baseline for the phase 1 product
-- `product/01-problem-statement.md`: why the problem matters and why the current workflow fails
-- `product/02-product-vision.md`: target user, value proposition, and product boundaries
-- `product/03-mvp-scope.md`: intended first release scope and success criteria
+- [`runbooks/deployment.md`](runbooks/deployment.md) — **authoritative**: topology, prerequisites,
+  startup and shutdown, environment template, volumes, resource policy, health checks, build
+  identity, authentication modes, failure diagnosis, validation commands
+- [`runbooks/local-dev.md`](runbooks/local-dev.md) — day-to-day local development and reset rules
 
-## Architecture Documents
+### API and data
 
-- `architecture/00-reviewer-overview.md`: fastest reviewer/instructor onboarding note for the current backend baseline
-- `architecture/backend-modularity-baseline.md`: authoritative current module ownership, API/port rules, package convention, and strict architecture gate
-- `architecture/01-system-context.md`: top-level view of product core, processing service, and data dependencies
-- `architecture/02-service-boundaries.md`: ownership boundaries across Spring Boot, FastAPI, search, and storage
-- `architecture/03-search-architecture.md`: search-first retrieval model and Elasticsearch role
-- `architecture/04-integration-assumptions.md`: current assumptions about the separate FastAPI repository and deferred questions
-- `architecture/05-end-to-end-diagram-pack.md`: reviewer-friendly current-state diagram pack for topology, flow, writes, search, and state transitions
-- `architecture/deprecations.md`: removed Spring surfaces and retained recovery decisions
-- `architecture/pre-phase1-architecture-overhaul.md`: verified overhaul decisions, boundaries,
-  transaction rules, migration strategy and validation evidence
-- `architecture/phase1-implemented-product-flow.md`: current implemented Spring-side product flow snapshot
-- `architecture/phase1-timestamp-aware-transcript-foundation.md`: Phase 1 impact map,
-  compatibility decisions, boundary proof, migration, indexing and validation evidence
-- `architecture/phase4-authorized-upload-media-streaming.md`: authorized Upload media GET/HEAD,
-  single-range behavior, storage confidentiality and frontend/runtime limitations
-- `architecture/phase5-user-playback-progress.md`: per-user playback-progress ownership, frozen
-  GET/PUT contract, source/status independence, last-write-wins limit and deletion cleanup
-- `architecture/phase7-search-quality-baseline.md`: versioned lexical evaluation corpus,
-  measured Elasticsearch 8.11.1 behavior, hard invariants and known search-quality gaps
-- `architecture/phase8-saved-moments.md`: canonical moment permalink, Saved Moment module
-  boundary, ownership and stale-row policy, bounded list and frontend saved-moments UX
-- `architecture/phase9-continue-watching.md`: bounded continue-watching list, eligibility and
-  ordering, resume ownership, no-autoplay rule and neutral product terminology
+- [`api/API.md`](api/API.md) — product-facing Spring API
+- [`data/Database.md`](data/Database.md) — PostgreSQL persistence summary
 
-## Submission Documents
+### Testing
 
-- `submission/project3-final-baseline.md`: current ownership, integrated flow, architecture result and known debt
-- `submission/project3-validation-matrix.md`: exact static/runtime/browser classifications and cross-repository contract evidence
+- [`testing/integration-smoke-checklist.md`](testing/integration-smoke-checklist.md) — manual smoke
+  checklist
+- Automated gateways and integration profiles are listed in
+  [`runbooks/deployment.md`](runbooks/deployment.md#validation-commands)
 
-## API And Data Documents
+### Handoff
 
-- `api/API.md`: current product-facing Spring API summary
-- `data/Database.md`: current PostgreSQL persistence summary
+- [`portfolio/backend-engineer-portfolio.md`](portfolio/backend-engineer-portfolio.md) — using
+  Project3 in a Backend Engineer application
+- [`demo/demo-script.md`](demo/demo-script.md) — bounded 5–8 minute live walkthrough, with a
+  fallback for when media processing is unavailable
+- [`thesis/thesis-handoff.md`](thesis/thesis-handoff.md) — four research directions with research
+  questions, hypotheses, variables, baselines, corpora, designs, threats to validity and the fork
+  changes each requires
+- [`known-limitations.md`](known-limitations.md) — consolidated limitations and what is *not*
+  claimed
 
-## Testing And Runbooks
+### Decision records
 
-- `testing/integration-smoke-checklist.md`: manual smoke checklist for the implemented Spring flow
-- `runbooks/local-dev.md`: local development startup and dependency notes
+- [`adr/ADR-001-spring-boot-as-product-core.md`](adr/ADR-001-spring-boot-as-product-core.md)
+- [`adr/ADR-002-fastapi-as-ai-processing-service.md`](adr/ADR-002-fastapi-as-ai-processing-service.md)
+- [`adr/ADR-003-elasticsearch-as-search-layer.md`](adr/ADR-003-elasticsearch-as-search-layer.md)
+- [`adr/ADR-004-no-temporal-in-phase-1.md`](adr/ADR-004-no-temporal-in-phase-1.md)
+- [`project3-architecture/technology-rationale.md`](project3-architecture/technology-rationale.md)
 
-## ADR Documents
+## Phase records
 
-- `adr/ADR-001-spring-boot-as-product-core.md`: records Spring Boot as the product core backend
-- `adr/ADR-002-fastapi-as-ai-processing-service.md`: records reuse of FastAPI as the internal processing service
-- `adr/ADR-003-elasticsearch-as-search-layer.md`: records Elasticsearch as the target product search layer
-- `adr/ADR-004-no-temporal-in-phase-1.md`: records the decision to exclude Temporal from phase 1
+Each phase document records the decisions, contract and evidence for one delivered slice. They stay
+accurate for their own scope; where one disagrees with the system inventory, the inventory wins.
 
-## Historical Planning Notes
+| Phase | Document |
+|---|---|
+| 1 | [`architecture/phase1-timestamp-aware-transcript-foundation.md`](architecture/phase1-timestamp-aware-transcript-foundation.md), [`architecture/phase1-implemented-product-flow.md`](architecture/phase1-implemented-product-flow.md) |
+| 2 | [`architecture/phase2-source-aware-asset-foundation.md`](architecture/phase2-source-aware-asset-foundation.md) |
+| 4 | [`architecture/phase4-authorized-upload-media-streaming.md`](architecture/phase4-authorized-upload-media-streaming.md) |
+| 5 | [`architecture/phase5-user-playback-progress.md`](architecture/phase5-user-playback-progress.md) |
+| 7 | [`architecture/phase7-search-quality-baseline.md`](architecture/phase7-search-quality-baseline.md) |
+| 8 | [`architecture/phase8-saved-moments.md`](architecture/phase8-saved-moments.md) |
+| 9 | [`architecture/phase9-continue-watching.md`](architecture/phase9-continue-watching.md) |
+| 10 | [`architecture/system-inventory.md`](architecture/system-inventory.md), [`architecture/architecture-review.md`](architecture/architecture-review.md), [`runbooks/deployment.md`](runbooks/deployment.md), and the handoff documents above |
 
-Most files under `planning/` are historical slice or transition notes, not the current runtime contract.
+## Historical
 
-Current exception:
+Kept for reasoning and provenance, not as a description of the current system. Each carries a banner
+pointing at its replacement.
 
-- `planning/deployable-demo-baseline.md`: current supported run-mode statement
-
-Historical/reference notes include:
-
-- `planning/phase-1-closure-summary.md`
-- `planning/phase-2-ownership-foundation.md`
-- `planning/roadmap-transition-phase1-to-phase2.md`
-- `planning/sprint-1-thin-slice.md`
+- `submission/project3-final-baseline.md`, `submission/project3-validation-matrix.md` — pre-Phase-1
+  baseline and validation matrix
+- `planning/deployable-demo-baseline.md` — original run-mode decision, superseded by the deployment
+  runbook
+- `planning/01-sprint-0.md`, `planning/sprint-1-thin-slice.md`,
+  `planning/phase-1-closure-summary.md`, `planning/phase-2-ownership-foundation.md`,
+  `planning/roadmap-transition-phase1-to-phase2.md` — delivery notes
+- `architecture/pre-phase1-architecture-overhaul.md`, `architecture/01-system-context.md`,
+  `architecture/02-service-boundaries.md`, `architecture/04-integration-assumptions.md` —
+  superseded in current-state terms by the system inventory
+- `project-history/project2-to-project3-evolution.md` — engineering history from Project2 to
+  Project3

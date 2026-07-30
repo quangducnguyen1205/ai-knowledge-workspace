@@ -1,6 +1,8 @@
 services:
   postgres:
     image: postgres:15
+    restart: ${INFRA_RESTART_POLICY:-unless-stopped}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-1g}
     environment:
       POSTGRES_DB: ${WORKSPACE_CORE_POSTGRES_DB:-workspace_core}
       POSTGRES_USER: ${WORKSPACE_CORE_POSTGRES_USER:-workspace_core}
@@ -63,6 +65,13 @@ services:
 
   elasticsearch:
     image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.11.1}
+    restart: ${INFRA_RESTART_POLICY:-unless-stopped}
+    # The container was previously observed exiting with 137 (OOM-killed) while another workload
+    # saturated Docker Desktop's memory. The JVM heap is already bounded, so the container limit is
+    # set above heap + off-heap + page cache headroom rather than at the heap size, and the restart
+    # policy brings the node back instead of leaving search silently unavailable.
+    mem_limit: ${ELASTICSEARCH_MEMORY_LIMIT:-1500m}
+    mem_reservation: ${ELASTICSEARCH_MEMORY_RESERVATION:-1g}
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -71,9 +80,21 @@ services:
       - "${ELASTICSEARCH_PORT:-9201}:9200"
     volumes:
       - workspace_core_elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   minio:
     image: ${MINIO_IMAGE:-minio/minio:latest}
+    restart: ${INFRA_RESTART_POLICY:-unless-stopped}
+    mem_limit: ${MINIO_MEMORY_LIMIT:-512m}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
@@ -83,20 +104,24 @@ services:
       - "${WORKSPACE_CORE_OBJECT_STORAGE_CONSOLE_PORT:-9001}:9001"
     volumes:
       - workspace_core_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   minio-create-bucket:
     image: ${MINIO_MC_IMAGE:-minio/mc:latest}
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ROOT_USER: ${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}
       WORKSPACE_CORE_OBJECT_STORAGE_BUCKET: ${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:-workspace-media}
     entrypoint: >
       /bin/sh -c "
-      until /usr/bin/mc alias set local http://minio:9000 \"${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}\" \"${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}\"; do
-        sleep 2;
-      done;
+      /usr/bin/mc alias set local http://minio:9000 \"${WORKSPACE_CORE_OBJECT_STORAGE_ACCESS_KEY:-minioadmin}\" \"${WORKSPACE_CORE_OBJECT_STORAGE_SECRET_KEY:-minioadmin}\";
       /usr/bin/mc mb --ignore-existing local/\"${WORKSPACE_CORE_OBJECT_STORAGE_BUCKET:-workspace-media}\";
       "
 
