@@ -13,6 +13,9 @@ import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContext;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextRow;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextTarget;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.TranscriptIndexWriteOperation;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchHit;
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQuery;
@@ -30,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -59,6 +63,8 @@ class SearchQualityBaselineIT {
             "/search-quality/v1/expected-slice-7.2.json";
     private static final String SLICE_73_EXPECTED_RESOURCE =
             "/search-quality/v1/expected-slice-7.3.json";
+    private static final String SLICE_74_EXPECTED_RESOURCE =
+            "/search-quality/v1/expected-slice-7.4.json";
     private static final String INDEX_NAME = "search-quality-v1";
     private static final String UNICODE_FIDELITY_INDEX_NAME = "search-quality-unicode-fidelity";
     private static final String BULK_FAILURE_INDEX_NAME = "search-quality-bulk-failure";
@@ -92,6 +98,7 @@ class SearchQualityBaselineIT {
     private static ExpectedBaseline historicalBaseline;
     private static ExpectedBaseline slice72Expectation;
     private static ExpectedBaseline currentExpectation;
+    private static ContextExpectation contextExpectation;
 
     @BeforeAll
     static void setUpBaseline() throws IOException {
@@ -104,6 +111,8 @@ class SearchQualityBaselineIT {
         slice72Expectation = applySliceExpectation(historicalBaseline, slice72Delta);
         assertThat(slice73Delta.baseVersion()).isEqualTo(slice72Expectation.version());
         currentExpectation = applySliceExpectation(slice72Expectation, slice73Delta);
+        contextExpectation = readResource(SLICE_74_EXPECTED_RESOURCE, ContextExpectation.class);
+        assertThat(contextExpectation.baseVersion()).isEqualTo(currentExpectation.version());
 
         String elasticsearchBaseUrl = "http://" + ELASTICSEARCH.getHttpHostAddress();
         ElasticsearchProperties properties = new ElasticsearchProperties();
@@ -314,6 +323,54 @@ class SearchQualityBaselineIT {
                 ));
     }
 
+    @TestFactory
+    Stream<DynamicTest> canonicalContextHydrationIsAdditiveToSlice73Ordering() {
+        return contextExpectation.scenarios().stream()
+                .map(scenario -> DynamicTest.dynamicTest(
+                        scenario.id(),
+                        () -> {
+                            SearchResult result = hydratedSearch(
+                                    scenario.query(), scenario.workspaceId(), scenario.assetId()
+                            );
+                            assertThat(result.hits())
+                                    .extracting(SearchHit::transcriptRowId)
+                                    .containsExactlyElementsOf(scenario.orderedRowIds());
+                            assertThat(result.hits()).allSatisfy(hit ->
+                                    assertThat(hit.contextSnippet())
+                                            .isEqualTo(scenario.expectedSnippets().get(hit.transcriptRowId()))
+                            );
+                        }
+                ));
+    }
+
+    @Test
+    void canonicalContextHydrationPreservesVietnameseIdentityTimingAndDiversityOrder() {
+        SearchResult vietnamese = hydratedSearch(
+                "thuật toán tìm kiếm", DEFAULT_WORKSPACE_ID, null
+        );
+        assertThat(vietnamese.hits()).singleElement().satisfies(hit -> {
+            assertThat(hit.transcriptRowId()).isEqualTo(VIETNAMESE_ROW_ID);
+            assertThat(hit.startMs()).isEqualTo(240000L);
+            assertThat(hit.endMs()).isEqualTo(244000L);
+            assertThat(hit.text()).isEqualTo(VIETNAMESE_TEXT);
+            assertThat(hit.contextSnippet()).isEqualTo(VIETNAMESE_TEXT);
+        });
+
+        SearchResult dominance = hydratedSearch(
+                "distributed tracing", DEFAULT_WORKSPACE_ID, null
+        );
+        assertThat(dominance.hits())
+                .extracting(SearchHit::transcriptRowId)
+                .containsExactlyElementsOf(scenario("candidate-dominance").orderedRowIds());
+        assertThat(dominance.hits())
+                .extracting(SearchHit::score)
+                .containsExactlyElementsOf(
+                        search("distributed tracing", DEFAULT_WORKSPACE_ID, null).hits().stream()
+                                .map(SearchHit::score)
+                                .toList()
+                );
+    }
+
     @Test
     void versionedExpectationChainPreservesHistoryAndLocksAssetDiversity() {
         ExpectedScenario historicalAdjacent = historicalScenario("adjacent-hits");
@@ -520,6 +577,10 @@ class SearchQualityBaselineIT {
 
     private static SearchResult search(String query, UUID workspaceId, UUID assetId) {
         return searchApplicationService.search(new SearchQuery(query, workspaceId, assetId));
+    }
+
+    private static SearchResult hydratedSearch(String query, UUID workspaceId, UUID assetId) {
+        return searchApplicationService.search(new SearchQuery(query, workspaceId, assetId, true));
     }
 
     private static SearchHit hit(SearchResult result, String transcriptRowId) {
@@ -799,6 +860,23 @@ class SearchQualityBaselineIT {
     ) {
     }
 
+    private record ContextExpectation(
+            String version,
+            String baseVersion,
+            List<ContextScenario> scenarios
+    ) {
+    }
+
+    private record ContextScenario(
+            String id,
+            String query,
+            UUID workspaceId,
+            UUID assetId,
+            List<String> orderedRowIds,
+            Map<String, String> expectedSnippets
+    ) {
+    }
+
     private record ExpectedScenario(
             String id,
             String classification,
@@ -860,10 +938,19 @@ class SearchQualityBaselineIT {
 
     private static final class CorpusAssetQueryPort implements SearchAssetQueryPort {
         private final Map<UUID, CorpusAsset> assetsById;
+        private final Map<UUID, IndexingAssetSource> sourcesById;
 
         private CorpusAssetQueryPort(Corpus sourceCorpus) {
             this.assetsById = sourceCorpus.assets().stream()
                     .collect(java.util.stream.Collectors.toUnmodifiableMap(CorpusAsset::id, asset -> asset));
+            this.sourcesById = sourceCorpus.assets().stream()
+                    .map(asset -> new IndexingAssetSource(
+                            asset.id(), asset.workspaceId(), asset.title(), expandRows(asset)
+                    ))
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            IndexingAssetSource::assetId,
+                            source -> source
+                    ));
         }
 
         @Override
@@ -884,6 +971,14 @@ class SearchQualityBaselineIT {
                     .map(CorpusAsset::id)
                     .sorted()
                     .toList();
+        }
+
+        @Override
+        public List<SearchCanonicalContext> loadCanonicalContexts(
+                UUID workspaceId,
+                List<SearchCanonicalContextTarget> targets
+        ) {
+            return fixtureCanonicalContexts(sourcesById, workspaceId, targets);
         }
     }
 
@@ -917,5 +1012,81 @@ class SearchQualityBaselineIT {
                     .sorted()
                     .toList();
         }
+
+        @Override
+        public List<SearchCanonicalContext> loadCanonicalContexts(
+                UUID workspaceId,
+                List<SearchCanonicalContextTarget> targets
+        ) {
+            return fixtureCanonicalContexts(assetsById, workspaceId, targets);
+        }
+    }
+
+    private static List<SearchCanonicalContext> fixtureCanonicalContexts(
+            Map<UUID, IndexingAssetSource> sourcesById,
+            UUID workspaceId,
+            List<SearchCanonicalContextTarget> targets
+    ) {
+        List<SearchCanonicalContext> contexts = new ArrayList<>();
+        for (SearchCanonicalContextTarget target : new LinkedHashSet<>(targets)) {
+            IndexingAssetSource source = sourcesById.get(target.assetId());
+            if (source == null || !workspaceId.equals(source.workspaceId())) {
+                continue;
+            }
+            List<IndexingTranscriptRow> rows = source.transcriptRows().stream()
+                    .filter(row -> row.segmentIndex() != null && row.text() != null && !row.text().isBlank())
+                    .sorted(Comparator.comparing(IndexingTranscriptRow::segmentIndex))
+                    .toList();
+            int hitIndex = fixtureHitIndex(rows, target);
+            if (hitIndex < 0) {
+                continue;
+            }
+            IndexingTranscriptRow hit = rows.get(hitIndex);
+            List<SearchCanonicalContextRow> orderedRows = new ArrayList<>();
+            if (hitIndex > 0) {
+                orderedRows.add(toFixtureContextRow(rows.get(hitIndex - 1)));
+            }
+            SearchCanonicalContextRow matched = toFixtureContextRow(hit);
+            orderedRows.add(matched);
+            if (hitIndex + 1 < rows.size()) {
+                orderedRows.add(toFixtureContextRow(rows.get(hitIndex + 1)));
+            }
+            contexts.add(new SearchCanonicalContext(
+                    target.assetId(),
+                    target.transcriptRowId(),
+                    target.segmentIndex(),
+                    matched,
+                    orderedRows
+            ));
+        }
+        return List.copyOf(contexts);
+    }
+
+    private static int fixtureHitIndex(
+            List<IndexingTranscriptRow> rows,
+            SearchCanonicalContextTarget target
+    ) {
+        for (int index = 0; index < rows.size(); index++) {
+            IndexingTranscriptRow row = rows.get(index);
+            if (target.transcriptRowId() != null) {
+                if (target.transcriptRowId().equals(row.id())) {
+                    return index;
+                }
+            } else if (row.id() == null && Objects.equals(target.segmentIndex(), row.segmentIndex())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static SearchCanonicalContextRow toFixtureContextRow(IndexingTranscriptRow row) {
+        return new SearchCanonicalContextRow(
+                row.id(),
+                row.segmentIndex(),
+                row.startMs(),
+                row.endMs(),
+                row.text(),
+                row.createdAt()
+        );
     }
 }

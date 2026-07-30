@@ -190,6 +190,12 @@ P3-E2 `[ĐÃ SMOKE THỰC TẾ]` verifies the complete automatic chain from one 
 
 P3-F1 `[ĐÃ XÁC MINH TỪ CODE]` adds a Spring-owned retrieval-only assistant context endpoint at `POST /api/assistant/context`. It authenticates through the existing current-user mechanism, validates workspace and optional asset scope through existing product services, reuses the PostgreSQL-gated search API path, and reads canonical transcript context from Spring-owned snapshots. The response is a bounded context pack with source citations only; it does not call FastAPI, invoke an LLM provider, generate an answer, persist chat history, or add embeddings/vector storage.
 
+Phase 7 Slice 7.4 keeps canonical transcript ownership in Asset/PostgreSQL while exposing a
+consumer-owned batch port to Search. Browser search uses that port only after final result
+selection to load targeted previous/match/next windows, with one statement per distinct Asset
+and no JPA entity crossing the module boundary. The assistant explicitly opts out of this
+browser snippet hydration and retains its existing canonical context flow.
+
 P3-F2A `[ĐÃ XÁC MINH TỪ CODE]` adds the first grounded answer code path: Browser calls Spring `POST /api/assistant/answer`; Spring reuses the existing assistant context retrieval path, assigns stable source IDs, calls the internal FastAPI assistant endpoint, validates every returned cited source ID against the supplied source IDs, and returns a structured answer. FastAPI is only an internal Ollama adapter and is disabled by default.
 
 P3-F2B.1 `[ĐÃ SMOKE THỰC TẾ]` verifies one controlled local grounded-answer runtime path: Spring public API -> authorized bounded context -> internal FastAPI adapter -> native macOS Ollama `0.31.1` with `qwen3:1.7b` -> FastAPI structured response -> Spring citation validation -> browser-shaped response. The verified public result was HTTP 200 with a nonblank answer, `insufficientContext=false`, and valid citations. Spring remained owner of authorization, bounded context selection, source identity, and final citation validation; FastAPI remained an internal adapter, and the browser did not call FastAPI or Ollama. The observed single-request latency was about 12.3 seconds, which is not a benchmark or performance claim. No streaming, history, persistence, embeddings, external provider, Kafka/outbox assistant flow, retry, DLQ, reindex, rebuild, or reconciliation workflow was added.

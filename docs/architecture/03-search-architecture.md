@@ -12,7 +12,8 @@ flowchart LR
     S -->|authorize user and workspace| P["PostgreSQL"]
     S -->|query transcript-row documents with filters| E["Elasticsearch"]
     E -->|ranked results| S
-    S -->|relevant segments| U
+    S -->|hydrate final rows| P
+    S -->|canonical contextual moments| U
     F["FastAPI AI Processing Service"] -->|processed transcript output| S
     S -->|index searchable documents| E
 ```
@@ -34,8 +35,12 @@ flowchart LR
 1. A user submits a search request through the product API.
 2. Spring Boot validates the user, workspace, and asset scope.
 3. Spring Boot queries Elasticsearch for relevant transcript-row documents using search text plus metadata filters.
-4. Elasticsearch returns ranked transcript-row results.
-5. Spring Boot returns workspace-scoped results and transcript segments to the client.
+4. Elasticsearch returns ranked transcript-row candidates.
+5. Spring applies deterministic relevance, adjacent-moment and Asset-diversity policy.
+6. For browser search only, Spring batch-loads a bounded previous/match/next window from the
+   Asset-owned PostgreSQL snapshot for each final selected row.
+7. Spring discards stale derived hits and returns workspace-scoped results with an additive
+   canonical `contextSnippet`.
 
 FastAPI is not the synchronous query endpoint for product search. Its role is to produce processing outputs that can later be indexed and searched.
 
@@ -83,10 +88,27 @@ The current implemented search path is deliberately small:
   inside each diversity round. Asset-scoped results retain the global relevance comparator.
 - `resultCount` is the post-policy result size. There is no pagination or client-controlled
   result limit.
+- Browser search hydrates only the final selected hits after all ranking, deduplication,
+  diversity and cap policy. The Search-owned Asset port accepts at most `12` targets, groups
+  them by Asset and performs one targeted PostgreSQL statement per distinct Asset. Each target
+  yields at most the previous, matching and next usable canonical rows; the full transcript
+  is never loaded for this path.
+- Transcript-row ID is authoritative when supplied. Segment-index fallback is used only for a
+  target without a row ID; a stale supplied row ID never falls back. PostgreSQL
+  neighbors follow usable canonical segment order, including across segment gaps.
+- Search validates the selected Elasticsearch hit against the matched PostgreSQL row before
+  adding context. A stale identity, segment, timing, normalized text or creation identity
+  removes that hit without reranking or refill. An operational PostgreSQL failure fails the
+  request as bounded `503 SEARCH_SERVICE_UNAVAILABLE`.
+- `contextSnippet` is plain text with a fixed previous/match/next window and a maximum of
+  `600` Unicode code points. The matching row remains the navigation, timing, score and ranking
+  identity. Assistant retrieval opts out because it already owns a separate canonical context
+  flow.
 
 This candidate-diversity change requires no mapping change or reindex. The current search
 layer remains lexical and product-owned; it is not hybrid, vector, paginated, or an
-answer-generation system, and result text does not yet include a before/after context snippet.
+answer-generation system. Canonical context hydration changes neither Elasticsearch mapping
+nor ranking and requires no reindex.
 
 The measured Phase 7 baseline, corpus ownership, integration command, hard invariants and
 known quality gaps are recorded in

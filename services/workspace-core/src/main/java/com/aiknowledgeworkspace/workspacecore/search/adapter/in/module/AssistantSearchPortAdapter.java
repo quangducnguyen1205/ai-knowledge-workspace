@@ -17,7 +17,7 @@ class AssistantSearchPortAdapter implements AssistantSearchPort {
 
     @Override
     public AssistantSearchPage search(String query, UUID workspaceId, UUID assetId) {
-        SearchResult response = searchQueries.search(new SearchQuery(query, workspaceId, assetId));
+        SearchResult response = searchQueries.search(new SearchQuery(query, workspaceId, assetId, false));
         return new AssistantSearchPage(response.workspaceIdFilter(), response.hits().stream()
                 .map(result -> new AssistantSearchHit(
                         result.assetId(), result.assetTitle(), result.transcriptRowId(), result.segmentIndex(),

@@ -25,6 +25,9 @@ import com.aiknowledgeworkspace.workspacecore.common.web.adapter.in.web.ApiExcep
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetUnavailableException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContext;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextLoadException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextRow;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.exception.WorkspaceNotFoundException;
 import com.aiknowledgeworkspace.workspacecore.workspace.adapter.in.web.WorkspaceApiExceptionHandler;
 import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
@@ -84,6 +87,34 @@ class SearchControllerTest {
         when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
         when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
                 .thenReturn(new SearchAssetDetails(assetId, workspaceId, true));
+        SearchCanonicalContextRow canonicalRow = new SearchCanonicalContextRow(
+                "row-55",
+                4,
+                1234L,
+                5678L,
+                "Dynamic programming solves overlapping subproblems.",
+                "2026-03-26T00:00:00Z"
+        );
+        when(searchAssetQueryPort.loadCanonicalContexts(
+                org.mockito.ArgumentMatchers.eq(workspaceId),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(List.of(new SearchCanonicalContext(
+                assetId,
+                "row-55",
+                4,
+                canonicalRow,
+                List.of(
+                        new SearchCanonicalContextRow(
+                                "row-54", 3, 1000L, 1233L,
+                                "Previous canonical row.", "2026-03-26T00:00:00Z"
+                        ),
+                        canonicalRow,
+                        new SearchCanonicalContextRow(
+                                "row-56", 5, 5679L, 7000L,
+                                "Next canonical row.", "2026-03-26T00:00:00Z"
+                        )
+                )
+        )));
         String searchResponse = """
                 {
                   "hits": {
@@ -143,8 +174,61 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.results[0].endMs").value(5678))
                 .andExpect(jsonPath("$.results[0].text")
                         .value("Dynamic programming solves overlapping subproblems."))
+                .andExpect(jsonPath("$.results[0].contextSnippet")
+                        .value("Previous canonical row. Dynamic programming solves overlapping subproblems. Next canonical row."))
                 .andExpect(jsonPath("$.results[0].createdAt").value("2026-03-26T00:00:00Z"))
                 .andExpect(jsonPath("$.results[0].score").value(2.75));
+
+        mockServer.verify();
+    }
+
+    @Test
+    void canonicalContextOperationalFailureReturnsBoundedServiceUnavailable() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
+                .thenReturn(new SearchAssetDetails(assetId, workspaceId, true));
+        when(searchAssetQueryPort.loadCanonicalContexts(
+                org.mockito.ArgumentMatchers.eq(workspaceId),
+                org.mockito.ArgumentMatchers.any()
+        )).thenThrow(new SearchCanonicalContextLoadException());
+        String searchResponse = """
+                {
+                  "hits": {
+                    "hits": [{
+                      "_score": 1.0,
+                      "_source": {
+                        "assetId": "%s",
+                        "workspaceId": "%s",
+                        "assetTitle": "Lecture",
+                        "transcriptRowId": "row-1",
+                        "segmentIndex": 1,
+                        "startMs": 0,
+                        "endMs": 1000,
+                        "text": "target row",
+                        "createdAt": "2026-07-30T00:00:00Z",
+                        "assetStatus": "SEARCHABLE"
+                      }
+                    }]
+                  }
+                }
+                """.formatted(assetId, workspaceId);
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andRespond(withSuccess(searchResponse, MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "target")
+                        .param("workspaceId", workspaceId.toString())
+                        .param("assetId", assetId.toString()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("SEARCH_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message")
+                        .value("Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau."))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(not(containsString("asset_transcript_rows"))))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(not(containsString(assetId.toString()))));
 
         mockServer.verify();
     }

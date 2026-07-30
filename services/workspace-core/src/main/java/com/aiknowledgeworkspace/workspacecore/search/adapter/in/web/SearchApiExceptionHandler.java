@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.search.application.exception.Searc
 import com.aiknowledgeworkspace.workspacecore.search.application.exception.SearchTranscriptUnavailableException;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexConnectivityException;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchCanonicalContextLoadException;
 
 import com.aiknowledgeworkspace.workspacecore.common.web.api.ApiErrorResponse;
 import com.aiknowledgeworkspace.workspacecore.common.web.api.PublicApiErrorResponses;
@@ -27,6 +28,13 @@ public class SearchApiExceptionHandler {
 
     @ExceptionHandler(SearchIndexOperationException.class)
     ResponseEntity<ApiErrorResponse> handleElasticsearchIntegration(SearchIndexOperationException exception) {
+        return PublicApiErrorResponses.serviceUnavailable("SEARCH_SERVICE_UNAVAILABLE", exception);
+    }
+
+    @ExceptionHandler(SearchCanonicalContextLoadException.class)
+    ResponseEntity<ApiErrorResponse> handleCanonicalContextUnavailable(
+            SearchCanonicalContextLoadException exception
+    ) {
         return PublicApiErrorResponses.serviceUnavailable("SEARCH_SERVICE_UNAVAILABLE", exception);
     }
 

@@ -10,6 +10,7 @@ public record SearchHit(
         Long startMs,
         Long endMs,
         String text,
+        String contextSnippet,
         String createdAt,
         Double score
 ) {

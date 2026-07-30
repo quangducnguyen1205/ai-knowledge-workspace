@@ -20,6 +20,10 @@ canonical inner hits for Workspace-wide search, an application-side authorized-h
 defense-in-depth filter, and deterministic round-based product ordering. Asset-scoped search
 retains its flat retrieval and global relevance order.
 
+Slice 7.4 adds browser-only canonical context after final selection. It does not change the
+Elasticsearch query, scoring, mapping, adjacent deduplication, diversity ordering or result
+caps.
+
 FastAPI is not involved. PostgreSQL remains the product and authorization authority;
 Elasticsearch remains derived state.
 
@@ -31,6 +35,7 @@ The versioned test inputs are:
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-baseline.json`
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.2.json`
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.3.json`
+- `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.4.json`
 
 The corpus uses stable Workspace, Asset and transcript-row IDs plus fixed timing and creation
 metadata. Version `v1` contains `102` transcript-row documents across two Workspaces and ten
@@ -48,12 +53,17 @@ chain is:
 expected-baseline.json
 -> apply expected-slice-7.2.json
 -> apply expected-slice-7.3.json
+-> verify expected-slice-7.4.json context evidence
 ```
 
 The Slice 7.3 overlay is never applied directly to historical v1. All other expectations are
 inherited unchanged. Changes to corpus semantics or accepted ordering require a new reviewable
 corpus version or an explicitly justified expectation overlay; do not edit historical order
 merely to make a policy change pass.
+
+The Slice 7.4 file is not a ranking overlay. It locks additive canonical snippets while
+asserting that exact-phrase, three-Asset diversity and accented-Vietnamese row order remain the
+Slice 7.3 order.
 
 ## Disposable Elasticsearch Suite
 
@@ -68,6 +78,18 @@ Run the real Elasticsearch evaluation with:
 ```bash
 mvn -f services/workspace-core/pom.xml -Psearch-quality-it verify
 ```
+
+Run the targeted real PostgreSQL context-query suite with:
+
+```bash
+mvn -f services/workspace-core/pom.xml -Pcanonical-context-it verify
+```
+
+That profile starts PostgreSQL `16.10` without a persistent volume, runs Flyway, exercises the
+production targeted JDBC query, and removes the disposable container. It proves row-ID
+authority, legacy segment fallback, first/middle/last windows, segment gaps, blank-row
+exclusion, null timing, batching and Asset isolation. The standard unit command executes
+neither dedicated integration class.
 
 The dedicated profile starts Elasticsearch `8.11.1` through Testcontainers, creates an isolated
 index with no persistent volume, applies the production mapping, indexes the versioned corpus,
@@ -93,6 +115,9 @@ API version. `commons-lang3` `3.18.0` is also test-scoped to match Testcontainer
 - `SearchApplicationService` and `SearchRelevancePolicy` for authorization scope, the searchable
   Asset allowlist, post-filtering, the public cap and per-Asset cap;
 - `AssistantSearchPortAdapter` to prove assistant retrieval reuses the same search use case.
+- the browser-only canonical context mode in `SearchApplicationService`, backed in the
+  Elasticsearch suite by the versioned corpus and separately by the real PostgreSQL query
+  suite.
 
 The suite does not duplicate the production query JSON.
 
@@ -143,7 +168,6 @@ The historical Slice 7.1 baseline records adjacent duplication; Slice 7.2 resolv
 application-level limitation, and Slice 7.3 resolves the locked Workspace-wide candidate
 starvation scenario. Current unresolved limitations are:
 
-- the response returns only the matching row text and has no before/after context snippet;
 - Vietnamese queries are not accent-insensitive;
 - typo tolerance and prefix matching are not enabled;
 - there is no pagination.
@@ -287,15 +311,65 @@ ordering.
 
 This slice changes neither mappings nor analyzers, boosts, public response fields,
 configuration, or index contents; no reindex is required. Underfill after inner-hit depth and
-adjacent clustering is accepted. It adds no context snippet, accent folding, fuzziness, prefix
-search, semantic/vector retrieval, frontend behavior or pagination.
+adjacent clustering is accepted. It adds no accent folding, fuzziness, prefix search,
+semantic/vector retrieval, frontend redesign or pagination.
+
+## Slice 7.4 Canonical Context Hydration
+
+The browser pipeline now ends with:
+
+```text
+final selected Elasticsearch hits
+-> at most 12 Search-owned canonical context targets
+-> group by distinct Asset
+-> one targeted PostgreSQL statement per Asset
+-> at most previous/match/next for each target
+-> canonical stale-hit validation
+-> plain-text contextSnippet
+```
+
+The query uses the existing `(asset_id, transcript_row_id)` and
+`(asset_id, segment_index)` indexes. A supplied transcript-row ID is authoritative; segment
+fallback is allowed only when the target lacks an ID. A supplied stale ID never falls back to
+its segment. Previous and next mean the nearest usable canonical rows by segment order, not arithmetic
+`segmentIndex +/- 1`, so gaps are valid. At most `36` rows cross the persistence boundary and
+no full transcript or cache is used.
+
+Before returning a hydrated hit, Spring requires Asset ID, row identity, segment, nullable
+timing, normalized text and creation identity to agree with PostgreSQL. Semantic stale or
+missing hits are removed in place; remaining rank and raw score are preserved, no candidate is
+refilled, and `resultCount` is recomputed. A PostgreSQL connectivity, timeout, SQL or invalid
+persistence-response failure becomes bounded `503 SEARCH_SERVICE_UNAVAILABLE` without exposing
+SQL or transcript data.
+
+Snippet policy is deliberately structural rather than semantic:
+
+- order is previous, matching, next;
+- Unicode whitespace collapses to one ASCII space;
+- duplicate neighbor text equal to the matching row is dropped;
+- budgets are `149` previous, `300` matching and `149` next code points, plus at most two
+  separators;
+- previous truncation retains the suffix nearest the match and prefixes `…`; matching and next
+  truncation retain their prefixes and append `…`;
+- total length is at most `600` Unicode code points and never splits a surrogate pair.
+
+The existing `text`, `transcriptRowId`, timing, score and ordering remain unchanged.
+`contextSnippet` is nullable and additive so a frontend can fall back to `text`. The assistant
+explicitly disables this mode and continues its existing canonical context/citation flow,
+avoiding duplicate hydration.
+
+`expected-slice-7.4.json` proves exact-phrase snippets, the unchanged three-Asset dominance
+order, and accented Vietnamese identity/timing through the production Elasticsearch path.
+The PostgreSQL profile separately proves the production LATERAL query. There is no Flyway
+migration, Elasticsearch mapping change or reindex.
 
 ## Ranking And Retrieval Boundaries
 
 Slice 7.1 adds only test infrastructure, corpus data and documentation. Slice 7.1A changes only
 the bulk request byte encoding. Slice 7.2 changes application post-ranking selection only.
 Slice 7.3 changes the Workspace-wide request shape, grouped response parsing, authorized-hit
-defense and deterministic product ordering. It does not change mappings, analyzers, boosts,
-public response fields, configuration or reindex requirements. Later quality work must
+defense and deterministic product ordering. Slice 7.4 changes only browser response hydration
+and adds the nullable `contextSnippet`; it does not change mappings, analyzers, boosts,
+configuration or reindex requirements. Later quality work must
 demonstrate improvement against this baseline while retaining its hard authorization,
 identity, timing and deterministic-order invariants.

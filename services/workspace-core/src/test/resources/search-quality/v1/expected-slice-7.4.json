@@ -1,0 +1,48 @@
+{
+  "version": "v1-slice-7.4-context",
+  "baseVersion": "v1-slice-7.3",
+  "scenarios": [
+    {
+      "id": "exact-phrase-context",
+      "query": "vector clocks",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "orderedRowIds": [
+        "vector-exact",
+        "vector-bag"
+      ],
+      "expectedSnippets": {
+        "vector-exact": "Vector clocks capture causality between distributed events. Clocks organized with a vector represent causal histories in distributed systems.",
+        "vector-bag": "Vector clocks capture causality between distributed events. Clocks organized with a vector represent causal histories in distributed systems. Convergence emerges when replicated services exchange state after a partition."
+      }
+    },
+    {
+      "id": "asset-diversity-context",
+      "query": "distributed tracing",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "orderedRowIds": [
+        "dominant-000",
+        "dominance-alternative-b",
+        "dominance-alternative-a"
+      ],
+      "expectedSnippets": {
+        "dominant-000": "Distributed tracing follows one request across service boundaries and records correlated spans.",
+        "dominance-alternative-b": "A practical overview explains distributed tracing after introducing logs, metrics, and spans. Shared retrieval baseline demonstrates common lexical ranking.",
+        "dominance-alternative-a": "Tracing distributed requests across service boundaries reveals latency. Shared retrieval baseline demonstrates common lexical ranking."
+      }
+    },
+    {
+      "id": "vietnamese-accented-context",
+      "query": "thuật toán tìm kiếm",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "orderedRowIds": [
+        "vi-accented"
+      ],
+      "expectedSnippets": {
+        "vi-accented": "Thuật toán tìm kiếm nhị phân giảm một nửa không gian sau mỗi bước."
+      }
+    }
+  ]
+}

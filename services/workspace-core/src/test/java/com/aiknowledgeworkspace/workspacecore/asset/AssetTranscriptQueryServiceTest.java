@@ -6,12 +6,17 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetN
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptContext;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextRow;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextTarget;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextWindow;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
@@ -91,6 +96,68 @@ class AssetTranscriptQueryServiceTest {
 
         assertThatThrownBy(() -> service.getAuthorizedAssetDetails(assetId))
                 .isInstanceOf(AssetNotFoundException.class);
+    }
+
+    @Test
+    void searchableOwnedAssetLoadsTargetedCanonicalContexts() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Asset asset = asset(assetId, workspaceId, AssetStatus.SEARCHABLE);
+        CanonicalTranscriptContextTarget target = new CanonicalTranscriptContextTarget("row-2", 2);
+        CanonicalTranscriptContextRow matched = new CanonicalTranscriptContextRow(
+                "row-2", 2, 1000L, 2000L, "canonical", "2026-01-01T00:00:00Z"
+        );
+        CanonicalTranscriptContextWindow window = new CanonicalTranscriptContextWindow(
+                "row-2", 2, matched, List.of(matched)
+        );
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(asset));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(true);
+        when(transcriptStore.loadContextWindows(assetId, List.of(target))).thenReturn(List.of(window));
+
+        assertThat(service.findSearchableTranscriptContexts(
+                assetId, workspaceId, List.of(target)
+        )).containsExactly(window);
+        verify(transcriptStore).loadContextWindows(assetId, List.of(target));
+    }
+
+    @Test
+    void wrongWorkspaceNonOwnedOrNonSearchableAssetNeverLoadsCanonicalContext() {
+        UUID assetId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        UUID otherWorkspaceId = UUID.randomUUID();
+
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(
+                asset(assetId, otherWorkspaceId, AssetStatus.SEARCHABLE)
+        ));
+        assertThat(service.findSearchableTranscriptContexts(
+                assetId,
+                workspaceId,
+                List.of(new CanonicalTranscriptContextTarget("row-1", 1))
+        )).isEmpty();
+        verifyNoInteractions(transcriptStore);
+
+        org.mockito.Mockito.reset(assetStore, transcriptStore, workspaceAccess);
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(
+                asset(assetId, workspaceId, AssetStatus.SEARCHABLE)
+        ));
+        when(workspaceAccess.isOwnedByCurrentUser(workspaceId)).thenReturn(false);
+        assertThat(service.findSearchableTranscriptContexts(
+                assetId,
+                workspaceId,
+                List.of(new CanonicalTranscriptContextTarget("row-1", 1))
+        )).isEmpty();
+        verifyNoInteractions(transcriptStore);
+
+        org.mockito.Mockito.reset(assetStore, transcriptStore, workspaceAccess);
+        when(assetStore.findById(assetId)).thenReturn(Optional.of(
+                asset(assetId, workspaceId, AssetStatus.TRANSCRIPT_READY)
+        ));
+        assertThat(service.findSearchableTranscriptContexts(
+                assetId,
+                workspaceId,
+                List.of(new CanonicalTranscriptContextTarget("row-1", 1))
+        )).isEmpty();
+        verifyNoInteractions(transcriptStore);
     }
 
     private Asset asset(UUID id, UUID workspaceId, AssetStatus status) {

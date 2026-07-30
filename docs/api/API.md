@@ -903,6 +903,7 @@ Each result currently contains:
 - `startMs` nullable integer milliseconds
 - `endMs` nullable integer milliseconds
 - `text`
+- `contextSnippet` nullable additive plain-text context
 - `createdAt`
 - `score`
 
@@ -935,9 +936,22 @@ Current behavior:
 - The public response contains at most `12` results. It may contain fewer because inner-hit
   depth and adjacent-moment deduplication are bounded; successful search does not promise
   twelve results.
+- After the final cap, browser search asks the Asset module for a PostgreSQL-canonical
+  previous/match/next window for each selected row. Requests are grouped by Asset and use one
+  targeted statement per distinct Asset; at most `12` targets and `36` canonical rows are
+  admitted.
+- `contextSnippet` is plain text in canonical row order with a fixed window of one row on
+  either side and a maximum of `600` Unicode code points. It is additive and nullable so
+  older clients may continue to render `text`; the matching identity, timing, score and
+  ordering are unchanged.
+- A derived Elasticsearch hit is discarded if its row identity, segment, timing, normalized
+  text or creation identity no longer matches PostgreSQL. Remaining hits keep their order,
+  no replacement candidate is fetched, and `resultCount` is recalculated.
 - The endpoint has no pagination and no client-controlled result limit.
 - This behavior requires no mapping change or reindex and does not add semantic/vector
-  retrieval, accent folding, typo/prefix support, or before/after context snippets.
+  retrieval, accent folding, typo/prefix support, HTML highlighting, or configurable context.
+- Assistant retrieval explicitly disables this browser response hydration because the
+  assistant already resolves its own bounded canonical transcript context.
 
 Common failure cases:
 
@@ -949,7 +963,7 @@ Common failure cases:
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_CONFLICT"` if `workspaceId` is omitted and the current user's default workspace state is internally conflicted
 - HTTP `409` with `code = "DEFAULT_WORKSPACE_ID_CONFLICT"` if `workspaceId` is omitted and Spring cannot create the reserved default workspace safely
 - HTTP `503` with `code = "SEARCH_SERVICE_UNAVAILABLE"` if Elasticsearch connectivity or
-  operation fails
+  operation fails, or if canonical PostgreSQL context hydration fails operationally
 
 ### `POST /api/assistant/context`
 

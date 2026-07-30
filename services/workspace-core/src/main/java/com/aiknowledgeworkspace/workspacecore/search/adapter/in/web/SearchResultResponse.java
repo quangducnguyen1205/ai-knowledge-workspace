@@ -10,6 +10,7 @@ public record SearchResultResponse(
         Long startMs,
         Long endMs,
         String text,
+        String contextSnippet,
         String createdAt,
         Double score
 ) {

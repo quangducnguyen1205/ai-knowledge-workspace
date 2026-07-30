@@ -2,24 +2,45 @@ package com.aiknowledgeworkspace.workspacecore.asset.adapter.out.persistence;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextTarget;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextWindow;
+import com.aiknowledgeworkspace.workspacecore.asset.application.exception.CanonicalTranscriptContextReadException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 @Component
 class CanonicalTranscriptPersistenceAdapter implements CanonicalTranscriptStore {
 
     private final CanonicalTranscriptJpaRepository transcriptRepository;
+    private final CanonicalTranscriptContextJdbcRepository contextRepository;
 
-    CanonicalTranscriptPersistenceAdapter(CanonicalTranscriptJpaRepository transcriptRepository) {
+    CanonicalTranscriptPersistenceAdapter(
+            CanonicalTranscriptJpaRepository transcriptRepository,
+            CanonicalTranscriptContextJdbcRepository contextRepository
+    ) {
         this.transcriptRepository = transcriptRepository;
+        this.contextRepository = contextRepository;
     }
 
     @Override
     public List<AssetTranscriptRowView> load(UUID assetId) {
         return sorted(transcriptRepository.findByAssetId(assetId));
+    }
+
+    @Override
+    public List<CanonicalTranscriptContextWindow> loadContextWindows(
+            UUID assetId,
+            List<CanonicalTranscriptContextTarget> targets
+    ) {
+        try {
+            return contextRepository.load(assetId, targets);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw new CanonicalTranscriptContextReadException();
+        }
     }
 
     @Override

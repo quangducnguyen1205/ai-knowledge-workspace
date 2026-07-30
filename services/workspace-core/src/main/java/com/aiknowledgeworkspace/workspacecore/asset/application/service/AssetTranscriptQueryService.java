@@ -7,6 +7,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetN
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptContext;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowView;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextTarget;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextWindow;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
@@ -69,6 +71,23 @@ public class AssetTranscriptQueryService {
                 .filter(asset -> workspaceId.equals(asset.getWorkspaceId()))
                 .filter(asset -> asset.getStatus() == AssetStatus.SEARCHABLE)
                 .flatMap(asset -> toTranscriptContext(asset, transcriptRowId, window));
+    }
+
+    @Transactional(readOnly = true)
+    public List<CanonicalTranscriptContextWindow> findSearchableTranscriptContexts(
+            UUID assetId,
+            UUID workspaceId,
+            List<CanonicalTranscriptContextTarget> targets
+    ) {
+        if (assetId == null || workspaceId == null || targets == null || targets.isEmpty()) {
+            return List.of();
+        }
+        return assetStore.findById(assetId)
+                .filter(asset -> workspaceId.equals(asset.getWorkspaceId()))
+                .filter(asset -> asset.getStatus() == AssetStatus.SEARCHABLE)
+                .filter(asset -> workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId()))
+                .map(asset -> transcriptStore.loadContextWindows(asset.getId(), targets))
+                .orElseGet(List::of);
     }
 
     @Transactional(readOnly = true)

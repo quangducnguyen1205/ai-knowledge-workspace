@@ -26,7 +26,7 @@ public class SearchController {
             @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "assetId", required = false) UUID assetId
     ) {
-        SearchResult result = searchQueries.search(new SearchQuery(query, workspaceId, assetId));
+        SearchResult result = searchQueries.search(new SearchQuery(query, workspaceId, assetId, true));
         return new SearchResponse(
                 result.query(),
                 result.workspaceIdFilter(),
@@ -41,6 +41,7 @@ public class SearchController {
                                 hit.startMs(),
                                 hit.endMs(),
                                 hit.text(),
+                                hit.contextSnippet(),
                                 hit.createdAt(),
                                 hit.score()
                         ))

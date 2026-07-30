@@ -7,4 +7,9 @@ public interface SearchAssetQueryPort {
     SearchAssetDetails getAuthorizedAssetDetails(UUID assetId);
 
     List<UUID> findSearchableAssetIdsInWorkspace(UUID workspaceId);
+
+    List<SearchCanonicalContext> loadCanonicalContexts(
+            UUID workspaceId,
+            List<SearchCanonicalContextTarget> targets
+    );
 }
