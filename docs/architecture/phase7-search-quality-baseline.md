@@ -14,6 +14,12 @@ Slice 7.2 adds one application-owned result policy: consecutive matching transcr
 the same Asset are represented as one video moment after deterministic relevance ordering and
 before result quotas. Elasticsearch retrieval and scoring remain unchanged.
 
+Slice 7.3 prevents Workspace-wide candidate starvation by retrieving bounded candidates from
+multiple relevant Assets before Spring policy. It adds Elasticsearch field collapse with
+canonical inner hits for Workspace-wide search, an application-side authorized-hit
+defense-in-depth filter, and deterministic round-based product ordering. Asset-scoped search
+retains its flat retrieval and global relevance order.
+
 FastAPI is not involved. PostgreSQL remains the product and authorization authority;
 Elasticsearch remains derived state.
 
@@ -24,6 +30,7 @@ The versioned test inputs are:
 - `services/workspace-core/src/test/resources/search-quality/v1/corpus.json`
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-baseline.json`
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.2.json`
+- `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.3.json`
 
 The corpus uses stable Workspace, Asset and transcript-row IDs plus fixed timing and creation
 metadata. Version `v1` contains `102` transcript-row documents across two Workspaces and ten
@@ -33,9 +40,20 @@ Vietnamese, optional Asset scope and Workspace isolation.
 
 `expected-baseline.json` remains the measured pre-Slice-7.2 history.
 `expected-slice-7.2.json` is a reviewed overlay containing only the scenarios intentionally
-changed by adjacent-moment policy. All other expectations are inherited unchanged. Changes to
-corpus semantics or accepted ordering require a new reviewable corpus version or an explicitly
-justified expectation overlay; do not edit historical order merely to make a policy change pass.
+changed by adjacent-moment policy. `expected-slice-7.3.json` is based on
+`v1-slice-7.2` and changes only the candidate-dominance scenario. The explicit expectation
+chain is:
+
+```text
+expected-baseline.json
+-> apply expected-slice-7.2.json
+-> apply expected-slice-7.3.json
+```
+
+The Slice 7.3 overlay is never applied directly to historical v1. All other expectations are
+inherited unchanged. Changes to corpus semantics or accepted ordering require a new reviewable
+corpus version or an explicitly justified expectation overlay; do not edit historical order
+merely to make a policy change pass.
 
 ## Disposable Elasticsearch Suite
 
@@ -95,9 +113,12 @@ The suite does not duplicate the production query JSON.
 | Optional Asset scope | only rows from the selected Asset | Hard invariant |
 | Public and per-Asset caps | 12 rows, 5 distinct Assets, no Asset above 3 rows | Hard invariant |
 
-The current Elasticsearch candidate pool is `60`. Spring returns at most `12` rows, with a
-workspace-wide maximum of `3` rows per Asset. `resultCount` is the number returned after the
-Spring relevance policy, not Elasticsearch total hits. The public API has no pagination or
+The historical flat Elasticsearch candidate pool is `60`. Slice 7.3 replaces it only for
+Workspace-wide retrieval with at most `12` collapsed Asset groups and `3` inner-hit candidates
+per group. Asset-scoped retrieval retains the flat size of `60`. Spring returns at most `12`
+rows, with a Workspace-wide maximum of `3` representatives per Asset. The bounded retrieval
+and adjacent deduplication may underfill the response. `resultCount` is the number returned
+after Spring policy, not Elasticsearch total hits. The public API has no pagination or
 client-controlled limit.
 
 ## Hard Invariants
@@ -109,7 +130,8 @@ The real-Elasticsearch suite fails on regression of:
 - stable canonical transcript-row identity;
 - nullable and present timing propagation;
 - production response parsing;
-- the `60`-candidate behavior as observed through dominance;
+- Workspace-wide grouped retrieval and Asset-scoped flat retrieval;
+- three relevant Assets in the first three `distributed tracing` results;
 - the public `12`-result cap;
 - the workspace-wide `3`-per-Asset cap;
 - exact phrase target within the locked position;
@@ -117,11 +139,10 @@ The real-Elasticsearch suite fails on regression of:
 
 ## Known Quality Gaps
 
-The historical Slice 7.1 baseline records adjacent duplication; Slice 7.2 resolves that one
-application-level limitation. Current unresolved limitations are:
+The historical Slice 7.1 baseline records adjacent duplication; Slice 7.2 resolves that
+application-level limitation, and Slice 7.3 resolves the locked Workspace-wide candidate
+starvation scenario. Current unresolved limitations are:
 
-- one strongly matching Asset can exhaust all `60` Elasticsearch candidates before Java
-  diversity policy runs;
 - the response returns only the matching row text and has no before/after context snippet;
 - Vietnamese queries are not accent-insensitive;
 - typo tolerance and prefix matching are not enabled;
@@ -194,12 +215,87 @@ Vietnamese remains unsupported. `AssistantSearchPortAdapter` reuses the same sea
 assistant retrieval receives the same representative ordering and canonical timing.
 
 This is structural adjacency over canonical segment ordering, not semantic understanding.
-Candidate-pool diversity remains unresolved, and no context snippet is added.
+No context snippet is added.
+
+## Slice 7.3 Workspace Asset Diversity
+
+Workspace-wide retrieval now preserves the existing lexical bool query, phrase boosts,
+`SEARCHABLE` filter, Workspace filter and authorized Asset allowlist, while changing the
+bounded candidate shape:
+
+```text
+Elasticsearch collapse on assetId.keyword
+-> at most 12 outer Asset groups
+-> named asset_moments inner hits
+-> at most 3 canonical transcript-row candidates per group
+```
+
+Outer hits establish group relevance only and use `_source: false`; they are never converted
+to product candidates. The adapter parses only
+`inner_hits.asset_moments.hits.hits`, including the outer top document through its inner-hit
+occurrence, so it cannot be duplicated. Both flat and grouped paths use the same canonical hit
+parser for identity, timing, text, metadata and raw score. Missing or malformed required
+inner-hit structure fails as a bounded search operation error without logging response or
+transcript payloads.
+
+Asset-scoped search intentionally remains a flat `size: 60` query without collapse. Applying
+inner depth `3` to a single selected Asset would incorrectly reduce the existing contract,
+which permits up to twelve non-adjacent representatives.
+
+After retrieval, Spring performs a defense-in-depth check against the PostgreSQL-authorized
+scope before meaningful-term filtering or result policy. Workspace-wide hits must belong to
+the eligible Asset allowlist; Asset-scoped hits must match the validated Asset. Unexpected
+valid-but-out-of-scope derived-state hits are discarded rather than failing the whole search.
+The warning is bounded to discarded count and scope type. Elasticsearch's existing
+Workspace, Asset and `SEARCHABLE` filters remain mandatory.
+
+The Workspace-wide product pipeline is:
+
+```text
+grouped Elasticsearch candidates
+-> authorized-hit filter
+-> meaningful-term filtering
+-> group and rank candidates inside each Asset
+-> adjacent-moment clustering inside each Asset
+-> at most 3 representatives per Asset
+-> deterministic round flattening
+-> public cap 12
+```
+
+Round 1 contains the best surviving representative from every Asset, round 2 the second, and
+round 3 the third. Every available first representative therefore appears before every second
+representative. Inside each round, order is score descending with null last, segment index
+ascending with null last, Asset ID ascending, then canonical transcript-row ID ascending with
+null last. `score` remains the raw Elasticsearch lexical score of that row, but Workspace-wide
+public ordering is intentionally no longer globally `_score desc`. Asset-scoped search keeps
+global relevance order after adjacent deduplication and does not use diversity rounds.
+
+The locked dominance evidence is:
+
+| Scenario | Historical v1 | Slice 7.2 | Slice 7.3 |
+| --- | --- | --- | --- |
+| `distributed tracing` rows | first three dominant adjacent rows | `dominant-000`; weaker Assets absent from flat top 60 | `dominant-000`, `dominance-alternative-b`, `dominance-alternative-a` |
+| Ordered Asset IDs | dominant Asset only | `aaaaaaaa-aaaa-aaaa-aaaa-000000000003` | `aaaaaaaa-aaaa-aaaa-aaaa-000000000003`, `aaaaaaaa-aaaa-aaaa-aaaa-000000000005`, `aaaaaaaa-aaaa-aaaa-aaaa-000000000004` |
+| Distinct Assets in top three | 1 | 1 | 3 |
+
+The result order is identical across at least ten repeated production queries. Exact phrase
+rank 1, adjacent clustering, Workspace isolation, optional Asset scope, canonical identity and
+timing, Unicode-safe bulk indexing, accented Vietnamese rank/timing and unaccented Vietnamese
+limitation remain unchanged. All `102` documents still enter through the production bulk
+adapter. Assistant retrieval reuses the same search use case and receives the same dominance
+ordering.
+
+This slice changes neither mappings nor analyzers, boosts, public response fields,
+configuration, or index contents; no reindex is required. Underfill after inner-hit depth and
+adjacent clustering is accepted. It adds no context snippet, accent folding, fuzziness, prefix
+search, semantic/vector retrieval, frontend behavior or pagination.
 
 ## Ranking And Retrieval Boundaries
 
 Slice 7.1 adds only test infrastructure, corpus data and documentation. Slice 7.1A changes only
 the bulk request byte encoding. Slice 7.2 changes application post-ranking selection only.
-No slice changes mapping analyzers, Elasticsearch query clauses, boosts, candidate size or
-public response fields. Later quality work must demonstrate improvement against this baseline
-while retaining its hard authorization, identity, timing and deterministic-order invariants.
+Slice 7.3 changes the Workspace-wide request shape, grouped response parsing, authorized-hit
+defense and deterministic product ordering. It does not change mappings, analyzers, boosts,
+public response fields, configuration or reindex requirements. Later quality work must
+demonstrate improvement against this baseline while retaining its hard authorization,
+identity, timing and deterministic-order invariants.

@@ -3,8 +3,10 @@ package com.aiknowledgeworkspace.workspacecore.search;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.SearchIndexOperationException;
 import com.aiknowledgeworkspace.workspacecore.search.adapter.out.search.ElasticsearchTranscriptAdapter;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -72,6 +74,14 @@ class ElasticsearchTranscriptAdapterTest {
         UUID workspaceId = UUID.randomUUID();
         mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
                 .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"size\":60")))
+                .andExpect(content().string(not(containsString("\"collapse\""))))
+                .andExpect(content().string(containsString(
+                        "\"sort\":[{\"_score\":{\"order\":\"desc\"}},"
+                                + "{\"segmentIndex\":{\"order\":\"asc\",\"missing\":\"_last\"}},"
+                                + "{\"assetId.keyword\":{\"order\":\"asc\"}},"
+                                + "{\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}}]"
+                )))
                 .andRespond(withSuccess("""
                         {"hits":{"hits":[{"_score":1.0,"_source":{
                           "assetId":"%s","assetTitle":"Legacy","transcriptRowId":"row-1",
@@ -85,6 +95,263 @@ class ElasticsearchTranscriptAdapterTest {
 
         org.assertj.core.api.Assertions.assertThat(hit.startMs()).isNull();
         org.assertj.core.api.Assertions.assertThat(hit.endMs()).isNull();
+        mockServer.verify();
+    }
+
+    @Test
+    void workspaceSearchUsesCollapseAndParsesOnlyCanonicalInnerHits() {
+        UUID firstAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID workspaceId = UUID.randomUUID();
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"size\":12")))
+                .andExpect(content().string(containsString("\"_source\":false")))
+                .andExpect(content().string(containsString(
+                        "\"collapse\":{\"field\":\"assetId.keyword\",\"max_concurrent_group_searches\":4"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"inner_hits\":{\"name\":\"asset_moments\",\"size\":3,\"_source\":true"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"inner_hits\":{\"name\":\"asset_moments\",\"size\":3,\"_source\":true,"
+                                + "\"sort\":[{\"_score\":{\"order\":\"desc\"}},"
+                                + "{\"segmentIndex\":{\"order\":\"asc\",\"missing\":\"_last\"}},"
+                                + "{\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"sort\":[{\"_score\":{\"order\":\"desc\"}},"
+                                + "{\"segmentIndex\":{\"order\":\"asc\",\"missing\":\"_last\"}},"
+                                + "{\"assetId.keyword\":{\"order\":\"asc\"}},"
+                                + "{\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}}]"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"segmentIndex\":{\"order\":\"asc\",\"missing\":\"_last\"}"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"assetId.keyword\":{\"order\":\"asc\"}"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}"
+                )))
+                .andRespond(withSuccess("""
+                        {
+                          "hits": {
+                            "hits": [
+                              {
+                                "_score": 9.0,
+                                "_source": {
+                                  "assetId": "%s",
+                                  "transcriptRowId": "outer-duplicate"
+                                },
+                                "inner_hits": {
+                                  "asset_moments": {
+                                    "hits": {
+                                      "hits": [
+                                        {
+                                          "_score": 9.0,
+                                          "_source": {
+                                            "assetId": "%s",
+                                            "assetTitle": "First",
+                                            "transcriptRowId": "outer-duplicate",
+                                            "segmentIndex": 4,
+                                            "startMs": 1000,
+                                            "endMs": 2000,
+                                            "text": "target first",
+                                            "createdAt": "2026-07-30T00:00:00Z"
+                                          }
+                                        },
+                                        {
+                                          "_score": null,
+                                          "_source": {
+                                            "assetId": "%s",
+                                            "assetTitle": "First",
+                                            "transcriptRowId": "nullable",
+                                            "segmentIndex": null,
+                                            "startMs": null,
+                                            "endMs": null,
+                                            "text": "target nullable",
+                                            "createdAt": "2026-07-30T00:00:01Z"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "_score": 4.0,
+                                "inner_hits": {
+                                  "asset_moments": {
+                                    "hits": {
+                                      "hits": [
+                                        {
+                                          "_score": 4.0,
+                                          "_source": {
+                                            "assetId": "%s",
+                                            "assetTitle": "Second",
+                                            "transcriptRowId": "second-row",
+                                            "segmentIndex": 8,
+                                            "startMs": 3000,
+                                            "endMs": 4000,
+                                            "text": "target second",
+                                            "createdAt": "2026-07-30T00:00:02Z"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                        """.formatted(firstAssetId, firstAssetId, firstAssetId, secondAssetId),
+                        MediaType.APPLICATION_JSON));
+
+        var hits = client.search(new TranscriptSearchQuery(
+                "target",
+                workspaceId,
+                null,
+                List.of(firstAssetId, secondAssetId),
+                List.of("target")
+        ));
+
+        assertThat(hits)
+                .extracting(hit -> hit.transcriptRowId())
+                .containsExactly("outer-duplicate", "nullable", "second-row");
+        assertThat(hits.get(0).startMs()).isEqualTo(1000L);
+        assertThat(hits.get(1).score()).isNull();
+        assertThat(hits.get(1).segmentIndex()).isNull();
+        assertThat(hits.get(1).startMs()).isNull();
+        assertThat(hits.get(1).endMs()).isNull();
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsNonNumericScore() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[{
+                  "_score":"private-score",
+                  "_source":{"assetId":"%s","segmentIndex":1}
+                }]}}}}]}}
+                """.formatted(assetId));
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessage("Elasticsearch search hit included a non-numeric value for _score")
+                .hasMessageNotContaining("private-score");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsNonIntegralSegmentIndex() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[{
+                  "_score":1.0,
+                  "_source":{"assetId":"%s","segmentIndex":1.5}
+                }]}}}}]}}
+                """.formatted(assetId));
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessageContaining("non-integral or out-of-range value for segmentIndex");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsMissingInnerHitStructure() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("{\"hits\":{\"hits\":[{}]}}");
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessageContaining("did not include asset moment inner hits");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsMissingNestedHitsArray() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{}}}}]}}
+                """);
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessageContaining("did not include asset moment inner hits");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchTreatsMissingScoreAndSegmentIndexAsNull() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[{
+                  "_source":{"assetId":"%s","transcriptRowId":"missing-nullables"}
+                }]}}}}]}}
+                """.formatted(assetId));
+
+        var hit = client.search(workspaceQuery(assetId)).getFirst();
+
+        assertThat(hit.score()).isNull();
+        assertThat(hit.segmentIndex()).isNull();
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsEmptyInnerHitGroup() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[]}}}}]}}
+                """);
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessageContaining("empty asset moment inner-hit group");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsInnerHitWithoutSource() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[{"_score":1.0}]}}}}]}}
+                """);
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessage("Elasticsearch search hit did not include _source");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsMissingTopLevelHits() {
+        UUID assetId = UUID.randomUUID();
+        expectGroupedSearchResponse("{\"hits\":{}}");
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(assetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessage("Elasticsearch search response did not include hits");
+        mockServer.verify();
+    }
+
+    @Test
+    void groupedSearchRejectsInvalidAssetUuidWithoutExposingIt() {
+        UUID eligibleAssetId = UUID.randomUUID();
+        expectGroupedSearchResponse("""
+                {"hits":{"hits":[{"inner_hits":{"asset_moments":{"hits":{"hits":[{
+                  "_score":1.0,
+                  "_source":{"assetId":"private-invalid-asset","segmentIndex":1}
+                }]}}}}]}}
+                """);
+
+        assertThatThrownBy(() -> client.search(workspaceQuery(eligibleAssetId)))
+                .isInstanceOf(SearchIndexOperationException.class)
+                .hasMessage("Elasticsearch search hit included an invalid assetId")
+                .hasMessageNotContaining("private-invalid-asset");
         mockServer.verify();
     }
 
@@ -196,5 +463,21 @@ class ElasticsearchTranscriptAdapterTest {
                 .andExpect(content().string(containsString("\"startMs\":{\"type\":\"long\"}")))
                 .andExpect(content().string(containsString("\"endMs\":{\"type\":\"long\"}")))
                 .andRespond(withSuccess());
+    }
+
+    private TranscriptSearchQuery workspaceQuery(UUID assetId) {
+        return new TranscriptSearchQuery(
+                "target",
+                UUID.randomUUID(),
+                null,
+                List.of(assetId),
+                List.of("target")
+        );
+    }
+
+    private void expectGroupedSearchResponse(String responseBody) {
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_search"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
     }
 }

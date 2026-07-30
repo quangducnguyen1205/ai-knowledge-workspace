@@ -25,8 +25,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class SearchApplicationServiceTest {
 
     @Mock
@@ -79,5 +81,85 @@ class SearchApplicationServiceTest {
         assertThatThrownBy(() -> service.search(new SearchQuery("query", selectedWorkspace, assetId)))
                 .isInstanceOf(SearchAssetNotFoundException.class);
         verifyNoInteractions(searchIndex);
+    }
+
+    @Test
+    void workspaceSearchDiscardsOutOfScopeHitsAndLogsOneBoundedWarning(CapturedOutput output) {
+        UUID workspaceId = UUID.randomUUID();
+        UUID authorizedAssetId = UUID.randomUUID();
+        UUID firstOutOfScopeAssetId = UUID.randomUUID();
+        UUID secondOutOfScopeAssetId = UUID.randomUUID();
+        when(workspaces.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(assets.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(authorizedAssetId));
+        when(searchIndex.search(any())).thenReturn(List.of(
+                hit(firstOutOfScopeAssetId, "private-title-a", "private-row-a", "private transcript target"),
+                hit(authorizedAssetId, "Authorized", "allowed-row", "target private result"),
+                hit(secondOutOfScopeAssetId, "private-title-b", "private-row-b", "private transcript target")
+        ));
+
+        SearchResult result = service.search(new SearchQuery("target-private-query", workspaceId, null));
+
+        assertThat(result.hits())
+                .extracting(searchHit -> searchHit.transcriptRowId())
+                .containsExactly("allowed-row");
+        assertThat(output.getAll())
+                .containsOnlyOnce("Discarded 2 out-of-scope search hits for workspace scope")
+                .doesNotContain(workspaceId.toString())
+                .doesNotContain(firstOutOfScopeAssetId.toString())
+                .doesNotContain(secondOutOfScopeAssetId.toString())
+                .doesNotContain("target-private-query")
+                .doesNotContain("private-title")
+                .doesNotContain("private transcript");
+    }
+
+    @Test
+    void workspaceSearchWithOnlyOutOfScopeHitsReturnsSuccessfulEmptyResult() {
+        UUID workspaceId = UUID.randomUUID();
+        UUID authorizedAssetId = UUID.randomUUID();
+        when(workspaces.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(assets.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(List.of(authorizedAssetId));
+        when(searchIndex.search(any())).thenReturn(List.of(
+                hit(UUID.randomUUID(), "Other", "other-row", "target result")
+        ));
+
+        SearchResult result = service.search(new SearchQuery("target", workspaceId, null));
+
+        assertThat(result.hits()).isEmpty();
+    }
+
+    @Test
+    void assetScopedSearchDiscardsCandidateFromDifferentAsset() {
+        UUID workspaceId = UUID.randomUUID();
+        UUID selectedAssetId = UUID.randomUUID();
+        when(workspaces.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(assets.getAuthorizedAssetDetails(selectedAssetId))
+                .thenReturn(new SearchAssetDetails(selectedAssetId, workspaceId, true));
+        when(searchIndex.search(any())).thenReturn(List.of(
+                hit(UUID.randomUUID(), "Other", "other-row", "target result")
+        ));
+
+        SearchResult result = service.search(new SearchQuery("target", workspaceId, selectedAssetId));
+
+        assertThat(result.assetIdFilter()).isEqualTo(selectedAssetId);
+        assertThat(result.hits()).isEmpty();
+    }
+
+    private TranscriptSearchHit hit(
+            UUID assetId,
+            String title,
+            String rowId,
+            String text
+    ) {
+        return new TranscriptSearchHit(
+                assetId,
+                title,
+                rowId,
+                1,
+                1000L,
+                2000L,
+                text,
+                "2026-07-30T00:00:00Z",
+                1.0
+        );
     }
 }

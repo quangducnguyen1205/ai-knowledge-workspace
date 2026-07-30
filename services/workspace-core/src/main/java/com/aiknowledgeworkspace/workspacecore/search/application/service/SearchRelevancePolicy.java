@@ -51,28 +51,59 @@ final class SearchRelevancePolicy {
         }
 
         int requiredTerms = requiredTermCount(meaningfulTerms.size());
-        int perAssetLimit = workspaceWide ? MAX_RESULTS_PER_ASSET : MAX_RESULTS;
-        Map<UUID, Integer> acceptedPerAsset = new HashMap<>();
-        List<TranscriptSearchHit> accepted = new ArrayList<>();
-
-        List<TranscriptSearchHit> rankedHits = hits.stream()
+        List<TranscriptSearchHit> relevantHits = hits.stream()
                 .filter(hit -> matchesEnoughMeaningfulTerms(hit, meaningfulTerms, requiredTerms))
-                .sorted(HIT_ORDER)
                 .toList();
+        return workspaceWide
+                ? selectWorkspaceWide(relevantHits)
+                : selectAssetScoped(relevantHits);
+    }
 
-        for (TranscriptSearchHit hit : deduplicateAdjacentMoments(rankedHits)) {
-            if (accepted.size() >= MAX_RESULTS) {
-                break;
-            }
-            int acceptedForAsset = acceptedPerAsset.getOrDefault(hit.assetId(), 0);
-            if (acceptedForAsset >= perAssetLimit) {
-                continue;
-            }
-            accepted.add(hit);
-            acceptedPerAsset.put(hit.assetId(), acceptedForAsset + 1);
+    private static List<TranscriptSearchHit> selectWorkspaceWide(List<TranscriptSearchHit> relevantHits) {
+        Map<UUID, List<TranscriptSearchHit>> candidatesByAsset = new HashMap<>();
+        for (TranscriptSearchHit hit : relevantHits) {
+            candidatesByAsset
+                    .computeIfAbsent(hit.assetId(), ignored -> new ArrayList<>())
+                    .add(hit);
         }
 
-        return List.copyOf(accepted);
+        List<List<TranscriptSearchHit>> momentsByAsset = candidatesByAsset.values().stream()
+                .map(assetCandidates -> {
+                    List<TranscriptSearchHit> rankedAssetCandidates = assetCandidates.stream()
+                            .sorted(HIT_ORDER)
+                            .toList();
+                    return deduplicateAdjacentMoments(rankedAssetCandidates).stream()
+                            .limit(MAX_RESULTS_PER_ASSET)
+                            .toList();
+                })
+                .toList();
+
+        List<TranscriptSearchHit> flattened = new ArrayList<>();
+        for (int round = 0; round < MAX_RESULTS_PER_ASSET && flattened.size() < MAX_RESULTS; round++) {
+            List<TranscriptSearchHit> roundHits = new ArrayList<>();
+            for (List<TranscriptSearchHit> assetMoments : momentsByAsset) {
+                if (assetMoments.size() > round) {
+                    roundHits.add(assetMoments.get(round));
+                }
+            }
+            roundHits.sort(HIT_ORDER);
+            for (TranscriptSearchHit roundHit : roundHits) {
+                if (flattened.size() >= MAX_RESULTS) {
+                    break;
+                }
+                flattened.add(roundHit);
+            }
+        }
+        return List.copyOf(flattened);
+    }
+
+    private static List<TranscriptSearchHit> selectAssetScoped(List<TranscriptSearchHit> relevantHits) {
+        List<TranscriptSearchHit> rankedHits = relevantHits.stream()
+                .sorted(HIT_ORDER)
+                .toList();
+        return deduplicateAdjacentMoments(rankedHits).stream()
+                .limit(MAX_RESULTS)
+                .toList();
     }
 
     private static List<TranscriptSearchHit> deduplicateAdjacentMoments(

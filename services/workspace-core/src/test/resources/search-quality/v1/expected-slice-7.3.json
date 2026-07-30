@@ -1,0 +1,30 @@
+{
+  "version": "v1-slice-7.3",
+  "baseVersion": "v1-slice-7.2",
+  "scenarioOverrides": [
+    {
+      "id": "candidate-dominance",
+      "classification": "HARD_INVARIANT",
+      "query": "distributed tracing",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "dominant-000",
+      "orderedRowIds": [
+        "dominant-000",
+        "dominance-alternative-b",
+        "dominance-alternative-a"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000003",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000004"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 3,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Workspace collapse admits three relevant Assets before Spring deduplicates adjacent moments and flattens the first representative round."
+    }
+  ]
+}

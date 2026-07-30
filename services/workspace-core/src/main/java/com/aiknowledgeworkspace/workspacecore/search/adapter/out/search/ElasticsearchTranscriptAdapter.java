@@ -34,7 +34,11 @@ public class ElasticsearchTranscriptAdapter implements
         TranscriptSearchQueryPort,
         TranscriptSearchMaintenancePort {
 
-    private static final int SEARCH_CANDIDATE_SIZE = 60;
+    private static final int ASSET_SCOPED_SEARCH_CANDIDATE_SIZE = 60;
+    private static final int WORKSPACE_ASSET_GROUP_SIZE = 12;
+    private static final int WORKSPACE_MOMENTS_PER_ASSET = 3;
+    private static final int WORKSPACE_GROUP_SEARCH_CONCURRENCY = 4;
+    private static final String ASSET_MOMENTS_INNER_HIT_NAME = "asset_moments";
     private static final String MINIMUM_MEANINGFUL_TERM_MATCH = "2<75%";
     private static final float TEXT_EXACT_PHRASE_BOOST = 10.0f;
     private static final float TEXT_NEAR_PHRASE_BOOST = 6.0f;
@@ -70,7 +74,9 @@ public class ElasticsearchTranscriptAdapter implements
                         .body(JsonNode.class),
                 "search transcript rows"
         );
-        return parseSearchHits(responseBody);
+        return query.assetId() == null
+                ? parseGroupedSearchHits(responseBody)
+                : parseFlatSearchHits(responseBody);
     }
 
     @Override
@@ -161,7 +167,41 @@ public class ElasticsearchTranscriptAdapter implements
         validateTitleSyncResponse(assetId, responseBody);
     }
 
-    private List<TranscriptSearchHit> parseSearchHits(JsonNode responseBody) {
+    private List<TranscriptSearchHit> parseFlatSearchHits(JsonNode responseBody) {
+        JsonNode hitsNode = parseTopLevelHits(responseBody);
+        List<TranscriptSearchHit> hits = new ArrayList<>();
+        for (JsonNode hitNode : hitsNode) {
+            hits.add(parseTranscriptHit(hitNode));
+        }
+        return List.copyOf(hits);
+    }
+
+    private List<TranscriptSearchHit> parseGroupedSearchHits(JsonNode responseBody) {
+        JsonNode groupHitsNode = parseTopLevelHits(responseBody);
+        List<TranscriptSearchHit> hits = new ArrayList<>();
+        for (JsonNode groupHitNode : groupHitsNode) {
+            JsonNode innerHitsNode = groupHitNode.path("inner_hits")
+                    .path(ASSET_MOMENTS_INNER_HIT_NAME)
+                    .path("hits")
+                    .path("hits");
+            if (!innerHitsNode.isArray()) {
+                throw new SearchIndexOperationException(
+                        "Elasticsearch grouped search hit did not include asset moment inner hits"
+                );
+            }
+            if (innerHitsNode.isEmpty()) {
+                throw new SearchIndexOperationException(
+                        "Elasticsearch grouped search hit included an empty asset moment inner-hit group"
+                );
+            }
+            for (JsonNode innerHitNode : innerHitsNode) {
+                hits.add(parseTranscriptHit(innerHitNode));
+            }
+        }
+        return List.copyOf(hits);
+    }
+
+    private JsonNode parseTopLevelHits(JsonNode responseBody) {
         if (responseBody == null) {
             throw new SearchIndexOperationException("Elasticsearch search response body was empty");
         }
@@ -170,26 +210,25 @@ public class ElasticsearchTranscriptAdapter implements
         if (!hitsNode.isArray()) {
             throw new SearchIndexOperationException("Elasticsearch search response did not include hits");
         }
+        return hitsNode;
+    }
 
-        List<TranscriptSearchHit> hits = new ArrayList<>();
-        for (JsonNode hitNode : hitsNode) {
-            JsonNode sourceNode = hitNode.path("_source");
-            if (!sourceNode.isObject()) {
-                throw new SearchIndexOperationException("Elasticsearch search hit did not include _source");
-            }
-            hits.add(new TranscriptSearchHit(
-                    parseAssetId(sourceNode),
-                    readOptionalText(sourceNode, "assetTitle"),
-                    readOptionalText(sourceNode, "transcriptRowId"),
-                    readOptionalInteger(sourceNode, "segmentIndex"),
-                    readOptionalLong(sourceNode, "startMs"),
-                    readOptionalLong(sourceNode, "endMs"),
-                    readOptionalText(sourceNode, "text"),
-                    readOptionalText(sourceNode, "createdAt"),
-                    readOptionalScore(hitNode)
-            ));
+    private TranscriptSearchHit parseTranscriptHit(JsonNode hitNode) {
+        JsonNode sourceNode = hitNode.path("_source");
+        if (!sourceNode.isObject()) {
+            throw new SearchIndexOperationException("Elasticsearch search hit did not include _source");
         }
-        return List.copyOf(hits);
+        return new TranscriptSearchHit(
+                parseAssetId(sourceNode),
+                readOptionalText(sourceNode, "assetTitle"),
+                readOptionalText(sourceNode, "transcriptRowId"),
+                readOptionalInteger(sourceNode, "segmentIndex"),
+                readOptionalLong(sourceNode, "startMs"),
+                readOptionalLong(sourceNode, "endMs"),
+                readOptionalText(sourceNode, "text"),
+                readOptionalText(sourceNode, "createdAt"),
+                readOptionalScore(hitNode)
+        );
     }
 
     private UUID parseAssetId(JsonNode sourceNode) {
@@ -216,9 +255,9 @@ public class ElasticsearchTranscriptAdapter implements
         if (fieldNode.isMissingNode() || fieldNode.isNull()) {
             return null;
         }
-        if (!fieldNode.isInt() || !fieldNode.canConvertToInt()) {
+        if (!fieldNode.isIntegralNumber() || !fieldNode.canConvertToInt()) {
             throw new SearchIndexOperationException(
-                    "Elasticsearch search hit included a non-numeric value for " + fieldName
+                    "Elasticsearch search hit included a non-integral or out-of-range value for " + fieldName
             );
         }
         return fieldNode.asInt();
@@ -239,7 +278,15 @@ public class ElasticsearchTranscriptAdapter implements
 
     private Double readOptionalScore(JsonNode hitNode) {
         JsonNode scoreNode = hitNode.path("_score");
-        return scoreNode.isMissingNode() || scoreNode.isNull() ? null : scoreNode.asDouble();
+        if (scoreNode.isMissingNode() || scoreNode.isNull()) {
+            return null;
+        }
+        if (!scoreNode.isNumber()) {
+            throw new SearchIndexOperationException(
+                    "Elasticsearch search hit included a non-numeric value for _score"
+            );
+        }
+        return scoreNode.asDouble();
     }
 
     private boolean transcriptIndexExists(String indexName) {
@@ -391,10 +438,30 @@ public class ElasticsearchTranscriptAdapter implements
         boolQuery.put("filter", filterClauses);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("size", SEARCH_CANDIDATE_SIZE);
         body.put("query", Map.of("bool", boolQuery));
-        body.put("sort", buildSortClauses());
+        body.put("sort", buildOuterSortClauses());
+        if (assetId != null) {
+            body.put("size", ASSET_SCOPED_SEARCH_CANDIDATE_SIZE);
+        } else {
+            body.put("size", WORKSPACE_ASSET_GROUP_SIZE);
+            body.put("_source", false);
+            body.put("collapse", buildWorkspaceCollapse());
+        }
         return body;
+    }
+
+    private Map<String, Object> buildWorkspaceCollapse() {
+        Map<String, Object> innerHits = new LinkedHashMap<>();
+        innerHits.put("name", ASSET_MOMENTS_INNER_HIT_NAME);
+        innerHits.put("size", WORKSPACE_MOMENTS_PER_ASSET);
+        innerHits.put("_source", true);
+        innerHits.put("sort", buildInnerHitSortClauses());
+
+        Map<String, Object> collapse = new LinkedHashMap<>();
+        collapse.put("field", "assetId.keyword");
+        collapse.put("max_concurrent_group_searches", WORKSPACE_GROUP_SEARCH_CONCURRENCY);
+        collapse.put("inner_hits", innerHits);
+        return collapse;
     }
 
     private List<Map<String, Object>> buildPhraseBoostClauses(String query) {
@@ -414,11 +481,19 @@ public class ElasticsearchTranscriptAdapter implements
         return Map.of("match_phrase", Map.of(field, phraseOptions));
     }
 
-    private List<Map<String, Object>> buildSortClauses() {
+    private List<Map<String, Object>> buildOuterSortClauses() {
         return List.of(
                 sortClause("_score", "desc"),
-                sortClause("segmentIndex", "asc"),
+                sortClause("segmentIndex", "asc", "_last"),
                 sortClause("assetId.keyword", "asc"),
+                sortClause("transcriptRowId.keyword", "asc", "_last")
+        );
+    }
+
+    private List<Map<String, Object>> buildInnerHitSortClauses() {
+        return List.of(
+                sortClause("_score", "desc"),
+                sortClause("segmentIndex", "asc", "_last"),
                 sortClause("transcriptRowId.keyword", "asc", "_last")
         );
     }

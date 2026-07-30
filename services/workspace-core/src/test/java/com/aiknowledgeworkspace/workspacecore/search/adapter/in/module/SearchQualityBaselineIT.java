@@ -57,6 +57,8 @@ class SearchQualityBaselineIT {
             "/search-quality/v1/expected-baseline.json";
     private static final String SLICE_72_EXPECTED_RESOURCE =
             "/search-quality/v1/expected-slice-7.2.json";
+    private static final String SLICE_73_EXPECTED_RESOURCE =
+            "/search-quality/v1/expected-slice-7.3.json";
     private static final String INDEX_NAME = "search-quality-v1";
     private static final String UNICODE_FIDELITY_INDEX_NAME = "search-quality-unicode-fidelity";
     private static final String BULK_FAILURE_INDEX_NAME = "search-quality-bulk-failure";
@@ -88,16 +90,20 @@ class SearchQualityBaselineIT {
     private static AssistantSearchPortAdapter assistantSearchAdapter;
     private static Corpus corpus;
     private static ExpectedBaseline historicalBaseline;
+    private static ExpectedBaseline slice72Expectation;
     private static ExpectedBaseline currentExpectation;
 
     @BeforeAll
     static void setUpBaseline() throws IOException {
         corpus = readResource(CORPUS_RESOURCE, Corpus.class);
         historicalBaseline = readResource(HISTORICAL_EXPECTED_RESOURCE, ExpectedBaseline.class);
-        SliceExpectation sliceExpectation = readResource(SLICE_72_EXPECTED_RESOURCE, SliceExpectation.class);
+        SliceExpectation slice72Delta = readResource(SLICE_72_EXPECTED_RESOURCE, SliceExpectation.class);
+        SliceExpectation slice73Delta = readResource(SLICE_73_EXPECTED_RESOURCE, SliceExpectation.class);
         assertThat(historicalBaseline.version()).isEqualTo(corpus.version());
-        assertThat(sliceExpectation.baseVersion()).isEqualTo(historicalBaseline.version());
-        currentExpectation = applySliceExpectation(historicalBaseline, sliceExpectation);
+        assertThat(slice72Delta.baseVersion()).isEqualTo(historicalBaseline.version());
+        slice72Expectation = applySliceExpectation(historicalBaseline, slice72Delta);
+        assertThat(slice73Delta.baseVersion()).isEqualTo(slice72Expectation.version());
+        currentExpectation = applySliceExpectation(slice72Expectation, slice73Delta);
 
         String elasticsearchBaseUrl = "http://" + ELASTICSEARCH.getHttpHostAddress();
         ElasticsearchProperties properties = new ElasticsearchProperties();
@@ -300,7 +306,7 @@ class SearchQualityBaselineIT {
     }
 
     @TestFactory
-    Stream<DynamicTest> versionedScenariosMatchSlice72Expectation() {
+    Stream<DynamicTest> versionedScenariosMatchSlice73Expectation() {
         return currentExpectation.scenarios().stream()
                 .map(scenario -> DynamicTest.dynamicTest(
                         scenario.id() + " [" + scenario.classification() + "]",
@@ -309,21 +315,31 @@ class SearchQualityBaselineIT {
     }
 
     @Test
-    void historicalAdjacentAndCandidateDominanceEvidenceRemainsExplicit() {
+    void versionedExpectationChainPreservesHistoryAndLocksAssetDiversity() {
         ExpectedScenario historicalAdjacent = historicalScenario("adjacent-hits");
+        ExpectedScenario slice72Adjacent = slice72Scenario("adjacent-hits");
         ExpectedScenario currentAdjacent = scenario("adjacent-hits");
         assertThat(historicalAdjacent.orderedRowIds())
                 .containsExactly("adjacent-020", "adjacent-021", "adjacent-022");
         assertThat(historicalAdjacent.adjacentClusterCount()).isOne();
+        assertThat(slice72Adjacent.orderedRowIds()).containsExactly("adjacent-020");
+        assertThat(slice72Adjacent.adjacentClusterCount()).isZero();
         assertThat(currentAdjacent.orderedRowIds()).containsExactly("adjacent-020");
         assertThat(currentAdjacent.adjacentClusterCount()).isZero();
 
         ExpectedScenario historicalDominance = historicalScenario("candidate-dominance");
+        ExpectedScenario slice72Dominance = slice72Scenario("candidate-dominance");
         ExpectedScenario currentDominance = scenario("candidate-dominance");
         assertThat(historicalDominance.orderedRowIds())
                 .containsExactly("dominant-000", "dominant-001", "dominant-002");
-        assertThat(currentDominance.orderedRowIds()).containsExactly("dominant-000");
-        assertThat(currentDominance.distinctAssetCount()).isOne();
+        assertThat(slice72Dominance.orderedRowIds()).containsExactly("dominant-000");
+        assertThat(slice72Dominance.distinctAssetCount()).isOne();
+        assertThat(currentDominance.orderedRowIds()).containsExactly(
+                "dominant-000",
+                "dominance-alternative-b",
+                "dominance-alternative-a"
+        );
+        assertThat(currentDominance.distinctAssetCount()).isEqualTo(3);
     }
 
     @Test
@@ -339,8 +355,24 @@ class SearchQualityBaselineIT {
     }
 
     @Test
+    void repeatedDominanceQueryKeepsThreeAssetsInTheSameOrder() {
+        ExpectedScenario dominance = scenario("candidate-dominance");
+
+        for (int repetition = 0; repetition < 10; repetition++) {
+            Evaluation evaluation = evaluate(dominance);
+            assertThat(evaluation.orderedRowIds())
+                    .as("repeat %s must preserve grouped candidate ordering", repetition)
+                    .containsExactlyElementsOf(dominance.orderedRowIds());
+            assertThat(evaluation.orderedAssetIds())
+                    .containsExactlyElementsOf(dominance.orderedAssetIds());
+            assertThat(evaluation.distinctAssetCount()).isEqualTo(3);
+        }
+    }
+
+    @Test
     void canonicalIdentityTimingAndLegacyNullTimingSurviveProductionParsing() {
         SearchResult exactPhrase = search("vector clocks", DEFAULT_WORKSPACE_ID, null);
+        assertThat(exactPhrase.hits().getFirst().transcriptRowId()).isEqualTo("vector-exact");
         SearchHit exactRow = hit(exactPhrase, "vector-exact");
         assertThat(exactRow.assetId())
                 .isEqualTo(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000001"));
@@ -421,22 +453,31 @@ class SearchQualityBaselineIT {
 
     @Test
     void assistantAdapterUsesTheSameProductionSearchUseCaseAndOrdering() {
-        SearchResult searchResult = search("causal delivery", DEFAULT_WORKSPACE_ID, null);
+        SearchResult searchResult = search("distributed tracing", DEFAULT_WORKSPACE_ID, null);
         AssistantSearchPage assistantResult =
-                assistantSearchAdapter.search("causal delivery", DEFAULT_WORKSPACE_ID, null);
+                assistantSearchAdapter.search("distributed tracing", DEFAULT_WORKSPACE_ID, null);
 
         assertThat(assistantResult.workspaceIdFilter()).isEqualTo(searchResult.workspaceIdFilter());
         assertThat(searchResult.hits())
                 .extracting(SearchHit::transcriptRowId)
-                .containsExactly("adjacent-020");
+                .containsExactly(
+                        "dominant-000",
+                        "dominance-alternative-b",
+                        "dominance-alternative-a"
+                );
         assertThat(assistantResult.results())
                 .extracting(result -> result.transcriptRowId())
                 .containsExactlyElementsOf(searchResult.hits().stream().map(SearchHit::transcriptRowId).toList());
         assertThat(assistantResult.results())
                 .extracting(result -> result.startMs())
                 .containsExactlyElementsOf(searchResult.hits().stream().map(SearchHit::startMs).toList());
-        assertThat(assistantResult.results().getFirst().startMs()).isEqualTo(60000L);
-        assertThat(assistantResult.results().getFirst().endMs()).isEqualTo(63000L);
+        assertThat(assistantResult.results())
+                .extracting(result -> result.assetId())
+                .containsExactly(
+                        UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000003"),
+                        UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000005"),
+                        UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000004")
+                );
     }
 
     private static void assertScenarioMatchesBaseline(ExpectedScenario scenario) {
@@ -667,6 +708,13 @@ class SearchQualityBaselineIT {
                 .filter(candidate -> candidate.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing historical scenario " + id));
+    }
+
+    private static ExpectedScenario slice72Scenario(String id) {
+        return slice72Expectation.scenarios().stream()
+                .filter(candidate -> candidate.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing Slice 7.2 scenario " + id));
     }
 
     private static ExpectedBaseline applySliceExpectation(

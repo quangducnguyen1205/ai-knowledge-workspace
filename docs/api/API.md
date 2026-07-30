@@ -916,11 +916,28 @@ Current behavior:
 - After that validation passes, `assetId` is applied as an exact filter inside the existing Elasticsearch search query.
 - The current search baseline is still lexical search over transcript text and asset title.
 - Spring keeps the baseline `multi_match` query and adds a small phrase-style boost layer so clearer exact or phrase-like matches can rise more appropriately.
-- Search ordering is deterministic on score ties: `_score desc`, then `segmentIndex`, `assetId`, and `transcriptRowId`.
-- Elasticsearch returns at most `60` ranked candidates to Spring.
-- The public response contains at most `12` results. Workspace-wide search accepts at most
-  `3` rows from one Asset; an Asset-scoped search may use the full public limit.
+- Workspace-wide Elasticsearch retrieval collapses on `assetId.keyword`, returning at most
+  `12` Asset groups with at most `3` canonical inner-hit candidates per Asset. The outer group
+  documents are not returned as candidates.
+- Asset-scoped retrieval remains flat with a candidate size of `60` and no collapse, so the
+  selected Asset may still contribute up to the public limit after adjacent deduplication.
+- Spring applies a defense-in-depth scope check to returned candidates against its
+  PostgreSQL-authorized Workspace/Asset scope before relevance policy. Elasticsearch's
+  Workspace, authorized Asset and `SEARCHABLE` filters remain mandatory.
+- Workspace-wide candidates are ranked and adjacent-deduplicated inside each Asset, limited to
+  `3` representatives per Asset, then flattened in rounds: all available first
+  representatives, then all second representatives, then all third representatives. Ordering
+  inside a round is `_score desc` with null last, then `segmentIndex`, `assetId`, and
+  `transcriptRowId`, each with its defined deterministic null handling.
+- The returned `score` is still the raw Elasticsearch lexical score for that row, but
+  Workspace-wide public results are intentionally no longer globally `_score desc`.
+  Asset-scoped results retain the global relevance comparator after adjacent deduplication.
+- The public response contains at most `12` results. It may contain fewer because inner-hit
+  depth and adjacent-moment deduplication are bounded; successful search does not promise
+  twelve results.
 - The endpoint has no pagination and no client-controlled result limit.
+- This behavior requires no mapping change or reindex and does not add semantic/vector
+  retrieval, accent folding, typo/prefix support, or before/after context snippets.
 
 Common failure cases:
 

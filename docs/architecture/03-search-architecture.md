@@ -65,12 +65,28 @@ The current implemented search path is deliberately small:
 - When `assetId` is provided, Spring validates that the asset is owned by the current user and belongs to the resolved workspace before sending the Elasticsearch query.
 - Results are returned as transcript-row hits, not chatbot answers.
 - Tie-breaking stays deterministic when scores are equal.
-- Elasticsearch supplies a fixed candidate pool of `60`.
-- Spring returns at most `12` rows and, for workspace-wide search, at most `3` rows per Asset.
+- Workspace-wide search collapses Elasticsearch hits on `assetId.keyword`: at most `12` Asset
+  groups are retrieved, with at most `3` canonical transcript-row candidates from each group.
+  Outer group hits are not product candidates; Spring parses only the named inner hits.
+- Asset-scoped search deliberately retains the flat Elasticsearch pool of `60` so one selected
+  Asset can still contribute up to the public limit after adjacent-moment deduplication.
+- Spring discards any returned hit outside the PostgreSQL-authorized Workspace/Asset scope
+  before applying result policy. The Elasticsearch Workspace, Asset-allowlist and `SEARCHABLE`
+  filters remain mandatory.
+- For workspace-wide search, Spring ranks and deduplicates candidates inside each Asset, keeps
+  at most `3` representatives per Asset, then flattens them in bounded rounds: every available
+  first representative precedes every second representative, which precedes every third.
+- Spring returns at most `12` rows. Inner-hit depth and adjacent deduplication may legitimately
+  underfill that cap.
+- `score` remains the raw Elasticsearch lexical score for its row. Workspace-wide public
+  ordering is intentionally not globally `_score desc`; relevance ordering is deterministic
+  inside each diversity round. Asset-scoped results retain the global relevance comparator.
 - `resultCount` is the post-policy result size. There is no pagination or client-controlled
   result limit.
 
-This means the current search layer is product-owned and usable, but it is not a hybrid, vector, or answer-generation system.
+This candidate-diversity change requires no mapping change or reindex. The current search
+layer remains lexical and product-owned; it is not hybrid, vector, paginated, or an
+answer-generation system, and result text does not yet include a before/after context snippet.
 
 The measured Phase 7 baseline, corpus ownership, integration command, hard invariants and
 known quality gaps are recorded in

@@ -14,7 +14,10 @@ import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchQue
 import com.aiknowledgeworkspace.workspacecore.search.application.query.SearchResult;
 import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -22,6 +25,7 @@ import org.springframework.util.StringUtils;
 public class SearchApplicationService implements SearchQueryUseCase {
 
     private static final int MAX_SEARCHABLE_ASSET_TERMS = 1_000;
+    private static final Logger LOGGER = LoggerFactory.getLogger(SearchApplicationService.class);
 
     private final WorkspaceAccessUseCase workspaceQueryApplication;
     private final SearchAssetQueryPort searchAssetQueryPort;
@@ -50,11 +54,37 @@ public class SearchApplicationService implements SearchQueryUseCase {
         List<TranscriptSearchHit> hits = transcriptSearchQueryPort.search(new TranscriptSearchQuery(
                 normalizedQuery, resolvedWorkspaceId, validatedAssetId, eligibleAssetIds, meaningfulTerms
         ));
+        List<TranscriptSearchHit> authorizedHits = filterAuthorizedHits(
+                hits, validatedAssetId, eligibleAssetIds
+        );
 
         List<TranscriptSearchHit> focusedHits = SearchRelevancePolicy.select(
-                hits, meaningfulTerms, validatedAssetId == null
+                authorizedHits, meaningfulTerms, validatedAssetId == null
         );
         return toSearchResult(normalizedQuery, resolvedWorkspaceId, validatedAssetId, focusedHits);
+    }
+
+    private List<TranscriptSearchHit> filterAuthorizedHits(
+            List<TranscriptSearchHit> hits,
+            UUID validatedAssetId,
+            List<UUID> eligibleAssetIds
+    ) {
+        Set<UUID> eligibleAssetIdSet = Set.copyOf(eligibleAssetIds);
+        List<TranscriptSearchHit> authorizedHits = hits.stream()
+                .filter(hit -> validatedAssetId == null
+                        ? eligibleAssetIdSet.contains(hit.assetId())
+                        : validatedAssetId.equals(hit.assetId()))
+                .toList();
+
+        int discardedCount = hits.size() - authorizedHits.size();
+        if (discardedCount > 0) {
+            LOGGER.warn(
+                    "Discarded {} out-of-scope search hits for {} scope",
+                    discardedCount,
+                    validatedAssetId == null ? "workspace" : "asset"
+            );
+        }
+        return authorizedHits;
     }
 
     private String normalizeQuery(String query) {

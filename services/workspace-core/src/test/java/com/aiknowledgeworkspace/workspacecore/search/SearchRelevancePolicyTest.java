@@ -131,6 +131,70 @@ class SearchRelevancePolicyTest {
     }
 
     @Test
+    void workspaceSearchPlacesEveryFirstRepresentativeBeforeAnySecondRepresentative() {
+        UUID dominantAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID weakerAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(dominantAssetId, "dominant-first", 10, 100.0),
+                targetHit(dominantAssetId, "dominant-second", 30, 90.0),
+                targetHit(weakerAssetId, "weaker-first", 20, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("dominant-first", "weaker-first", "dominant-second");
+    }
+
+    @Test
+    void workspaceRoundsKeepRelevanceOrderAndDeterministicNullsInsideEachRound() {
+        UUID firstAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID nullAssetId = UUID.fromString("00000000-0000-0000-0000-000000000003");
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(firstAssetId, "first-round-a", 5, 80.0),
+                targetHit(firstAssetId, "second-round-a", null, 40.0),
+                targetHit(secondAssetId, "first-round-b", 6, 90.0),
+                targetHit(secondAssetId, "second-round-b", 40, 50.0),
+                targetHit(nullAssetId, "first-round-null", null, null)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly(
+                        "first-round-b",
+                        "first-round-a",
+                        "first-round-null",
+                        "second-round-b",
+                        "second-round-a"
+                );
+    }
+
+    @Test
+    void adjacentDominantCandidatesCollapseBeforeWorkspaceRounds() {
+        UUID dominantAssetId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000003");
+        UUID alternativeBAssetId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000005");
+        UUID alternativeAAssetId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-000000000004");
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(dominantAssetId, "dominant-002", 1002, 100.0),
+                targetHit(alternativeAAssetId, "dominance-alternative-a", 40, 10.0),
+                targetHit(dominantAssetId, "dominant-000", 1000, 100.0),
+                targetHit(alternativeBAssetId, "dominance-alternative-b", 41, 20.0),
+                targetHit(dominantAssetId, "dominant-001", 1001, 100.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly(
+                        "dominant-000",
+                        "dominance-alternative-b",
+                        "dominance-alternative-a"
+                );
+    }
+
+    @Test
     void consecutiveRunCollapsesTransitivelyAndEqualScoresUseExistingTieBreak() {
         UUID assetId = UUID.randomUUID();
 
@@ -347,7 +411,7 @@ class SearchRelevancePolicyTest {
             UUID assetId,
             String transcriptRowId,
             Integer segmentIndex,
-            double score
+            Double score
     ) {
         return hit(assetId, "Target lecture", transcriptRowId, segmentIndex, "Target moment", score);
     }
@@ -358,7 +422,7 @@ class SearchRelevancePolicyTest {
             String transcriptRowId,
             Integer segmentIndex,
             String text,
-            double score
+            Double score
     ) {
         return new TranscriptSearchHit(
                 assetId,

@@ -119,8 +119,9 @@ class SearchControllerTest {
                 .andExpect(content().string(containsString("\"match_phrase\":{\"text\":{\"query\":\"dynamic programming\",\"boost\":6.0,\"slop\":2}}")))
                 .andExpect(content().string(containsString("\"match_phrase\":{\"assetTitle\":{\"query\":\"dynamic programming\",\"boost\":8.0,\"slop\":0}}")))
                 .andExpect(content().string(containsString("\"size\":60")))
+                .andExpect(content().string(not(containsString("\"collapse\""))))
                 .andExpect(content().string(containsString("\"_score\":{\"order\":\"desc\"}")))
-                .andExpect(content().string(containsString("\"segmentIndex\":{\"order\":\"asc\"}")))
+                .andExpect(content().string(containsString("\"segmentIndex\":{\"order\":\"asc\",\"missing\":\"_last\"}")))
                 .andExpect(content().string(containsString("\"assetId.keyword\":{\"order\":\"asc\"}")))
                 .andExpect(content().string(containsString("\"transcriptRowId.keyword\":{\"order\":\"asc\",\"missing\":\"_last\"}")))
                 .andRespond(withSuccess(searchResponse, MediaType.APPLICATION_JSON));
@@ -201,6 +202,14 @@ class SearchControllerTest {
                 .andExpect(content().string(containsString("\"assetStatus.keyword\":\"SEARCHABLE\"")))
                 .andExpect(content().string(containsString("\"terms\":{\"assetId.keyword\":[\"" + searchableAssetId + "\"]")))
                 .andExpect(content().string(not(containsString("\"term\":{\"assetId.keyword\""))))
+                .andExpect(content().string(containsString("\"size\":12")))
+                .andExpect(content().string(containsString("\"_source\":false")))
+                .andExpect(content().string(containsString(
+                        "\"collapse\":{\"field\":\"assetId.keyword\",\"max_concurrent_group_searches\":4"
+                )))
+                .andExpect(content().string(containsString(
+                        "\"inner_hits\":{\"name\":\"asset_moments\",\"size\":3,\"_source\":true"
+                )))
                 .andRespond(withSuccess("{\"hits\":{\"hits\":[]}}", MediaType.APPLICATION_JSON));
 
         mockMvc.perform(get("/api/search")
