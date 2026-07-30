@@ -1,7 +1,9 @@
 package com.aiknowledgeworkspace.workspacecore.asset.adapter.out.persistence;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -41,6 +43,33 @@ interface AssetPlaybackProgressJpaRepository
             @Param("positionMs") long positionMs,
             @Param("completed") boolean completed,
             @Param("updatedAt") Instant updatedAt
+    );
+
+    /**
+     * Resumable progress joined to the Asset that still owns it, so the projection always carries
+     * current title and source rather than a stored presentation snapshot. Progress rows whose
+     * Asset was deleted or whose Asset lives in another Workspace simply do not join.
+     *
+     * <p>{@code updated_at} is non-null in the schema; the predicate stays explicit so the
+     * eligibility rule is readable in one place and survives a future nullable column.
+     */
+    @Query("""
+            select new com.aiknowledgeworkspace.workspacecore.asset.adapter.out.persistence.ResumableAssetPlaybackRow(
+                asset.id, asset.workspaceId, asset.title, asset.sourceType,
+                entry.positionMs, entry.completed, entry.updatedAt)
+            from AssetPlaybackProgressEntry entry
+            join Asset asset on asset.id = entry.assetId
+            where entry.userId = :userId
+              and asset.workspaceId = :workspaceId
+              and entry.positionMs > 0
+              and entry.completed = false
+              and entry.updatedAt is not null
+            order by entry.updatedAt desc, asset.id asc
+            """)
+    List<ResumableAssetPlaybackRow> findResumable(
+            @Param("userId") String userId,
+            @Param("workspaceId") UUID workspaceId,
+            Pageable pageable
     );
 
     void deleteByAssetId(UUID assetId);

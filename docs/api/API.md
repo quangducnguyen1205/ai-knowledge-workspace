@@ -631,7 +631,46 @@ Common failure cases:
   `positionMs`/`completed` value of the wrong JSON type
 - HTTP `404` with `code = "ASSET_NOT_FOUND"` if the Asset is absent or not owned by the current user
 
-There is no watch-history or progress-list endpoint yet.
+### `GET /api/playback-progress?workspaceId=<uuid>`
+
+Lists the Assets the current user can continue watching in one Workspace.
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `workspaceIdFilter`
+  - `itemCount`
+  - `maxItems`
+  - `items[]` with:
+    - `assetId`
+    - `workspaceId`
+    - `assetTitle`
+    - `sourceType`
+    - `positionMs`
+    - `completed`
+    - `updatedAt`
+
+Current behavior:
+
+- `workspaceId` is optional; the current user's default Workspace is used when it is omitted.
+- An Asset is listed only when the progress belongs to the current user, the Asset still exists in
+  the requested owned Workspace, `positionMs > 0`, `completed = false` and `updatedAt` is present.
+- Eligibility carries no Asset-status rule, because playback progress itself is status independent.
+- Ordering is `updatedAt` descending with `assetId` ascending as a deterministic tie break.
+- The response is bounded by a server-owned maximum of `12` items per Workspace, reported as
+  `maxItems`. There is no pagination and no client-controlled limit.
+- `assetTitle` and `sourceType` are projected from current Asset state, so a rename is visible on
+  the next read; no presentation snapshot is stored.
+- The endpoint is a pure read: listing never creates, updates or deletes playback progress.
+- Resetting the position to `0`, completing the Asset or deleting the Asset removes it from the
+  list; clearing `completed` while the position is still positive brings it back.
+
+Common failure cases:
+
+- HTTP `400` with `code = "INVALID_WORKSPACE_ID"` if `workspaceId` is not a valid UUID
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` if the Workspace is absent or not owned by the
+  current user
 
 ### `POST /api/saved-moments`
 

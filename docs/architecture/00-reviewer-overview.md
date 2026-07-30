@@ -61,6 +61,7 @@ collaboration platform, or unrestricted RAG product.
 - [Phase 5 User Playback Progress](phase5-user-playback-progress.md)
 - [Phase 7 Search Quality Baseline](phase7-search-quality-baseline.md)
 - [Phase 8 Stable Moment Links And Saved Moments](phase8-saved-moments.md)
+- [Phase 9 Continue Watching](phase9-continue-watching.md)
 - [API Summary](../api/API.md)
 - [Database](../data/Database.md)
 - [Local Development](../runbooks/local-dev.md)

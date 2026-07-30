@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.asset;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetPlaybackProgressSnapshot;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.ResumableAssetPlayback;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetPlaybackProgressStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
@@ -396,6 +397,145 @@ class AssetPlaybackProgressConcurrencyPostgresTest {
         } catch (Throwable failure) {
             return failure;
         }
+    }
+
+    // ------------------------------------------- continue-watching projection
+
+    @Test
+    void continueWatchingListsStartedIncompleteProgressWrittenByTheProductionUpsert() {
+        UUID uploadAssetId = persistUpload();
+        UUID youtubeAssetId = persistYoutube();
+        saveProgress(uploadAssetId, "user-1", 12_000L, false, FIRST_WRITE);
+        saveProgress(youtubeAssetId, "user-1", 45_000L, false, SECOND_WRITE);
+
+        List<ResumableAssetPlayback> resumable = progressStore.findResumable("user-1", workspaceId, 12);
+
+        assertThat(resumable).extracting(ResumableAssetPlayback::assetId)
+                .containsExactly(youtubeAssetId, uploadAssetId);
+        assertThat(resumable.getFirst()).satisfies(item -> {
+            assertThat(item.workspaceId()).isEqualTo(workspaceId);
+            assertThat(item.assetTitle()).isEqualTo("YouTube video");
+            assertThat(item.positionMs()).isEqualTo(45_000L);
+            assertThat(item.completed()).isFalse();
+            assertThat(item.updatedAt()).isEqualTo(SECOND_WRITE);
+        });
+    }
+
+    @Test
+    void resettingThePositionToZeroThroughTheUpsertRemovesTheAssetFromContinueWatching() {
+        UUID assetId = persistUpload();
+        saveProgress(assetId, "user-1", 12_000L, false, FIRST_WRITE);
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12)).hasSize(1);
+
+        saveProgress(assetId, "user-1", 0L, false, SECOND_WRITE);
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12)).isEmpty();
+        assertThat(rowCount(assetId)).isEqualTo(1);
+    }
+
+    @Test
+    void completingAndThenClearingCompletionThroughTheUpsertTogglesContinueWatching() {
+        UUID assetId = persistUpload();
+        saveProgress(assetId, "user-1", 90_000L, true, FIRST_WRITE);
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12)).isEmpty();
+
+        saveProgress(assetId, "user-1", 90_000L, false, SECOND_WRITE);
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12))
+                .singleElement()
+                .satisfies(item -> assertThat(item.positionMs()).isEqualTo(90_000L));
+    }
+
+    @Test
+    void continueWatchingIsIsolatedByUserAndWorkspaceOnPostgres() {
+        UUID assetId = persistUpload();
+        UUID otherWorkspaceId = transactionTemplate.execute(status -> workspaceStore.save(new Workspace(
+                UUID.randomUUID(), "Other workspace", "owner-1", false
+        )).getId());
+        saveProgress(assetId, "user-1", 12_000L, false, FIRST_WRITE);
+        saveProgress(assetId, "user-2", 34_000L, false, SECOND_WRITE);
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12))
+                .singleElement()
+                .satisfies(item -> assertThat(item.positionMs()).isEqualTo(12_000L));
+        assertThat(progressStore.findResumable("user-2", workspaceId, 12))
+                .singleElement()
+                .satisfies(item -> assertThat(item.positionMs()).isEqualTo(34_000L));
+        assertThat(progressStore.findResumable("user-3", workspaceId, 12)).isEmpty();
+        assertThat(progressStore.findResumable("user-1", otherWorkspaceId, 12)).isEmpty();
+    }
+
+    @Test
+    void continueWatchingOrdersNewestFirstWithAssetIdAsTheTieBreakOnPostgres() {
+        UUID lowerId = UUID.fromString("00000000-0000-4000-8000-000000000001");
+        UUID higherId = UUID.fromString("00000000-0000-4000-8000-000000000002");
+        UUID newest = persistUpload();
+        persistUploadWithId(lowerId);
+        persistUploadWithId(higherId);
+        saveProgress(newest, "user-1", 1_000L, false, SECOND_WRITE);
+        saveProgress(higherId, "user-1", 1_000L, false, FIRST_WRITE);
+        saveProgress(lowerId, "user-1", 1_000L, false, FIRST_WRITE);
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12))
+                .extracting(ResumableAssetPlayback::assetId)
+                .containsExactly(newest, lowerId, higherId);
+    }
+
+    @Test
+    void continueWatchingIsBoundedAndNeverWritesProgress() {
+        List<UUID> assetIds = new ArrayList<>();
+        for (int index = 0; index < 15; index++) {
+            UUID assetId = persistUpload();
+            assetIds.add(assetId);
+            saveProgress(assetId, "user-1", 1_000L * (index + 1), false,
+                    FIRST_WRITE.plusSeconds(index));
+        }
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12)).hasSize(12);
+        progressStore.findResumable("user-1", workspaceId, 12);
+
+        // The class shares one throwaway database across tests, so the assertion is scoped to the
+        // Assets this test created rather than to the whole table.
+        assertThat(assetIds.stream().mapToInt(this::rowCount).sum()).isEqualTo(assetIds.size());
+        assertThat(progressStore.find(assetIds.getFirst(), "user-1"))
+                .get()
+                .satisfies(snapshot -> assertThat(snapshot.positionMs()).isEqualTo(1_000L));
+    }
+
+    @Test
+    void deletingAnAssetRemovesItFromContinueWatchingOnPostgres() {
+        UUID removedAssetId = persistUpload();
+        UUID keptAssetId = persistUpload();
+        saveProgress(removedAssetId, "user-1", 12_000L, false, SECOND_WRITE);
+        saveProgress(keptAssetId, "user-1", 34_000L, false, FIRST_WRITE);
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12)).hasSize(2);
+
+        jdbcTemplate.update("delete from assets where id = ?", removedAssetId);
+
+        assertThat(progressStore.findResumable("user-1", workspaceId, 12))
+                .singleElement()
+                .satisfies(item -> assertThat(item.assetId()).isEqualTo(keptAssetId));
+    }
+
+    /** The production upsert flushes automatically, so it needs an active transaction. */
+    private void saveProgress(UUID assetId, String userId, long positionMs, boolean completed, Instant updatedAt) {
+        transactionTemplate.executeWithoutResult(status ->
+                progressStore.upsert(assetId, userId, positionMs, completed, updatedAt));
+    }
+
+    private void persistUploadWithId(UUID assetId) {
+        transactionTemplate.executeWithoutResult(status -> assetStore.save(Asset.uploaded(
+                assetId,
+                "lecture.mp4",
+                "Uploaded lecture",
+                AssetStatus.PROCESSING,
+                workspaceId,
+                "workspace-media",
+                "objects/" + assetId + ".mp4",
+                "video/mp4",
+                42L,
+                "etag-1"
+        )));
     }
 
     private void collect(List<Throwable> failures, Future<Throwable> writer) throws Exception {

@@ -55,10 +55,45 @@ class AssetPlaybackProgressUpsertContractTest {
         assertThat(modifying.clearAutomatically()).isTrue();
     }
 
+    /**
+     * The guard is about write paths: the atomic upsert must stay the only way progress is created
+     * or replaced. Bounded reads such as the continue-watching projection are allowed, so they are
+     * asserted to be non-modifying rather than forbidden.
+     */
     @Test
     void theRepositoryExposesNoReadThenBranchWriteHelper() {
         assertThat(AssetPlaybackProgressJpaRepository.class.getDeclaredMethods())
                 .extracting(Method::getName)
-                .containsExactlyInAnyOrder("upsert", "deleteByAssetId");
+                .containsExactlyInAnyOrder("upsert", "deleteByAssetId", "findResumable");
+
+        assertThat(AssetPlaybackProgressJpaRepository.class.getDeclaredMethods())
+                .filteredOn(method -> method.getAnnotation(Modifying.class) != null)
+                .extracting(Method::getName)
+                .containsExactly("upsert");
+    }
+
+    @Test
+    void theContinueWatchingProjectionIsABoundedNonModifyingRead() throws Exception {
+        Method findResumable = AssetPlaybackProgressJpaRepository.class.getDeclaredMethod(
+                "findResumable", String.class, UUID.class, org.springframework.data.domain.Pageable.class
+        );
+        Query query = findResumable.getAnnotation(Query.class);
+
+        assertThat(findResumable.getAnnotation(Modifying.class)).isNull();
+        assertThat(query).isNotNull();
+        assertThat(query.nativeQuery()).isFalse();
+
+        String jpql = query.value().toLowerCase(java.util.Locale.ROOT);
+        assertThat(jpql).startsWith("select");
+        // Word boundaries, so the `updatedAt` column never reads as an `update` statement.
+        assertThat(jpql).doesNotMatch("(?s).*\\b(insert|update|delete|merge)\\b.*");
+        assertThat(jpql).contains(
+                "entry.userid = :userid",
+                "asset.workspaceid = :workspaceid",
+                "entry.positionms > 0",
+                "entry.completed = false",
+                "entry.updatedat is not null",
+                "order by entry.updatedat desc, asset.id asc"
+        );
     }
 }

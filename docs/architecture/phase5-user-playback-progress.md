@@ -100,6 +100,8 @@ Assets is unchanged.
 
 ## Not in this slice
 
-- No watch-history or progress-list endpoint.
+- No watch-history or progress-list endpoint. Phase 9 later added the bounded
+  `GET /api/playback-progress?workspaceId=…` Continue-watching read on top of this same table and
+  ownership boundary; see [`phase9-continue-watching.md`](phase9-continue-watching.md).
 - No frontend Resume behavior; the frozen backend contract exists so that work can start.
 - No progress-derived analytics, recommendation or reporting surface.
