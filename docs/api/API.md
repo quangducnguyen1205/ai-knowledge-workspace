@@ -633,6 +633,94 @@ Common failure cases:
 
 There is no watch-history or progress-list endpoint yet.
 
+### `POST /api/saved-moments`
+
+Saves one canonical video moment for the current user.
+
+Request:
+
+```json
+{
+  "assetId": "<uuid>",
+  "transcriptRowId": "<canonical-row-id>"
+}
+```
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `savedMomentId`
+  - `workspaceId`
+  - `assetId`
+  - `assetTitle`
+  - `sourceType`
+  - `transcriptRowId`
+  - `segmentIndex` nullable integer
+  - `startMs` nullable integer milliseconds
+  - `endMs` nullable integer milliseconds
+  - `text`
+  - `savedAt`
+
+Current behavior:
+
+- Saving is idempotent: one record exists per user, Asset and canonical transcript row, and a repeat
+  returns the existing record with its original `savedMomentId` and `savedAt`.
+- The unique constraint is the concurrency boundary, so concurrent duplicate saves converge on one
+  record instead of surfacing a database failure.
+- The Workspace is resolved from Asset ownership. A `workspaceId` in the request body is ignored.
+- Ownership and canonical row existence are validated before any write.
+- Only canonical identity is persisted. No note, tag, folder, ranking score, originating query,
+  playback position or copied context snapshot is stored.
+- Presentation fields are resolved from current canonical Asset state, so a later transcript edit is
+  reflected on the next read.
+
+### `GET /api/saved-moments?workspaceId=<uuid>`
+
+Lists the current user's saved moments in one Workspace.
+
+Response:
+
+- HTTP `200`
+- Body:
+  - `workspaceIdFilter`
+  - `savedMomentCount`
+  - `maxItems`
+  - `items[]` using the same fields as the save response
+
+Current behavior:
+
+- `workspaceId` is optional; the current user's default Workspace is used when it is omitted.
+- Results are newest first, with `savedMomentId` as a deterministic tie break.
+- The response is bounded by a server-owned maximum of `100` items per Workspace, reported as
+  `maxItems`. There is no pagination and no client-controlled limit in this phase.
+- A saved moment whose canonical transcript row no longer exists is omitted rather than returned as
+  a navigable link. Reading never deletes or inserts a row.
+- Canonical data is resolved in one batched lookup grouped by Asset, so the list is not an N+1 query.
+
+### `DELETE /api/saved-moments/{savedMomentId}`
+
+Removes one saved moment owned by the current user.
+
+Response:
+
+- HTTP `204`
+
+Common failure cases for saved moments:
+
+- HTTP `400` with `code = "INVALID_SAVED_MOMENT_REQUEST"` for a missing `assetId`, or a missing,
+  blank or over-length `transcriptRowId`
+- HTTP `400` with `code = "INVALID_REQUEST_BODY"` for a missing or malformed body
+- HTTP `404` with `code = "SAVED_MOMENT_TARGET_NOT_FOUND"` when the Asset is absent, not owned by the
+  current user, or has no such canonical transcript row
+- HTTP `404` with `code = "SAVED_MOMENT_NOT_FOUND"` when the saved moment is absent or owned by
+  another user
+- HTTP `404` with `code = "WORKSPACE_NOT_FOUND"` when the requested Workspace is absent or not owned
+  by the current user
+
+Saved moments are authenticated per-user bookmarks. There is no public, anonymous or token-signed
+sharing, and no notes, tags or folders.
+
 ### `PATCH /api/assets/{assetId}`
 
 Updates the product-owned asset title.
@@ -1117,5 +1205,8 @@ Current structured error codes:
 - `ASSET_MEDIA_NOT_AVAILABLE`
 - `ASSET_MEDIA_RANGE_NOT_SATISFIABLE`
 - `ASSET_MEDIA_READ_FAILED`
+- `INVALID_SAVED_MOMENT_REQUEST`
+- `SAVED_MOMENT_TARGET_NOT_FOUND`
+- `SAVED_MOMENT_NOT_FOUND`
 - `INVALID_REQUEST_PARAMETER`
 - `INVALID_REQUEST_BODY`

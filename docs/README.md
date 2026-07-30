@@ -19,10 +19,11 @@ For the current Spring product-core baseline, this is the fastest useful reading
 11. `architecture/phase4-authorized-upload-media-streaming.md`
 12. `architecture/phase5-user-playback-progress.md`
 13. `architecture/phase7-search-quality-baseline.md`
-14. `api/API.md`
-15. `data/Database.md`
-16. `runbooks/local-dev.md`
-17. `testing/integration-smoke-checklist.md`
+14. `architecture/phase8-saved-moments.md`
+15. `api/API.md`
+16. `data/Database.md`
+17. `runbooks/local-dev.md`
+18. `testing/integration-smoke-checklist.md`
 
 These are the main current-source-of-truth docs for understanding how the backend actually behaves today.
 
@@ -71,6 +72,8 @@ These are the main current-source-of-truth docs for understanding how the backen
   GET/PUT contract, source/status independence, last-write-wins limit and deletion cleanup
 - `architecture/phase7-search-quality-baseline.md`: versioned lexical evaluation corpus,
   measured Elasticsearch 8.11.1 behavior, hard invariants and known search-quality gaps
+- `architecture/phase8-saved-moments.md`: canonical moment permalink, Saved Moment module
+  boundary, ownership and stale-row policy, bounded list and frontend saved-moments UX
 
 ## Submission Documents
 

@@ -1,6 +1,8 @@
 package com.aiknowledgeworkspace.workspacecore.asset.application.service;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetCanonicalMoment;
+import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetCanonicalMomentTarget;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetDetails;
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetIndexingSource;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.AssetNotFoundException;
@@ -16,8 +18,12 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.Canonic
 import com.aiknowledgeworkspace.workspacecore.workspace.api.WorkspaceAccessUseCase;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,6 +96,40 @@ public class AssetTranscriptQueryService {
                 .orElseGet(List::of);
     }
 
+    /**
+     * Resolves current canonical moments for owned Assets. Targets are grouped by Asset so the
+     * lookup stays one bounded query per distinct Asset rather than one per requested row. A
+     * missing Asset, a foreign Asset or a transcript row that no longer exists is simply absent
+     * from the result; a supplied row identifier never falls back to a different row.
+     */
+    @Transactional(readOnly = true)
+    public List<AssetCanonicalMoment> findAuthorizedCanonicalMoments(List<AssetCanonicalMomentTarget> targets) {
+        if (targets == null || targets.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Set<String>> rowIdsByAsset = new LinkedHashMap<>();
+        for (AssetCanonicalMomentTarget target : targets) {
+            if (target == null || target.assetId() == null || !StringUtils.hasText(target.transcriptRowId())) {
+                continue;
+            }
+            rowIdsByAsset
+                    .computeIfAbsent(target.assetId(), ignored -> new LinkedHashSet<>())
+                    .add(target.transcriptRowId());
+        }
+
+        List<AssetCanonicalMoment> moments = new ArrayList<>();
+        rowIdsByAsset.forEach((assetId, rowIds) -> assetStore.findById(assetId)
+                .filter(asset -> workspaceQueryApplication.isOwnedByCurrentUser(asset.getWorkspaceId()))
+                .ifPresent(asset -> transcriptStore.loadCanonicalRows(assetId, List.copyOf(rowIds)).stream()
+                        .filter(this::isUsable)
+                        .forEach(row -> rowIds.stream()
+                                .filter(rowId -> matchesTranscriptRowId(row, rowId))
+                                .findFirst()
+                                .ifPresent(rowId -> moments.add(toCanonicalMoment(asset, rowId, row))))));
+        return List.copyOf(moments);
+    }
+
     @Transactional(readOnly = true)
     public List<AssetTranscriptRowView> loadUsableSnapshot(UUID assetId) {
         return transcriptStore.load(assetId).stream()
@@ -147,6 +187,20 @@ public class AssetTranscriptQueryService {
 
     private AssetIndexingSource createIndexingSource(Asset asset, List<AssetTranscriptRowView> transcriptRows) {
         return new AssetIndexingSource(asset.getId(), asset.getWorkspaceId(), asset.getTitle(), transcriptRows);
+    }
+
+    private AssetCanonicalMoment toCanonicalMoment(Asset asset, String requestedRowId, AssetTranscriptRowView row) {
+        return new AssetCanonicalMoment(
+                asset.getId(),
+                asset.getWorkspaceId(),
+                asset.getTitle(),
+                asset.getSourceType(),
+                requestedRowId,
+                row.segmentIndex(),
+                row.startMs(),
+                row.endMs(),
+                row.text()
+        );
     }
 
     private AssetDetails toDetails(Asset asset) {

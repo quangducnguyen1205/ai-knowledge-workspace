@@ -10,6 +10,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.Canonic
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUseCase;
+import com.aiknowledgeworkspace.workspacecore.savedmoment.application.port.in.SavedMomentAssetCleanupUseCase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -24,8 +25,9 @@ class AssetDeletionRemovesPlaybackProgressTest {
     private final CanonicalTranscriptStore transcriptStore = mock(CanonicalTranscriptStore.class);
     private final AssetPlaybackProgressStore playbackProgressStore = mock(AssetPlaybackProgressStore.class);
     private final ProcessingRequestUseCase processingRequestUseCase = mock(ProcessingRequestUseCase.class);
+    private final SavedMomentAssetCleanupUseCase savedMomentCleanup = mock(SavedMomentAssetCleanupUseCase.class);
     private final AssetMutationTransaction transaction = new AssetMutationTransaction(
-            assetStore, transcriptStore, playbackProgressStore, processingRequestUseCase
+            assetStore, transcriptStore, playbackProgressStore, processingRequestUseCase, savedMomentCleanup
     );
 
     @Test
@@ -38,9 +40,12 @@ class AssetDeletionRemovesPlaybackProgressTest {
 
         transaction.delete(upload);
 
-        InOrder order = inOrder(transcriptStore, playbackProgressStore, processingRequestUseCase, assetStore);
+        InOrder order = inOrder(
+                transcriptStore, playbackProgressStore, savedMomentCleanup, processingRequestUseCase, assetStore
+        );
         order.verify(transcriptStore).delete(assetId);
         order.verify(playbackProgressStore).deleteForAsset(assetId);
+        order.verify(savedMomentCleanup).deleteForAsset(assetId);
         order.verify(processingRequestUseCase).deleteForAsset(assetId);
         order.verify(assetStore).delete(upload);
     }
@@ -56,6 +61,7 @@ class AssetDeletionRemovesPlaybackProgressTest {
 
         verify(transcriptStore).delete(assetId);
         verify(playbackProgressStore).deleteForAsset(assetId);
+        verify(savedMomentCleanup).deleteForAsset(assetId);
         verify(processingRequestUseCase).deleteForAsset(assetId);
         verify(assetStore).delete(youtube);
     }
@@ -70,5 +76,6 @@ class AssetDeletionRemovesPlaybackProgressTest {
         transaction.updateTitle(upload, "New");
 
         org.mockito.Mockito.verifyNoInteractions(playbackProgressStore);
+        org.mockito.Mockito.verifyNoInteractions(savedMomentCleanup);
     }
 }

@@ -5,6 +5,7 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetPl
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUseCase;
+import com.aiknowledgeworkspace.workspacecore.savedmoment.application.port.in.SavedMomentAssetCleanupUseCase;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,17 +16,20 @@ class AssetMutationTransaction {
     private final CanonicalTranscriptStore transcriptStore;
     private final AssetPlaybackProgressStore playbackProgressStore;
     private final ProcessingRequestUseCase processingRequestUseCase;
+    private final SavedMomentAssetCleanupUseCase savedMomentCleanup;
 
     AssetMutationTransaction(
             AssetStore assetStore,
             CanonicalTranscriptStore transcriptStore,
             AssetPlaybackProgressStore playbackProgressStore,
-            ProcessingRequestUseCase processingRequestUseCase
+            ProcessingRequestUseCase processingRequestUseCase,
+            SavedMomentAssetCleanupUseCase savedMomentCleanup
     ) {
         this.assetStore = assetStore;
         this.transcriptStore = transcriptStore;
         this.playbackProgressStore = playbackProgressStore;
         this.processingRequestUseCase = processingRequestUseCase;
+        this.savedMomentCleanup = savedMomentCleanup;
     }
 
     @Transactional
@@ -38,6 +42,7 @@ class AssetMutationTransaction {
     void delete(Asset asset) {
         transcriptStore.delete(asset.getId());
         playbackProgressStore.deleteForAsset(asset.getId());
+        savedMomentCleanup.deleteForAsset(asset.getId());
         processingRequestUseCase.deleteForAsset(asset.getId());
         assetStore.delete(asset);
     }

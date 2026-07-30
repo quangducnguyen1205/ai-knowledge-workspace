@@ -5,8 +5,8 @@ MinIO and Redis are derived, transport, binary or execution infrastructure.
 
 ## Migration policy
 
-The Spring backend uses the immutable clean baseline plus additive Phase 1, Phase 2 Slice 1 and
-Phase 5 Slice 5A migrations:
+The Spring backend uses the immutable clean baseline plus additive Phase 1, Phase 2 Slice 1,
+Phase 5 Slice 5A and Phase 8 migrations:
 
 ```text
 services/workspace-core/src/main/resources/db/migration/
@@ -14,16 +14,17 @@ services/workspace-core/src/main/resources/db/migration/
 ├── V2__add_transcript_timing.sql
 ├── V3__add_asset_source_identity.sql
 ├── V4__strengthen_youtube_video_id_constraint.sql
-└── V5__add_asset_playback_progress.sql
+├── V5__add_asset_playback_progress.sql
+└── V6__add_saved_moments.sql
 ```
 
 The previous local-development migration chain was consolidated before timestamp-aware transcript
-work. `V1`, `V2`, `V3` and `V4` remain unchanged. Existing clean-V1 databases migrate in place
-through `V2`, `V3`, `V4` and `V5`; databases from the older pre-baseline chain remain outside this
-compatibility promise. Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
+work. `V1`, `V2`, `V3`, `V4` and `V5` remain unchanged. Existing clean-V1 databases migrate in place
+through `V2`, `V3`, `V4`, `V5` and `V6`; databases from the older pre-baseline chain remain outside
+this compatibility promise. Do not set `baseline-on-migrate=true` to disguise an unsupported schema.
 
-`V5` is purely additive: it creates one new table and changes no existing table, column, constraint
-or index.
+`V5` and `V6` are purely additive: each creates one new table and changes no existing table, column,
+constraint or index.
 
 `spring.jpa.hibernate.ddl-auto=validate` remains the normal setting, so Flyway creates the schema
 and Hibernate verifies mappings without mutating it.
@@ -38,6 +39,7 @@ and Hibernate verifies mappings without mutating it.
 | `processing_jobs` | processing | one durable processing request correlation per asset |
 | `asset_transcript_rows` | asset | canonical ordered transcript snapshot |
 | `asset_playback_progress` | asset | per-user playback position and completion state |
+| `saved_moments` | saved moment | per-user bookmark of one canonical transcript row |
 | `outbox_events` | outbox | durable publication intent and recovery state |
 | `consumed_processing_result_events` | processing | result inbox/idempotency and bounded recovery envelope |
 | `asset_search_index_jobs` | search | derived-indexing intent, attempt and fingerprint state |
@@ -52,6 +54,7 @@ user_accounts                  workspaces
                                                    1 ---- * asset_transcript_rows
                                                    1 ---- * asset_search_index_jobs
                                                    1 ---- * asset_playback_progress
+                                                   1 ---- * saved_moments
 
 outbox_events                         generic durable intent
 consumed_processing_result_events     processing-result inbox
@@ -134,6 +137,29 @@ the default test profile. `AssetPlaybackProgressConcurrencyPostgresTest` proves 
 PostgreSQL server in a throwaway database, and `AssetPlaybackProgressUpsertContractTest` guards the
 statement shape in every build.
 
+### `saved_moments`
+
+Rows store `id`, `user_id`, `workspace_id`, `asset_id`, `transcript_row_id` and `saved_at`. Only
+canonical identity and ownership are persisted: no note, tag, folder, ranking score, originating
+query, playback position or copied context snapshot. Presentation data is always resolved from
+current canonical Asset state at read time.
+
+`uk_saved_moments_user_asset_row` guarantees one record per user, Asset and transcript row, and it
+is the concurrency boundary: the application attempts the insert first and treats the constraint
+rejection as "already saved", so concurrent duplicate saves converge on one row without a read-then-
+branch in Java. `ck_saved_moments_transcript_row_id_not_blank` keeps the canonical row identity
+usable, and `idx_saved_moments_user_workspace_recent` serves the only read path — the newest saved
+moments of one user in one Workspace.
+
+`user_id` is the resolved product identity string and reuses the `workspaces.owner_id` type and
+rationale, so it is not foreign-keyed to `user_accounts`. `workspace_id` is denormalized for that
+index; an Asset never moves between Workspaces, and every read revalidates ownership through the
+Asset.
+
+`fk_saved_moments_asset` cascades on Asset deletion, and the application deletion boundary also
+removes saved moments explicitly inside the same product-truth transaction, so a deleted Asset
+leaves no usable orphan.
+
 ### `processing_jobs`
 
 Each job has a unique asset and a non-null, unique `processing_request_event_id`, plus processing
@@ -185,7 +211,7 @@ index does not change product truth.
 
 ## Clean-schema validation
 
-`CleanBaselineMigrationTest` starts from an empty database and migrates V1→V2→V3→V4→V5. It proves
+`CleanBaselineMigrationTest` starts from an empty database and migrates V1→V2→V3→V4→V5→V6. It proves
 that V3 preserves and backfills existing upload data, leaves no `source_type` default, accepts both
 valid source shapes, enforces non-negative upload size and rejects mixed shapes. It also verifies
 workspace-scoped YouTube uniqueness, nullable upload identities and the Phase 1 transcript-timing
@@ -194,7 +220,10 @@ that composite identity, the non-negative check and the Asset foreign key all ho
 deleting an Asset removes only its own progress rows. `AssetSourcePersistenceTest` validates JPA
 round-trips for both source types, and `AssetPlaybackProgressPersistenceTest` validates the
 playback-progress mapping, composite identity, constraints and deletion behavior against the
-migrated schema with `ddl-auto=validate`.
+migrated schema with `ddl-auto=validate`. For V6 it proves the new table is additive, that existing
+Asset and playback-progress rows are untouched, and that the unique constraint, the blank-row check,
+the Asset foreign key and the deletion cascade all hold. `SavedMomentPersistenceTest` validates the
+saved-moment mapping, uniqueness, newest-first ordering, bounded reads and Asset-scoped cleanup.
 
 Playback-progress upsert and concurrency behavior additionally run against a real PostgreSQL
 server. The test is skipped unless the server is offered through the environment, so the default
@@ -209,6 +238,15 @@ mvn -f services/workspace-core/pom.xml test -Dtest=AssetPlaybackProgressConcurre
 
 It creates a throwaway database, migrates it with Flyway, and drops it afterwards; product data is
 never touched.
+
+Saved-moment persistence, uniqueness and authorization additionally run against a real disposable
+PostgreSQL container, including concurrent duplicate saves:
+
+```bash
+mvn -f services/workspace-core/pom.xml -Psaved-moment-it verify
+```
+
+The container has no persistent volume and is removed when the suite finishes.
 
 ```bash
 mvn -q -f services/workspace-core/pom.xml test

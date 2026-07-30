@@ -17,6 +17,7 @@ class BackendModularityBaselineTest {
             "integration",
             "outbox",
             "processing",
+            "savedmoment",
             "search",
             "storage",
             "workspace");

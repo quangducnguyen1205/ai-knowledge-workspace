@@ -26,6 +26,7 @@ class ModuleBoundaryRulesTest {
             "integration",
             "outbox",
             "processing",
+            "savedmoment",
             "search",
             "storage",
             "workspace"
@@ -144,6 +145,7 @@ class ModuleBoundaryRulesTest {
                         ROOT + "identity..",
                         ROOT + "integration..",
                         ROOT + "processing..",
+                        ROOT + "savedmoment..",
                         ROOT + "search..",
                         ROOT + "storage..",
                         ROOT + "workspace.."

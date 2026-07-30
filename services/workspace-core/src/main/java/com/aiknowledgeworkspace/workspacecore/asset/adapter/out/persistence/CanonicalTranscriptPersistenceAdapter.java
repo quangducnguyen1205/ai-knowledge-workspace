@@ -6,8 +6,12 @@ import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalT
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.CanonicalTranscriptContextWindow;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.CanonicalTranscriptContextReadException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
@@ -29,6 +33,46 @@ class CanonicalTranscriptPersistenceAdapter implements CanonicalTranscriptStore 
     @Override
     public List<AssetTranscriptRowView> load(UUID assetId) {
         return sorted(transcriptRepository.findByAssetId(assetId));
+    }
+
+    @Override
+    public List<AssetTranscriptRowView> loadCanonicalRows(UUID assetId, List<String> transcriptRowIds) {
+        if (assetId == null || transcriptRowIds == null || transcriptRowIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> storedRowIds = new LinkedHashSet<>();
+        Set<Integer> segmentConventionIndexes = new LinkedHashSet<>();
+        for (String transcriptRowId : transcriptRowIds) {
+            if (transcriptRowId == null || transcriptRowId.isBlank()) {
+                continue;
+            }
+            storedRowIds.add(transcriptRowId);
+            parseSegmentConvention(transcriptRowId).ifPresent(segmentConventionIndexes::add);
+        }
+
+        List<AssetTranscriptRowSnapshot> snapshots = new ArrayList<>();
+        if (!storedRowIds.isEmpty()) {
+            snapshots.addAll(transcriptRepository.findByAssetIdAndTranscriptRowIdIn(assetId, storedRowIds));
+        }
+        if (!segmentConventionIndexes.isEmpty()) {
+            transcriptRepository.findByAssetIdAndSegmentIndexIn(assetId, segmentConventionIndexes).stream()
+                    .filter(snapshot -> snapshot.getTranscriptRowId() == null
+                            || snapshot.getTranscriptRowId().isBlank())
+                    .forEach(snapshots::add);
+        }
+        return sorted(snapshots);
+    }
+
+    private Optional<Integer> parseSegmentConvention(String transcriptRowId) {
+        if (!transcriptRowId.startsWith("segment-")) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Integer.valueOf(transcriptRowId.substring("segment-".length())));
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
     }
 
     @Override

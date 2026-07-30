@@ -163,7 +163,7 @@ class CleanBaselineMigrationTest {
         Map<String, Object> uploadBeforeV5 = loadUploadFields(jdbc, uploadAssetId);
         assertThat(columns(jdbc, "assets")).doesNotContain("position_ms", "completed");
 
-        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(dataSource, "5").migrate().migrationsExecuted).isEqualTo(1);
 
         assertThat(columns(jdbc, "asset_playback_progress"))
                 .containsExactlyInAnyOrder("asset_id", "user_id", "position_ms", "completed", "updated_at");
@@ -189,6 +189,75 @@ class CleanBaselineMigrationTest {
         jdbc.update("delete from assets where id = ?", uploadAssetId);
         assertThat(progressRowCount(jdbc, uploadAssetId)).isZero();
         assertThat(progressRowCount(jdbc, youtubeAssetId)).isEqualTo(1);
+    }
+
+    @Test
+    void v6AddsSavedMomentsWithoutTouchingExistingProductTables() {
+        JdbcDataSource dataSource = dataSource();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        assertThat(flyway(dataSource, "5").migrate().migrationsExecuted).isEqualTo(5);
+
+        UUID workspaceId = insertWorkspace(jdbc, "Saved moments");
+        UUID uploadAssetId = UUID.randomUUID();
+        insertSourceAwareAsset(
+                jdbc, uploadAssetId, workspaceId, "UPLOAD", null,
+                "fixture.mp4", "workspace-media", "objects/fixture.mp4", "video/mp4", 42L, "legacy-etag"
+        );
+        UUID youtubeAssetId = UUID.randomUUID();
+        insertYoutubeAsset(jdbc, youtubeAssetId, workspaceId, "Safe_ID-456");
+        insertPlaybackProgress(jdbc, uploadAssetId, "user-1", 12345L, false);
+        Map<String, Object> uploadBeforeV6 = loadUploadFields(jdbc, uploadAssetId);
+
+        assertThat(flyway(dataSource, null).migrate().migrationsExecuted).isEqualTo(1);
+
+        assertThat(columns(jdbc, "saved_moments")).containsExactlyInAnyOrder(
+                "id", "user_id", "workspace_id", "asset_id", "transcript_row_id", "saved_at"
+        );
+        assertThat(constraints(jdbc, "saved_moments")).contains(
+                "pk_saved_moments",
+                "uk_saved_moments_user_asset_row",
+                "ck_saved_moments_transcript_row_id_not_blank",
+                "fk_saved_moments_asset"
+        );
+        assertThat(loadUploadFields(jdbc, uploadAssetId)).isEqualTo(uploadBeforeV6);
+        assertThat(progressRowCount(jdbc, uploadAssetId)).isEqualTo(1);
+        assertThat(columns(jdbc, "assets")).doesNotContain("transcript_row_id", "saved_at");
+
+        insertSavedMoment(jdbc, uploadAssetId, workspaceId, "user-1", "row-a");
+        insertSavedMoment(jdbc, uploadAssetId, workspaceId, "user-1", "row-b");
+        insertSavedMoment(jdbc, uploadAssetId, workspaceId, "user-2", "row-a");
+        insertSavedMoment(jdbc, youtubeAssetId, workspaceId, "user-1", "row-a");
+
+        assertInvalidAsset(() -> insertSavedMoment(jdbc, uploadAssetId, workspaceId, "user-1", "row-a"));
+        assertInvalidAsset(() -> insertSavedMoment(jdbc, uploadAssetId, workspaceId, "user-1", "   "));
+        assertInvalidAsset(() -> insertSavedMoment(jdbc, UUID.randomUUID(), workspaceId, "user-1", "row-a"));
+
+        assertThat(savedMomentRowCount(jdbc, uploadAssetId)).isEqualTo(3);
+        jdbc.update("delete from assets where id = ?", uploadAssetId);
+        assertThat(savedMomentRowCount(jdbc, uploadAssetId)).isZero();
+        assertThat(savedMomentRowCount(jdbc, youtubeAssetId)).isEqualTo(1);
+    }
+
+    private void insertSavedMoment(
+            JdbcTemplate jdbc,
+            UUID assetId,
+            UUID workspaceId,
+            String userId,
+            String transcriptRowId
+    ) {
+        jdbc.update(
+                "insert into saved_moments (id, user_id, workspace_id, asset_id, transcript_row_id, saved_at) "
+                        + "values (?, ?, ?, ?, ?, current_timestamp)",
+                UUID.randomUUID(), userId, workspaceId, assetId, transcriptRowId
+        );
+    }
+
+    private int savedMomentRowCount(JdbcTemplate jdbc, UUID assetId) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from saved_moments where asset_id = ?", Integer.class, assetId
+        );
+        return count == null ? 0 : count;
     }
 
     private void insertPlaybackProgress(

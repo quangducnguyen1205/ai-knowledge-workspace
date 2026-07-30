@@ -59,6 +59,8 @@ collaboration platform, or unrestricted RAG product.
 - [Current Implemented Product Flow](phase1-implemented-product-flow.md)
 - [Phase 2 Source-Aware Asset Foundation](phase2-source-aware-asset-foundation.md)
 - [Phase 5 User Playback Progress](phase5-user-playback-progress.md)
+- [Phase 7 Search Quality Baseline](phase7-search-quality-baseline.md)
+- [Phase 8 Stable Moment Links And Saved Moments](phase8-saved-moments.md)
 - [API Summary](../api/API.md)
 - [Database](../data/Database.md)
 - [Local Development](../runbooks/local-dev.md)
