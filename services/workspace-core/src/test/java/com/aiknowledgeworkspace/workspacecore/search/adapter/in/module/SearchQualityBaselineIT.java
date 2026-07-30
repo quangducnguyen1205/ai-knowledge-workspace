@@ -53,10 +53,14 @@ import org.testcontainers.utility.DockerImageName;
 class SearchQualityBaselineIT {
 
     private static final String CORPUS_RESOURCE = "/search-quality/v1/corpus.json";
-    private static final String EXPECTED_RESOURCE = "/search-quality/v1/expected-baseline.json";
+    private static final String HISTORICAL_EXPECTED_RESOURCE =
+            "/search-quality/v1/expected-baseline.json";
+    private static final String SLICE_72_EXPECTED_RESOURCE =
+            "/search-quality/v1/expected-slice-7.2.json";
     private static final String INDEX_NAME = "search-quality-v1";
     private static final String UNICODE_FIDELITY_INDEX_NAME = "search-quality-unicode-fidelity";
     private static final String BULK_FAILURE_INDEX_NAME = "search-quality-bulk-failure";
+    private static final String RESULT_CAP_INDEX_NAME = "search-quality-result-caps";
     private static final String ELASTICSEARCH_IMAGE =
             "docker.elastic.co/elasticsearch/elasticsearch:8.11.1";
     private static final int EXPECTED_DOCUMENT_COUNT = 102;
@@ -83,13 +87,17 @@ class SearchQualityBaselineIT {
     private static SearchApplicationService searchApplicationService;
     private static AssistantSearchPortAdapter assistantSearchAdapter;
     private static Corpus corpus;
-    private static ExpectedBaseline expectedBaseline;
+    private static ExpectedBaseline historicalBaseline;
+    private static ExpectedBaseline currentExpectation;
 
     @BeforeAll
     static void setUpBaseline() throws IOException {
         corpus = readResource(CORPUS_RESOURCE, Corpus.class);
-        expectedBaseline = readResource(EXPECTED_RESOURCE, ExpectedBaseline.class);
-        assertThat(expectedBaseline.version()).isEqualTo(corpus.version());
+        historicalBaseline = readResource(HISTORICAL_EXPECTED_RESOURCE, ExpectedBaseline.class);
+        SliceExpectation sliceExpectation = readResource(SLICE_72_EXPECTED_RESOURCE, SliceExpectation.class);
+        assertThat(historicalBaseline.version()).isEqualTo(corpus.version());
+        assertThat(sliceExpectation.baseVersion()).isEqualTo(historicalBaseline.version());
+        currentExpectation = applySliceExpectation(historicalBaseline, sliceExpectation);
 
         String elasticsearchBaseUrl = "http://" + ELASTICSEARCH.getHttpHostAddress();
         ElasticsearchProperties properties = new ElasticsearchProperties();
@@ -292,12 +300,30 @@ class SearchQualityBaselineIT {
     }
 
     @TestFactory
-    Stream<DynamicTest> versionedScenariosMatchMeasuredBaseline() {
-        return expectedBaseline.scenarios().stream()
+    Stream<DynamicTest> versionedScenariosMatchSlice72Expectation() {
+        return currentExpectation.scenarios().stream()
                 .map(scenario -> DynamicTest.dynamicTest(
                         scenario.id() + " [" + scenario.classification() + "]",
                         () -> assertScenarioMatchesBaseline(scenario)
                 ));
+    }
+
+    @Test
+    void historicalAdjacentAndCandidateDominanceEvidenceRemainsExplicit() {
+        ExpectedScenario historicalAdjacent = historicalScenario("adjacent-hits");
+        ExpectedScenario currentAdjacent = scenario("adjacent-hits");
+        assertThat(historicalAdjacent.orderedRowIds())
+                .containsExactly("adjacent-020", "adjacent-021", "adjacent-022");
+        assertThat(historicalAdjacent.adjacentClusterCount()).isOne();
+        assertThat(currentAdjacent.orderedRowIds()).containsExactly("adjacent-020");
+        assertThat(currentAdjacent.adjacentClusterCount()).isZero();
+
+        ExpectedScenario historicalDominance = historicalScenario("candidate-dominance");
+        ExpectedScenario currentDominance = scenario("candidate-dominance");
+        assertThat(historicalDominance.orderedRowIds())
+                .containsExactly("dominant-000", "dominant-001", "dominant-002");
+        assertThat(currentDominance.orderedRowIds()).containsExactly("dominant-000");
+        assertThat(currentDominance.distinctAssetCount()).isOne();
     }
 
     @Test
@@ -344,32 +370,73 @@ class SearchQualityBaselineIT {
 
     @Test
     void publicAndWorkspacePerAssetCapsRemainCharacterized() {
-        Evaluation evaluation = evaluate(scenario("public-and-per-asset-caps"));
+        ElasticsearchTranscriptAdapter capAdapter = newAdapter(RESULT_CAP_INDEX_NAME);
+        List<IndexingAssetSource> sources = resultCapSources();
+        List<TranscriptIndexWriteOperation> operations = sources.stream()
+                .flatMap(source -> indexOperations(source).stream())
+                .toList();
+        FixtureAssetQueryPort assets = new FixtureAssetQueryPort(sources);
+        SearchApplicationService capSearch = new SearchApplicationService(
+                new CorpusWorkspaceAccess(corpus),
+                assets,
+                capAdapter
+        );
+        boolean indexCreated = false;
 
-        assertThat(evaluation.result().hits()).hasSize(12);
-        assertThat(evaluation.result().hits().stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        SearchHit::assetId,
-                        java.util.stream.Collectors.counting()
-                )))
-                .allSatisfy((assetId, count) -> assertThat(count)
-                        .as("Asset %s must not exceed the workspace-wide cap", assetId)
-                        .isLessThanOrEqualTo(3));
+        try {
+            capAdapter.ensureTranscriptIndexExists();
+            indexCreated = true;
+            capAdapter.indexTranscriptRows(operations);
+            capAdapter.refreshTranscriptIndex();
+
+            SearchResult workspaceResult =
+                    capSearch.search(new SearchQuery("workspace quota marker", DEFAULT_WORKSPACE_ID, null));
+            assertThat(workspaceResult.hits()).hasSize(12);
+            assertThat(workspaceResult.hits().stream()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            SearchHit::assetId,
+                            java.util.stream.Collectors.counting()
+                    )))
+                    .allSatisfy((assetId, count) -> assertThat(count)
+                            .as("Asset %s must not exceed the workspace-wide cap", assetId)
+                            .isLessThanOrEqualTo(3));
+
+            UUID assetScopedId = sources.getLast().assetId();
+            SearchResult assetResult = capSearch.search(new SearchQuery(
+                    "asset quota marker",
+                    DEFAULT_WORKSPACE_ID,
+                    assetScopedId
+            ));
+            assertThat(assetResult.hits()).hasSize(12);
+            assertThat(assetResult.hits()).allMatch(hit -> assetScopedId.equals(hit.assetId()));
+        } finally {
+            if (indexCreated) {
+                restClient.delete()
+                        .uri("/{indexName}", RESULT_CAP_INDEX_NAME)
+                        .retrieve()
+                        .toBodilessEntity();
+            }
+        }
     }
 
     @Test
     void assistantAdapterUsesTheSameProductionSearchUseCaseAndOrdering() {
-        SearchResult searchResult = search("vector clocks", DEFAULT_WORKSPACE_ID, null);
+        SearchResult searchResult = search("causal delivery", DEFAULT_WORKSPACE_ID, null);
         AssistantSearchPage assistantResult =
-                assistantSearchAdapter.search("vector clocks", DEFAULT_WORKSPACE_ID, null);
+                assistantSearchAdapter.search("causal delivery", DEFAULT_WORKSPACE_ID, null);
 
         assertThat(assistantResult.workspaceIdFilter()).isEqualTo(searchResult.workspaceIdFilter());
+        assertThat(searchResult.hits())
+                .extracting(SearchHit::transcriptRowId)
+                .containsExactly("adjacent-020");
         assertThat(assistantResult.results())
                 .extracting(result -> result.transcriptRowId())
                 .containsExactlyElementsOf(searchResult.hits().stream().map(SearchHit::transcriptRowId).toList());
         assertThat(assistantResult.results())
                 .extracting(result -> result.startMs())
                 .containsExactlyElementsOf(searchResult.hits().stream().map(SearchHit::startMs).toList());
+        assertThat(assistantResult.results().getFirst().startMs()).isEqualTo(60000L);
+        assertThat(assistantResult.results().getFirst().endMs()).isEqualTo(63000L);
     }
 
     private static void assertScenarioMatchesBaseline(ExpectedScenario scenario) {
@@ -493,6 +560,62 @@ class SearchQualityBaselineIT {
         );
     }
 
+    private static List<IndexingAssetSource> resultCapSources() {
+        List<UUID> workspaceCapAssetIds = List.of(
+                UUID.fromString("cccccccc-cccc-cccc-cccc-000000000001"),
+                UUID.fromString("cccccccc-cccc-cccc-cccc-000000000002"),
+                UUID.fromString("cccccccc-cccc-cccc-cccc-000000000003"),
+                UUID.fromString("cccccccc-cccc-cccc-cccc-000000000004")
+        );
+        List<IndexingAssetSource> sources = new ArrayList<>();
+        for (int assetIndex = 0; assetIndex < workspaceCapAssetIds.size(); assetIndex++) {
+            List<IndexingTranscriptRow> rows = new ArrayList<>();
+            for (int rowIndex = 0; rowIndex < 4; rowIndex++) {
+                rows.add(capRow(
+                        "workspace-cap-" + assetIndex + "-" + rowIndex,
+                        rowIndex * 2,
+                        "Workspace quota marker remains a distinct non-adjacent result."
+                ));
+            }
+            sources.add(new IndexingAssetSource(
+                    workspaceCapAssetIds.get(assetIndex),
+                    DEFAULT_WORKSPACE_ID,
+                    "Workspace quota fixture " + assetIndex,
+                    List.copyOf(rows)
+            ));
+        }
+
+        UUID assetScopedId = UUID.fromString("cccccccc-cccc-cccc-cccc-000000000099");
+        List<IndexingTranscriptRow> assetRows = new ArrayList<>();
+        for (int rowIndex = 0; rowIndex < 13; rowIndex++) {
+            assetRows.add(capRow(
+                    "asset-cap-" + rowIndex,
+                    100 + (rowIndex * 2),
+                    "Asset quota marker remains a distinct non-adjacent result."
+            ));
+        }
+        sources.add(new IndexingAssetSource(
+                assetScopedId,
+                DEFAULT_WORKSPACE_ID,
+                "Asset quota fixture",
+                List.copyOf(assetRows)
+        ));
+        return List.copyOf(sources);
+    }
+
+    private static IndexingTranscriptRow capRow(String id, int segmentIndex, String text) {
+        long startMs = segmentIndex * 1000L;
+        return new IndexingTranscriptRow(
+                id,
+                "result-cap-fixture",
+                segmentIndex,
+                startMs,
+                startMs + 500L,
+                text,
+                "2026-07-30T00:00:00Z"
+        );
+    }
+
     private static ElasticsearchTranscriptAdapter newAdapter(String indexName) {
         ElasticsearchProperties properties = new ElasticsearchProperties();
         properties.setBaseUrl("http://" + ELASTICSEARCH.getHttpHostAddress());
@@ -533,10 +656,39 @@ class SearchQualityBaselineIT {
     }
 
     private static ExpectedScenario scenario(String id) {
-        return expectedBaseline.scenarios().stream()
+        return currentExpectation.scenarios().stream()
                 .filter(candidate -> candidate.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing expected scenario " + id));
+    }
+
+    private static ExpectedScenario historicalScenario(String id) {
+        return historicalBaseline.scenarios().stream()
+                .filter(candidate -> candidate.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing historical scenario " + id));
+    }
+
+    private static ExpectedBaseline applySliceExpectation(
+            ExpectedBaseline baseline,
+            SliceExpectation sliceExpectation
+    ) {
+        Map<String, ExpectedScenario> overrides = sliceExpectation.scenarioOverrides().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        ExpectedScenario::id,
+                        scenario -> scenario
+                ));
+        Set<String> baselineIds = baseline.scenarios().stream()
+                .map(ExpectedScenario::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!baselineIds.containsAll(overrides.keySet())) {
+            throw new IllegalArgumentException("Slice expectation contains unknown scenarios");
+        }
+
+        List<ExpectedScenario> mergedScenarios = baseline.scenarios().stream()
+                .map(scenario -> overrides.getOrDefault(scenario.id(), scenario))
+                .toList();
+        return new ExpectedBaseline(sliceExpectation.version(), mergedScenarios);
     }
 
     private static <T> T readResource(String path, Class<T> type) throws IOException {
@@ -590,6 +742,13 @@ class SearchQualityBaselineIT {
     }
 
     private record ExpectedBaseline(String version, List<ExpectedScenario> scenarios) {
+    }
+
+    private record SliceExpectation(
+            String version,
+            String baseVersion,
+            List<ExpectedScenario> scenarioOverrides
+    ) {
     }
 
     private record ExpectedScenario(
@@ -675,6 +834,38 @@ class SearchQualityBaselineIT {
             return assetsById.values().stream()
                     .filter(asset -> asset.workspaceId().equals(workspaceId))
                     .map(CorpusAsset::id)
+                    .sorted()
+                    .toList();
+        }
+    }
+
+    private static final class FixtureAssetQueryPort implements SearchAssetQueryPort {
+        private final Map<UUID, IndexingAssetSource> assetsById;
+
+        private FixtureAssetQueryPort(List<IndexingAssetSource> sources) {
+            this.assetsById = sources.stream()
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            IndexingAssetSource::assetId,
+                            source -> source
+                    ));
+        }
+
+        @Override
+        public SearchAssetDetails getAuthorizedAssetDetails(UUID assetId) {
+            IndexingAssetSource source = assetsById.get(assetId);
+            if (source == null) {
+                throw new SearchAssetUnavailableException(
+                        new IllegalArgumentException("Unknown cap fixture Asset " + assetId)
+                );
+            }
+            return new SearchAssetDetails(source.assetId(), source.workspaceId(), true);
+        }
+
+        @Override
+        public List<UUID> findSearchableAssetIdsInWorkspace(UUID workspaceId) {
+            return assetsById.values().stream()
+                    .filter(source -> source.workspaceId().equals(workspaceId))
+                    .map(IndexingAssetSource::assetId)
                     .sorted()
                     .toList();
         }

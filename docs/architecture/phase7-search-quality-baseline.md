@@ -10,6 +10,10 @@ Workspace video searches.
 Slice 7.1A closes the Unicode transport regression discovered by that baseline. It does not
 change search ranking, query clauses, mapping analyzers or public contracts.
 
+Slice 7.2 adds one application-owned result policy: consecutive matching transcript rows from
+the same Asset are represented as one video moment after deterministic relevance ordering and
+before result quotas. Elasticsearch retrieval and scoring remain unchanged.
+
 FastAPI is not involved. PostgreSQL remains the product and authorization authority;
 Elasticsearch remains derived state.
 
@@ -19,6 +23,7 @@ The versioned test inputs are:
 
 - `services/workspace-core/src/test/resources/search-quality/v1/corpus.json`
 - `services/workspace-core/src/test/resources/search-quality/v1/expected-baseline.json`
+- `services/workspace-core/src/test/resources/search-quality/v1/expected-slice-7.2.json`
 
 The corpus uses stable Workspace, Asset and transcript-row IDs plus fixed timing and creation
 metadata. Version `v1` contains `102` transcript-row documents across two Workspaces and ten
@@ -26,9 +31,11 @@ Assets. It covers exact phrases, bag-of-words retrieval, adjacent duplicates, on
 candidate dominance, deterministic ties, short queries, English, accented and unaccented
 Vietnamese, optional Asset scope and Workspace isolation.
 
-Changes to corpus semantics or accepted ordering require a new reviewable corpus version or an
-explicitly justified baseline update. Do not edit expected order merely to make a ranking
-change pass.
+`expected-baseline.json` remains the measured pre-Slice-7.2 history.
+`expected-slice-7.2.json` is a reviewed overlay containing only the scenarios intentionally
+changed by adjacent-moment policy. All other expectations are inherited unchanged. Changes to
+corpus semantics or accepted ordering require a new reviewable corpus version or an explicitly
+justified expectation overlay; do not edit historical order merely to make a policy change pass.
 
 ## Disposable Elasticsearch Suite
 
@@ -71,7 +78,7 @@ API version. `commons-lang3` `3.18.0` is also test-scoped to match Testcontainer
 
 The suite does not duplicate the production query JSON.
 
-## Measured Version 1 Baseline
+## Historical Measured Version 1 Baseline
 
 | Scenario | Ordered baseline / metric | Classification |
 | --- | --- | --- |
@@ -110,9 +117,9 @@ The real-Elasticsearch suite fails on regression of:
 
 ## Known Quality Gaps
 
-Slice 7.1 deliberately records these current limitations:
+The historical Slice 7.1 baseline records adjacent duplication; Slice 7.2 resolves that one
+application-level limitation. Current unresolved limitations are:
 
-- adjacent matching transcript rows are not deduplicated;
 - one strongly matching Asset can exhaust all `60` Elasticsearch candidates before Java
   diversity policy runs;
 - the response returns only the matching row text and has no before/after context snippet;
@@ -147,10 +154,52 @@ This is transport fidelity plus the behavior of the existing standard analyzer; 
 accent folding, Vietnamese stemming or accent-insensitive search. The unaccented query
 `thuat toan tim kiem` remains unsupported.
 
-## Why Ranking Is Unchanged
+## Slice 7.2 Adjacent-Moment Policy
+
+The policy pipeline is:
+
+```text
+raw Elasticsearch candidates
+-> meaningful-term filtering
+-> existing deterministic relevance ordering
+-> adjacent-moment clustering
+-> workspace per-Asset cap
+-> public total cap
+```
+
+A cluster is limited to one Asset and one connected run of distinct, non-null consecutive
+`segmentIndex` values. Thus `20,21,22` is one run, `20,21,23` is two runs and `20,22` is two
+runs. Input order does not affect the cluster. Rows from different Assets never join, null
+segment indexes remain independent, and identical text or neighboring timestamps do not create
+a cluster. Duplicate candidates with the same non-null segment index join the same run.
+
+The representative is the highest-ranked candidate under the existing production comparator:
+score descending, then segment index, Asset ID and canonical transcript-row ID. This means equal
+scores in `20,21,22` retain segment `20`, while a higher-scoring segment `21` remains the
+representative. Representatives retain their existing global relevance order.
+
+The policy applies equally to workspace-wide and Asset-scoped searches. Workspace-wide search
+still permits at most three representatives per Asset; Asset-scoped search can return up to the
+public maximum of twelve representatives.
+
+| Scenario | Historical v1 | Slice 7.2 |
+| --- | --- | --- |
+| Adjacent `causal delivery` | `adjacent-020`, `adjacent-021`, `adjacent-022`; one duplicate run in public results | `adjacent-020`; no adjacent run remains |
+| Candidate dominance `distributed tracing` | first three dominant adjacent rows; one Asset | `dominant-000`; still one Asset because weaker Assets were absent from the top-60 candidates |
+| Shared cap corpus | 12 rows from five Assets, including adjacent rows | five moment representatives; dedicated non-adjacent fixtures retain hard 12-total and per-Asset cap evidence |
+
+Exact phrase and bag-of-words ordering, deterministic ties, Workspace isolation, accented
+Vietnamese rank/timing and Unicode production bulk indexing remain unchanged. Unaccented
+Vietnamese remains unsupported. `AssistantSearchPortAdapter` reuses the same search use case, so
+assistant retrieval receives the same representative ordering and canonical timing.
+
+This is structural adjacency over canonical segment ordering, not semantic understanding.
+Candidate-pool diversity remains unresolved, and no context snippet is added.
+
+## Ranking And Retrieval Boundaries
 
 Slice 7.1 adds only test infrastructure, corpus data and documentation. Slice 7.1A changes only
-the bulk request byte encoding. Neither slice changes mapping analyzers, query clauses, boosts,
-candidate size, post-filtering, result caps or public response fields. Later quality work must
-first demonstrate improvement against this baseline while retaining its hard authorization,
-identity, timing and deterministic-order invariants.
+the bulk request byte encoding. Slice 7.2 changes application post-ranking selection only.
+No slice changes mapping analyzers, Elasticsearch query clauses, boosts, candidate size or
+public response fields. Later quality work must demonstrate improvement against this baseline
+while retaining its hard authorization, identity, timing and deterministic-order invariants.

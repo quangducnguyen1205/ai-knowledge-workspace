@@ -1,0 +1,74 @@
+{
+  "version": "v1-slice-7.2",
+  "baseVersion": "v1",
+  "scenarioOverrides": [
+    {
+      "id": "adjacent-hits",
+      "classification": "HARD_INVARIANT",
+      "query": "causal delivery",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "adjacent-020",
+      "orderedRowIds": [
+        "adjacent-020"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The consecutive run 20, 21, 22 is represented by the highest-ranked row, adjacent-020."
+    },
+    {
+      "id": "candidate-dominance",
+      "classification": "CHARACTERIZED_LIMITATION",
+      "query": "distributed tracing",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "dominant-000",
+      "orderedRowIds": [
+        "dominant-000"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000003"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 1,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "The dominant consecutive candidates collapse, but weaker Assets remain absent because Elasticsearch already excluded them from the top-60 candidate pool."
+    },
+    {
+      "id": "public-and-per-asset-caps",
+      "classification": "CHARACTERIZED_DELTA",
+      "query": "shared retrieval",
+      "workspaceId": "11111111-1111-1111-1111-111111111111",
+      "assetId": null,
+      "targetRowId": "shared-a1-000",
+      "orderedRowIds": [
+        "shared-a1-000",
+        "shared-a2-000",
+        "shared-a4-000",
+        "shared-a5-000",
+        "shared-a6-000"
+      ],
+      "orderedAssetIds": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000004",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+        "aaaaaaaa-aaaa-aaaa-aaaa-000000000006"
+      ],
+      "adjacentClusterCount": 0,
+      "distinctAssetCount": 5,
+      "targetInTop1": true,
+      "targetInTop3": true,
+      "targetInTop6": true,
+      "notes": "Each historical four-row consecutive series now contributes one representative; separate non-adjacent integration fixtures retain hard evidence for both result caps."
+    }
+  ]
+}

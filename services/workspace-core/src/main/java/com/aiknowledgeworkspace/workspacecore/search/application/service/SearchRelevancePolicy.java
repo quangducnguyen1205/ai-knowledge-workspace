@@ -4,11 +4,13 @@ import com.aiknowledgeworkspace.workspacecore.search.application.port.out.Transc
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,22 +55,75 @@ final class SearchRelevancePolicy {
         Map<UUID, Integer> acceptedPerAsset = new HashMap<>();
         List<TranscriptSearchHit> accepted = new ArrayList<>();
 
-        hits.stream()
+        List<TranscriptSearchHit> rankedHits = hits.stream()
                 .filter(hit -> matchesEnoughMeaningfulTerms(hit, meaningfulTerms, requiredTerms))
                 .sorted(HIT_ORDER)
-                .forEachOrdered(hit -> {
-                    if (accepted.size() >= MAX_RESULTS) {
-                        return;
-                    }
-                    int acceptedForAsset = acceptedPerAsset.getOrDefault(hit.assetId(), 0);
-                    if (acceptedForAsset >= perAssetLimit) {
-                        return;
-                    }
-                    accepted.add(hit);
-                    acceptedPerAsset.put(hit.assetId(), acceptedForAsset + 1);
-                });
+                .toList();
+
+        for (TranscriptSearchHit hit : deduplicateAdjacentMoments(rankedHits)) {
+            if (accepted.size() >= MAX_RESULTS) {
+                break;
+            }
+            int acceptedForAsset = acceptedPerAsset.getOrDefault(hit.assetId(), 0);
+            if (acceptedForAsset >= perAssetLimit) {
+                continue;
+            }
+            accepted.add(hit);
+            acceptedPerAsset.put(hit.assetId(), acceptedForAsset + 1);
+        }
 
         return List.copyOf(accepted);
+    }
+
+    private static List<TranscriptSearchHit> deduplicateAdjacentMoments(
+            List<TranscriptSearchHit> rankedHits
+    ) {
+        Map<UUID, Map<Integer, Integer>> runStartByAssetAndSegment = adjacentRunStarts(rankedHits);
+        Set<AdjacentMomentCluster> representedClusters = new HashSet<>();
+        List<TranscriptSearchHit> representatives = new ArrayList<>();
+
+        for (TranscriptSearchHit hit : rankedHits) {
+            if (hit.segmentIndex() == null) {
+                representatives.add(hit);
+                continue;
+            }
+
+            int runStart = runStartByAssetAndSegment.get(hit.assetId()).get(hit.segmentIndex());
+            if (representedClusters.add(new AdjacentMomentCluster(hit.assetId(), runStart))) {
+                representatives.add(hit);
+            }
+        }
+
+        return List.copyOf(representatives);
+    }
+
+    private static Map<UUID, Map<Integer, Integer>> adjacentRunStarts(
+            List<TranscriptSearchHit> rankedHits
+    ) {
+        Map<UUID, TreeSet<Integer>> orderedSegmentsByAsset = new HashMap<>();
+        for (TranscriptSearchHit hit : rankedHits) {
+            if (hit.segmentIndex() != null) {
+                orderedSegmentsByAsset
+                        .computeIfAbsent(hit.assetId(), ignored -> new TreeSet<>())
+                        .add(hit.segmentIndex());
+            }
+        }
+
+        Map<UUID, Map<Integer, Integer>> runStartByAssetAndSegment = new HashMap<>();
+        orderedSegmentsByAsset.forEach((assetId, segmentIndexes) -> {
+            Map<Integer, Integer> runStartBySegment = new HashMap<>();
+            Integer previous = null;
+            Integer runStart = null;
+            for (Integer segmentIndex : segmentIndexes) {
+                if (previous == null || (long) segmentIndex - previous != 1L) {
+                    runStart = segmentIndex;
+                }
+                runStartBySegment.put(segmentIndex, runStart);
+                previous = segmentIndex;
+            }
+            runStartByAssetAndSegment.put(assetId, runStartBySegment);
+        });
+        return runStartByAssetAndSegment;
     }
 
     private static boolean matchesEnoughMeaningfulTerms(
@@ -97,5 +152,8 @@ final class SearchRelevancePolicy {
             tokens.add(matcher.group());
         }
         return tokens;
+    }
+
+    private record AdjacentMomentCluster(UUID assetId, int runStartSegmentIndex) {
     }
 }

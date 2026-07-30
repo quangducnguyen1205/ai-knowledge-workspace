@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetDetails;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetQueryPort;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchHit;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.TranscriptSearchQuery;
@@ -71,7 +72,7 @@ class SearchRelevancePolicyTest {
                         assetId,
                         "Codex Course " + assetIndex,
                         "row-" + assetIndex + "-" + moment,
-                        moment,
+                        moment * 2,
                         "Codex helps with grounded software tasks, example " + moment + ".",
                         90.0 - (assetIndex * 10) - moment
                 ));
@@ -113,7 +114,7 @@ class SearchRelevancePolicyTest {
         when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId))
                 .thenReturn(List.of(firstAssetId, secondAssetId));
         when(transcriptSearchQueryPort.search(any())).thenReturn(List.of(
-                hit(secondAssetId, "Codex", "row-b", 2, "Codex details", 4.0),
+                hit(secondAssetId, "Codex", "row-b", 3, "Codex details", 4.0),
                 hit(secondAssetId, "Codex", "row-a", 1, "Codex details", 4.0),
                 hit(firstAssetId, "Codex", "row-c", 1, "Codex details", 4.0)
         ));
@@ -130,6 +131,175 @@ class SearchRelevancePolicyTest {
     }
 
     @Test
+    void consecutiveRunCollapsesTransitivelyAndEqualScoresUseExistingTieBreak() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "row-22", 22, 10.0),
+                targetHit(assetId, "row-20", 20, 10.0),
+                targetHit(assetId, "row-21", 21, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("row-20");
+    }
+
+    @Test
+    void higherRankedMiddleSegmentRepresentsAdjacentRun() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "row-20", 20, 8.0),
+                targetHit(assetId, "row-21", 21, 12.0),
+                targetHit(assetId, "row-22", 22, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("row-21");
+    }
+
+    @Test
+    void inputPermutationKeepsRepresentativeAndGlobalOrderDeterministic() {
+        UUID firstAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        List<TranscriptSearchHit> firstOrder = List.of(
+                targetHit(secondAssetId, "second-5", 5, 9.0),
+                targetHit(firstAssetId, "first-21", 21, 12.0),
+                targetHit(firstAssetId, "first-30", 30, 8.0),
+                targetHit(firstAssetId, "first-20", 20, 10.0),
+                targetHit(firstAssetId, "first-22", 22, 11.0)
+        );
+        List<TranscriptSearchHit> secondOrder = List.of(
+                firstOrder.get(4),
+                firstOrder.get(3),
+                firstOrder.get(2),
+                firstOrder.get(1),
+                firstOrder.get(0)
+        );
+
+        SearchResult first = workspaceSearch(firstOrder);
+        SearchResult second = workspaceSearch(secondOrder);
+
+        assertThat(first.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("first-21", "second-5", "first-30");
+        assertThat(second.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactlyElementsOf(first.hits().stream()
+                        .map(result -> result.transcriptRowId())
+                        .toList());
+    }
+
+    @Test
+    void nonAdjacentIdenticalTextRemainsSeparateMoments() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "row-20", 20, 10.0),
+                targetHit(assetId, "row-22", 22, 9.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("row-20", "row-22");
+    }
+
+    @Test
+    void connectedPairAndSeparatedIndexProduceTwoRepresentatives() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "row-23", 23, 8.0),
+                targetHit(assetId, "row-21", 21, 9.0),
+                targetHit(assetId, "row-20", 20, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("row-20", "row-23");
+    }
+
+    @Test
+    void sameSegmentIndexesInDifferentAssetsNeverShareACluster() {
+        UUID firstAssetId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondAssetId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(secondAssetId, "second-20", 20, 10.0),
+                targetHit(firstAssetId, "first-20", 20, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("first-20", "second-20");
+    }
+
+    @Test
+    void nullIndexesRemainIndependentAndDuplicateNonNullIndexUsesHighestRankedCandidate() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "null-a", null, 12.0),
+                targetHit(assetId, "null-b", null, 11.0),
+                targetHit(assetId, "duplicate-lower", 20, 8.0),
+                targetHit(assetId, "duplicate-higher", 20, 10.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("null-a", "null-b", "duplicate-higher");
+    }
+
+    @Test
+    void adjacentDeduplicationRunsBeforeWorkspacePerAssetQuota() {
+        UUID assetId = UUID.randomUUID();
+
+        SearchResult response = workspaceSearch(List.of(
+                targetHit(assetId, "cluster-20", 20, 20.0),
+                targetHit(assetId, "cluster-21", 21, 19.0),
+                targetHit(assetId, "cluster-22", 22, 18.0),
+                targetHit(assetId, "moment-30", 30, 17.0),
+                targetHit(assetId, "moment-40", 40, 16.0),
+                targetHit(assetId, "moment-50", 50, 15.0)
+        ));
+
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("cluster-20", "moment-30", "moment-40");
+    }
+
+    @Test
+    void assetScopedSearchDeduplicatesMomentsAndUsesPublicLimit() {
+        UUID assetId = UUID.randomUUID();
+        List<TranscriptSearchHit> candidates = new ArrayList<>();
+        candidates.add(targetHit(assetId, "cluster-20", 20, 30.0));
+        candidates.add(targetHit(assetId, "cluster-21", 21, 29.0));
+        for (int index = 0; index < 13; index++) {
+            candidates.add(targetHit(assetId, "moment-" + index, 100 + (index * 2), 20.0 - index));
+        }
+
+        SearchResult response = assetSearch(assetId, candidates);
+
+        assertThat(response.hits()).hasSize(12);
+        assertThat(response.hits().getFirst().transcriptRowId()).isEqualTo("cluster-20");
+        assertThat(response.hits())
+                .extracting(result -> result.transcriptRowId())
+                .doesNotContain("cluster-21");
+    }
+
+    @Test
+    void emptyAndSingleCandidateInputsRemainStable() {
+        UUID assetId = UUID.randomUUID();
+
+        assertThat(workspaceSearch(List.of(assetId), List.of()).hits()).isEmpty();
+        assertThat(workspaceSearch(List.of(targetHit(assetId, "single", 20, 10.0))).hits())
+                .extracting(result -> result.transcriptRowId())
+                .containsExactly("single");
+    }
+
+    @Test
     void genericOnlyQueryReturnsNoLooseMatches() {
         UUID workspaceId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
@@ -143,11 +313,50 @@ class SearchRelevancePolicyTest {
         verify(transcriptSearchQueryPort, never()).search(any());
     }
 
+    private SearchResult workspaceSearch(List<TranscriptSearchHit> candidates) {
+        List<UUID> assetIds = candidates.stream()
+                .map(TranscriptSearchHit::assetId)
+                .distinct()
+                .toList();
+        return workspaceSearch(assetIds, candidates);
+    }
+
+    private SearchResult workspaceSearch(
+            List<UUID> assetIds,
+            List<TranscriptSearchHit> candidates
+    ) {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.findSearchableAssetIdsInWorkspace(workspaceId)).thenReturn(assetIds);
+        if (!assetIds.isEmpty()) {
+            when(transcriptSearchQueryPort.search(any())).thenReturn(candidates);
+        }
+        return searchService.search(new SearchQuery("target", workspaceId, null));
+    }
+
+    private SearchResult assetSearch(UUID assetId, List<TranscriptSearchHit> candidates) {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceQueryApplication.resolveWorkspaceId(workspaceId)).thenReturn(workspaceId);
+        when(searchAssetQueryPort.getAuthorizedAssetDetails(assetId))
+                .thenReturn(new SearchAssetDetails(assetId, workspaceId, true));
+        when(transcriptSearchQueryPort.search(any())).thenReturn(candidates);
+        return searchService.search(new SearchQuery("target", workspaceId, assetId));
+    }
+
+    private TranscriptSearchHit targetHit(
+            UUID assetId,
+            String transcriptRowId,
+            Integer segmentIndex,
+            double score
+    ) {
+        return hit(assetId, "Target lecture", transcriptRowId, segmentIndex, "Target moment", score);
+    }
+
     private TranscriptSearchHit hit(
             UUID assetId,
             String assetTitle,
             String transcriptRowId,
-            int segmentIndex,
+            Integer segmentIndex,
             String text,
             double score
     ) {
