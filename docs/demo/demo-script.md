@@ -120,7 +120,8 @@ curl -s localhost:8081/api/build-info
 > usernames, no dependency list. It degrades to nulls rather than guessing."
 
 Show **Settings → Diagnostics** for the frontend revision, and say the startup is readiness-gated —
-Compose health checks and `depends_on: service_healthy`, no fixed sleeps anywhere.
+Compose health checks and `depends_on: service_healthy`, with health polled every two seconds and
+no blind fixed startup delay.
 
 ## Minute 7:00–8:00 — Close honestly
 

@@ -61,12 +61,19 @@ jobs:
         run: mvn -B -f services/workspace-core/pom.xml test
 
       - name: Kafka runtime config check
-        run: make kafka-config-check
+        # `.env` is a private developer file and is never present in a clean checkout, so both
+        # deployment gateways validate through the committed template instead. Nothing is copied
+        # or generated: the checkout is exactly as tracked before and after this job.
+        run: make kafka-config-check ENV_FILE=.env.example
 
       - name: Compose configuration renders
+        run: docker compose --env-file .env.example -f infra/docker-compose.dev.yml config --quiet
+
+      - name: Checkout is unchanged by the gateways
+        # Proves the two steps above are read-only: no generated `.env`, no rendered artifact.
         run: |
-          cp .env.example .env
-          docker compose --env-file .env -f infra/docker-compose.dev.yml config --quiet
+          test ! -e .env
+          test -z "$(git status --porcelain)" || { git status --short; exit 1; }
 
   integration:
     name: disposable PostgreSQL and Elasticsearch suites

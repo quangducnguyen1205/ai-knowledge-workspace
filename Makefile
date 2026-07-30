@@ -59,8 +59,9 @@ infra-up:
 	docker compose --env-file "$(ENV_FILE)" -f "$(COMPOSE_FILE)" up -d
 
 # Blocks until every long-running dependency reports healthy, so the next step never starts
-# against a socket that is open but not ready. Readiness comes from the Compose health checks;
-# there is no fixed sleep anywhere in this sequence.
+# against a socket that is open but not ready. Readiness comes from the Compose health checks:
+# there is no blind fixed startup delay; health is polled every two seconds and the wait ends as
+# soon as every service reports healthy.
 infra-wait:
 	@printf 'Waiting for infrastructure readiness'
 	@for i in $$(seq 1 90); do \

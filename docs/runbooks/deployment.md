@@ -46,10 +46,12 @@ cd ../DemoFastAPI && make up
 ```
 
 `make stack-up` runs `infra-up` then `infra-wait`. `infra-wait` polls the Compose health status of
-every service and returns as soon as all of them are healthy; on timeout it prints which service is
-still unhealthy and the full `ps` output. **There is no fixed sleep anywhere in the sequence** —
-startup ordering is readiness-based, both in the Makefile and in `depends_on: condition:
-service_healthy`.
+every service every two seconds and returns as soon as all of them are healthy; on timeout (90
+polls, about three minutes) it prints which service is still unhealthy and the full `ps` output.
+**There is no blind fixed startup delay** — startup ordering is readiness-based, both in the
+Makefile's health poll and in `depends_on: condition: service_healthy`. The two-second interval is
+the polling cadence, not a wait for a fixed duration: a stack that is healthy immediately proceeds
+on the first poll.
 
 ## Shutdown
 
@@ -185,9 +187,17 @@ of whichever shell ran `make run`.
 
 ```bash
 mvn -f services/workspace-core/pom.xml test        # unit, architecture, migration
-make kafka-config-check                            # static Kafka runtime policy
+make kafka-config-check                            # static Kafka runtime policy, local .env
 docker compose --env-file .env -f infra/docker-compose.dev.yml config --quiet
 git diff --check
+```
+
+The same two deployment gateways, in the form CI runs them. A clean checkout has `.env.example`
+but no `.env`, so both read the committed template and neither creates a file:
+
+```bash
+make kafka-config-check ENV_FILE=.env.example
+docker compose --env-file .env.example -f infra/docker-compose.dev.yml config --quiet
 ```
 
 Integration profiles that need Docker are separate and explicit:
