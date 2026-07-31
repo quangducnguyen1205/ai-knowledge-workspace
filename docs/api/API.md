@@ -397,10 +397,14 @@ Request:
   - `title` optional
 
 Accepted URLs are HTTPS-only `youtube.com`, `www.youtube.com`, `m.youtube.com` watch URLs,
-`youtu.be/{id}`, and `www.youtube.com/shorts/{id}`. Spring extracts exactly one 11-character
-`[A-Za-z0-9_-]` video ID. Time, fragment, tracking and watch-URL playlist parameters do not become
-product identity. Playlist-only, channel, handle, search, embed, live-path, arbitrary-host,
-userinfo and custom-port URLs are rejected.
+`youtu.be/{id}`, and `www.youtube.com/shorts/{id}` — a browser-copied watch link works with or
+without `www`, and scheme plus hostname are compared case-insensitively against that exact
+allowlist (never by substring). Spring extracts exactly one 11-character `[A-Za-z0-9_-]` video
+ID and owns that identity end to end; processing and retry carry only the stored ID. Time,
+fragment, tracking (`si`, `feature`, `utm_*`, `pp`) and watch-URL playlist parameters do not
+become product identity. Playlist-only, channel, handle, search, embed, live-path,
+arbitrary-host, deceptive host-suffix, userinfo and custom-port URLs are rejected, and the
+rejection response never echoes the submitted URL.
 
 Response:
 

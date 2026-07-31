@@ -46,6 +46,35 @@ class YouTubeUrlPolicyTest {
     }
 
     @Test
+    void acceptsCaseInsensitiveSchemeAndHostnameWhileKeepingPathAndParameterCaseStrict() {
+        // Browsers freely mix scheme/host case when copying links; scheme and host comparison is
+        // case-insensitive, while the /watch path and the v parameter name stay case-sensitive.
+        List<String> accepted = List.of(
+                "HTTPS://WWW.YOUTUBE.COM/watch?v=" + VIDEO_ID,
+                "https://YouTube.com/watch?v=" + VIDEO_ID,
+                "https://M.YOUTUBE.COM/watch?v=" + VIDEO_ID,
+                "HTTPS://YOUTU.BE/" + VIDEO_ID
+        );
+
+        assertThat(accepted)
+                .allSatisfy(url -> assertThat(policy.normalize(url).canonicalUrl())
+                        .isEqualTo("https://www.youtube.com/watch?v=" + VIDEO_ID));
+        assertInvalid("https://www.youtube.com/WATCH?v=" + VIDEO_ID);
+        assertInvalid("https://www.youtube.com/watch?V=" + VIDEO_ID);
+    }
+
+    @Test
+    void ignoresFeatureShareAndPromotionParametersLikeEveryOtherTrackingParameter() {
+        var withFeature = policy.normalize(
+                "https://youtube.com/watch?v=%s&feature=share&pp=ygU".formatted(VIDEO_ID)
+        );
+
+        assertThat(withFeature.youtubeVideoId()).isEqualTo(VIDEO_ID);
+        assertThat(withFeature.canonicalUrl())
+                .isEqualTo("https://www.youtube.com/watch?v=" + VIDEO_ID);
+    }
+
+    @Test
     void rejectsSchemesAuthoritiesAndHostLookalikesOutsideTheExactAllowlist() {
         List<String> rejected = List.of(
                 "http://www.youtube.com/watch?v=" + VIDEO_ID,
