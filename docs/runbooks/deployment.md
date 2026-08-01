@@ -71,7 +71,7 @@ is a manual, explicit act; see the reset rules in [`local-dev.md`](local-dev.md)
 default MinIO and PostgreSQL credentials are the well-known local development values and the
 Keycloak entries are explicitly marked `change-me-local-only`. `.env` itself is not committed.
 
-No secret is required to run the test suites or the CI workflows.
+No secret is required to run the test suites.
 
 ## Persistent volumes
 
@@ -192,7 +192,7 @@ docker compose --env-file .env -f infra/docker-compose.dev.yml config --quiet
 git diff --check
 ```
 
-The same two deployment gateways, in the form CI runs them. A clean checkout has `.env.example`
+The same two deployment gateways, in their clean-checkout form. A clean checkout has `.env.example`
 but no `.env`, so both read the committed template and neither creates a file:
 
 ```bash
