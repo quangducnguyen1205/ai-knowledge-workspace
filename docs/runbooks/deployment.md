@@ -67,9 +67,18 @@ is a manual, explicit act; see the reset rules in [`local-dev.md`](local-dev.md)
 
 ## Environment template and secrets
 
-`.env.example` is the authoritative template. It contains only local-safe placeholders — the
-default MinIO and PostgreSQL credentials are the well-known local development values and the
-Keycloak entries are explicitly marked `change-me-local-only`. `.env` itself is not committed.
+`.env.example` is the authoritative template and the complete inventory of the environment inputs
+this repository supports — the variable list is not duplicated here or anywhere else. It contains
+only local-safe placeholders: the default MinIO and PostgreSQL credentials are the well-known local
+development values and the Keycloak entries are explicitly marked `change-me-local-only`. `.env`
+itself is not committed.
+
+Read it with two conventions in mind. An **active** key is a supported input shown at its current
+effective default, so copying the file changes nothing. A **commented-out** key is an optional
+override knob; its comment says what it does and what happens when it is left absent. A variable
+that appears in neither form is not a supported input — the `WORKSPACE_CORE_IT_POSTGRES_*`
+integration-test variables below are the example, set by one test command rather than by an
+operator.
 
 No secret is required to run the test suites.
 
