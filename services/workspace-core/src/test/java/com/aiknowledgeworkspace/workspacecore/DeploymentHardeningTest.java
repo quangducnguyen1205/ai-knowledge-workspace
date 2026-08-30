@@ -1,7 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -18,8 +17,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
- * Deployment-facing invariants for Phase 10: the running revision can be identified safely, and a
- * production-like runtime never resolves an anonymous request to a local development user.
+ * Deployment-facing invariants for Phase 10: the running revision can be identified safely.
+ *
+ * <p>The former development identity fallback and its production-like startup validator are gone:
+ * no runtime resolves an anonymous request to a user in any profile. That invariant now lives in
+ * the security tests beside {@code CurrentUserService} and {@code AuthController}.
  */
 class DeploymentHardeningTest {
 
@@ -115,49 +117,5 @@ class DeploymentHardeningTest {
                 .getRecordComponents())
                 .extracting(java.lang.reflect.RecordComponent::getName)
                 .containsExactly("application", "version", "gitCommit", "buildTime");
-    }
-
-    // -------------------------------------------------- authentication hardening
-
-    @Test
-    void aProductionLikeRuntimeRefusesToStartWithTheDevelopmentFallbackEnabled() {
-        ProductionLikeAuthenticationProfileValidator validator =
-                new ProductionLikeAuthenticationProfileValidator(true);
-
-        assertThatThrownBy(validator::afterPropertiesSet)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("production-like")
-                .hasMessageContaining("CURRENT_USER_DEV_FALLBACK_ENABLED");
-    }
-
-    @Test
-    void aProductionLikeRuntimeStartsWhenTheDevelopmentFallbackIsDisabled() {
-        ProductionLikeAuthenticationProfileValidator validator =
-                new ProductionLikeAuthenticationProfileValidator(false);
-
-        validator.afterPropertiesSet();
-    }
-
-    @Test
-    void theValidatorIsBoundToTheProductionLikeProfileOnly() {
-        org.springframework.context.annotation.Profile profile =
-                ProductionLikeAuthenticationProfileValidator.class
-                        .getAnnotation(org.springframework.context.annotation.Profile.class);
-
-        assertThat(profile).isNotNull();
-        assertThat(profile.value()).containsExactly("production-like");
-    }
-
-    @Test
-    void theStartupFailureNeverLeaksAnIdentityOrACredential() {
-        ProductionLikeAuthenticationProfileValidator validator =
-                new ProductionLikeAuthenticationProfileValidator(true);
-
-        assertThatThrownBy(validator::afterPropertiesSet)
-                .satisfies(failure -> assertThat(failure.getMessage())
-                        .doesNotContain("local-dev-user")
-                        .doesNotContain("password")
-                        .doesNotContain("token")
-                        .doesNotContain("@"));
     }
 }

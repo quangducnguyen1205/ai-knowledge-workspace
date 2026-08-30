@@ -18,7 +18,6 @@ their own. Each one is deliberate or accepted, and each says what would close it
 | Limitation | Detail |
 |---|---|
 | `keycloak_jwt` is a foundation, not a shipped mode | A native media element cannot carry an in-memory bearer token, so authorized Upload playback has no path in JWT mode. Recorded in the Phase 4 acceptance. Closing it needs a signed-URL or cookie strategy that has not been designed. |
-| Development fallback exists | An anonymous request can resolve to `local-dev-user` in local development. It is forced off by the `production-like` profile, and the application **refuses to start** if that profile is active while the flag has been re-enabled. |
 
 ## Search
 

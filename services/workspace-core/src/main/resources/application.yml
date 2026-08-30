@@ -26,7 +26,6 @@ server:
   port: ${SERVER_PORT:8081}
 
 workspace:
-  default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
   security:
     authentication-mode: ${WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE:legacy_session}
@@ -89,12 +88,7 @@ outbox:
     max-cycles: ${WORKSPACE_CORE_OUTBOX_RECOVERY_MAX_CYCLES:3}
 
 current-user:
-  header-name: ${CURRENT_USER_HEADER_NAME:X-Current-User-Id}
   session-attribute-name: ${CURRENT_USER_SESSION_ATTRIBUTE:CURRENT_USER_ID}
-  default-id: ${CURRENT_USER_ID:local-dev-user}
-  # Local development convenience only. The `production-like` profile forces this to false and
-  # `ProductionLikeAuthenticationProfileValidator` refuses to start if it is re-enabled there.
-  dev-fallback-enabled: ${CURRENT_USER_DEV_FALLBACK_ENABLED:true}
 
 integration:
   fastapi:

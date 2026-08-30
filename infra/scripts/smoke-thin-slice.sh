@@ -10,8 +10,6 @@ SMOKE_VERIFY_CONTEXT="${SMOKE_VERIFY_CONTEXT:-}"
 SMOKE_CONTEXT_WINDOW="${SMOKE_CONTEXT_WINDOW:-2}"
 SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-}"
 SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-}"
-SMOKE_USE_LEGACY_AUTH_FALLBACK="${SMOKE_USE_LEGACY_AUTH_FALLBACK:-}"
-SMOKE_LEGACY_USER_ID="${SMOKE_LEGACY_USER_ID:-smoke-dev-user}"
 
 API_HTTP_CODE=""
 API_BODY_FILE=""
@@ -33,19 +31,16 @@ Environment variables:
   SMOKE_CONTEXT_WINDOW          Optional: transcript context window to use when SMOKE_VERIFY_CONTEXT is enabled (default: 2)
   SMOKE_AUTH_EMAIL              Optional: defaults to smoke-user@example.com on localhost only; required for non-local targets
   SMOKE_AUTH_PASSWORD           Optional: defaults to password123 on localhost only; required for non-local targets
-  SMOKE_USE_LEGACY_AUTH_FALLBACK Optional: when set to 1/true/yes/on, skip register/login and use /api/auth/session instead
-  SMOKE_LEGACY_USER_ID          Optional: userId to use with the legacy auth-session fallback (default: smoke-dev-user)
 
 Notes:
   - Repo A, PostgreSQL, Elasticsearch, and workspace-core must already be running.
-  - The helper now uses the authenticated product path by default:
+  - The helper uses the authenticated product path:
     register/login -> /api/me -> workspace -> upload -> status -> transcript -> index -> search -> context.
   - If search-query is omitted, the script derives a simple query from the first transcript row.
   - If SMOKE_WORKSPACE_NAME is set, the script creates a workspace, reads it back, uploads into it,
     lists assets in it, and searches within it.
   - If SMOKE_VERIFY_CONTEXT is enabled, the script also opens the top search hit through
     /api/assets/{assetId}/transcript/context.
-  - The older /api/auth/session path remains available only when SMOKE_USE_LEGACY_AUTH_FALLBACK is enabled.
 EOF
 }
 
@@ -91,10 +86,6 @@ is_local_base_url() {
 }
 
 initialize_auth_defaults() {
-    if is_truthy "$SMOKE_USE_LEGACY_AUTH_FALLBACK"; then
-        return
-    fi
-
     if is_local_base_url; then
         SMOKE_AUTH_EMAIL="${SMOKE_AUTH_EMAIL:-smoke-user@example.com}"
         SMOKE_AUTH_PASSWORD="${SMOKE_AUTH_PASSWORD:-password123}"
@@ -126,7 +117,7 @@ fail_api() {
             echo "Classification hint: likely Elasticsearch readiness/integration issue." >&2
             ;;
         INVALID_CREDENTIALS|INVALID_AUTH_REQUEST|INVALID_EMAIL|INVALID_PASSWORD|AUTHENTICATION_REQUIRED)
-            echo "Classification hint: auth/session setup failed before the product flow could run." >&2
+            echo "Classification hint: authentication setup failed before the product flow could run." >&2
             ;;
         "")
             if [[ "$API_HTTP_CODE" == "502" || "$API_HTTP_CODE" == "504" ]]; then
@@ -215,22 +206,6 @@ ensure_workspace_core_ready() {
 }
 
 establish_authenticated_session() {
-    if is_truthy "$SMOKE_USE_LEGACY_AUTH_FALLBACK"; then
-        print_step "Establishing local/dev auth-session fallback"
-        LEGACY_AUTH_BODY="$(jq -nc --arg userId "$SMOKE_LEGACY_USER_ID" '{userId: $userId}')"
-        api_call POST "/api/auth/session" \
-            -H "Content-Type: application/json" \
-            --data "$LEGACY_AUTH_BODY"
-
-        if [[ "$API_HTTP_CODE" != "200" ]]; then
-            fail_api "Legacy auth-session setup failed"
-        fi
-
-        echo "authMode: legacy-auth-session"
-        echo "currentUserId: $(read_json '.userId')"
-        return
-    fi
-
     print_step "Establishing authenticated product session"
     AUTH_REQUEST_BODY="$(jq -nc --arg email "$SMOKE_AUTH_EMAIL" --arg password "$SMOKE_AUTH_PASSWORD" '{email: $email, password: $password}')"
 

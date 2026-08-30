@@ -7,7 +7,6 @@ import com.aiknowledgeworkspace.workspacecore.identity.application.command.Login
 import com.aiknowledgeworkspace.workspacecore.identity.application.command.RegisterUserCommand;
 import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.WorkspaceSecurityProperties;
 import com.aiknowledgeworkspace.workspacecore.identity.application.exception.AuthModeUnavailableException;
-import com.aiknowledgeworkspace.workspacecore.identity.application.exception.AuthenticationRequiredException;
 import com.aiknowledgeworkspace.workspacecore.identity.application.port.in.AuthUseCase;
 import com.aiknowledgeworkspace.workspacecore.identity.application.result.AuthenticatedUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,24 +37,6 @@ public class AuthController {
 
     public AuthController(AuthUseCase authUseCase, CurrentUserService currentUserService) {
         this(authUseCase, currentUserService, new WorkspaceSecurityProperties());
-    }
-
-    @PostMapping("/api/auth/session")
-    public AuthSessionResponse createSession(
-            @RequestBody(required = false) CreateAuthSessionRequest request,
-            HttpServletRequest httpServletRequest
-    ) {
-        requireLegacySessionMode();
-        if (!currentUserService.isDevFallbackEnabled()) {
-            throw new AuthenticationRequiredException("Authentication is required");
-        }
-
-        HttpSession session = httpServletRequest.getSession(true);
-        String currentUserId = currentUserService.establishCurrentUser(
-                session,
-                request == null ? null : request.userId()
-        );
-        return new AuthSessionResponse(currentUserId);
     }
 
     @PostMapping("/api/auth/register")

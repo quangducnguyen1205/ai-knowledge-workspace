@@ -159,30 +159,26 @@ The frontend build revision is injected at build time from `VITE_APP_REVISION` a
 
 ## Authentication modes
 
-| Runtime | `current-user.dev-fallback-enabled` | Anonymous request |
-|---|---|---|
-| Local development (default) | `true` | resolved to `local-dev-user` |
-| `production-like` profile | forced `false` | `401 AUTHENTICATION_REQUIRED` |
+Identity comes only from legitimate authentication, in every runtime and profile: the session
+established by `POST /api/auth/register` / `POST /api/auth/login` in the default `legacy_session`
+mode, or a validated bearer token in `keycloak_jwt` mode. An anonymous request — with or without a
+caller-supplied user-id header — is rejected with `401 AUTHENTICATION_REQUIRED`.
 
-`application-production-like.yml` sets the flag to `false`, and
-`ProductionLikeAuthenticationProfileValidator` **refuses to start** if the profile is active while
-the flag has been re-enabled through the environment. The invariant cannot be lost silently.
-
-```bash
-# production-like run
-SPRING_PROFILE="project3,production-like" make run
-```
+The former development identity fallback (`X-Current-User-Id` header, `POST /api/auth/session`,
+and the `local-dev-user` default identity behind `CURRENT_USER_DEV_FALLBACK_ENABLED`) has been
+removed, along with the `production-like` profile and startup validator that existed only to keep
+it out of production-like runs. Passing `production-like` in `SPRING_PROFILES_ACTIVE` is now a
+harmless no-op. For local development, register or log in a local user — the smoke helper does
+this automatically on localhost.
 
 Error bodies never contain an identity: an unauthenticated request returns
-`{"code":"AUTHENTICATION_REQUIRED","message":"Authentication is required"}`, and the startup
-failure message names the property to change, not the user it would have resolved.
+`{"code":"AUTHENTICATION_REQUIRED","message":"Authentication is required"}`.
 
 ## Logs and failure diagnosis
 
 | Symptom | Where to look | Usual cause |
 |---|---|---|
 | Spring exits at startup | Spring console output | PostgreSQL unreachable, or Flyway validation against an unsupported schema |
-| `Refusing to start: the production-like profile …` | Spring console output | `CURRENT_USER_DEV_FALLBACK_ENABLED=true` with the production-like profile |
 | Search returns `503 SEARCH_SERVICE_UNAVAILABLE` | `docker compose logs elasticsearch` | node down, or still recovering shards |
 | Elasticsearch `Exited (137)` | `docker inspect infra-elasticsearch-1` | host memory exhaustion; see the resource policy |
 | Asset title change returns `503` | Spring log, `code=SEARCH_SERVICE_UNAVAILABLE` | Asset has no indexed documents yet, or Kafka is down |

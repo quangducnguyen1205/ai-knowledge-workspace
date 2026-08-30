@@ -54,25 +54,15 @@ public class CurrentUserService implements CurrentUserContext {
 
         ServletRequestAttributes requestAttributes = getServletRequestAttributes();
         if (requestAttributes == null) {
-            return resolveDevFallbackUserId();
+            throw new AuthenticationRequiredException("Authentication is required");
         }
 
-        HttpServletRequest request = requestAttributes.getRequest();
-        String sessionUserId = resolveSessionUserId(request);
+        String sessionUserId = resolveSessionUserId(requestAttributes.getRequest());
         if (StringUtils.hasText(sessionUserId)) {
             return sessionUserId;
         }
 
-        if (!currentUserProperties.isDevFallbackEnabled()) {
-            throw new AuthenticationRequiredException("Authentication is required");
-        }
-
-        String requestUserId = request.getHeader(currentUserProperties.getHeaderName());
-        if (StringUtils.hasText(requestUserId)) {
-            return requestUserId.trim();
-        }
-
-        return resolveDevFallbackUserId();
+        throw new AuthenticationRequiredException("Authentication is required");
     }
 
     public String getAuthenticatedSessionUserId() {
@@ -93,22 +83,6 @@ public class CurrentUserService implements CurrentUserContext {
     public void clearCurrentUser(HttpSession session) {
         session.removeAttribute(currentUserProperties.getSessionAttributeName());
         session.invalidate();
-    }
-
-    public boolean isDefaultUser(String userId) {
-        return currentUserProperties.getDefaultId().equals(userId);
-    }
-
-    public boolean isDevFallbackEnabled() {
-        return currentUserProperties.isDevFallbackEnabled();
-    }
-
-    public String getHeaderName() {
-        return currentUserProperties.getHeaderName();
-    }
-
-    public String getSessionAttributeName() {
-        return currentUserProperties.getSessionAttributeName();
     }
 
     private ServletRequestAttributes getServletRequestAttributes() {
@@ -151,14 +125,6 @@ public class CurrentUserService implements CurrentUserContext {
         }
 
         return null;
-    }
-
-    private String resolveDevFallbackUserId() {
-        if (currentUserProperties.isDevFallbackEnabled()) {
-            return currentUserProperties.getDefaultId();
-        }
-
-        throw new AuthenticationRequiredException("Authentication is required");
     }
 
     private String normalizeRequestedUserId(String requestedUserId) {

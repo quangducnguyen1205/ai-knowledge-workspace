@@ -105,8 +105,8 @@ Default mode is `legacy_session`: register/login establish a server-side session
 reads it. `keycloak_jwt` exists as a foundation and is deferred — it has no browser media-playback
 path, as recorded in the Phase 4 acceptance.
 
-A development fallback can resolve an anonymous request to `local-dev-user`. It is enabled by
-default for local work and is switched off, and enforced off, by the `production-like` profile. See
+There is no development identity fallback: an anonymous request is rejected with `401` in every
+profile, and a caller-supplied user-id header is never treated as identity. See
 [`../runbooks/deployment.md`](../runbooks/deployment.md).
 
 ## Corrections applied during this review

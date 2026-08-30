@@ -192,8 +192,10 @@ bounded warning rather than failing the request.
 > unavailable in that mode (recorded in Phase 4). Closing it needs a signed-URL or cookie strategy
 > that has not been designed.
 
-> **Accepted strength (Phase 10).** The development fallback can no longer leak into a
-> production-like runtime: the profile forces it off and the validator refuses to start otherwise.
+> **Accepted strength.** The development identity fallback (`X-Current-User-Id` header,
+> `POST /api/auth/session`, default local user) has been removed outright: no runtime profile
+> resolves an anonymous request to a user, so the Phase 10 production-like guard profile and its
+> startup validator are gone too.
 
 ## Failure isolation
 

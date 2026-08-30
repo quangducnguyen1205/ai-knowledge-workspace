@@ -12,10 +12,9 @@ For the current deployable-demo baseline, the supported verification order is:
 4. Run backend smoke against `http://localhost:8081`.
 5. Start Repo FE and verify the browser path through `http://localhost:5173`.
 
-For the current backend slice, the primary product-facing current-user path is session-based auth through register/login.
-`POST /api/auth/session` and `X-Current-User-Id` remain available as secondary local/dev fallbacks.
-If authenticated session, auth-session fallback, and header are all absent, Spring can fall back to the configured local/dev default user when `CURRENT_USER_DEV_FALLBACK_ENABLED=true`.
-The smoke helper now follows the authenticated product path by default and only uses the older auth-session shortcut when `SMOKE_USE_LEGACY_AUTH_FALLBACK=1` is set explicitly.
+For the current backend slice, the only current-user path is session-based auth through register/login.
+The former local/dev fallbacks (`POST /api/auth/session`, the `X-Current-User-Id` header, and the configured default user) have been removed; an unauthenticated request is rejected with `401`.
+The smoke helper follows the authenticated product path.
 P3-C1 adds `keycloak_jwt` mode. Keep `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=legacy_session` for the current default smoke checklist unless you are running a controlled Keycloak/OIDC smoke. In JWT mode, bearer tokens map to local `UserAccount` rows by provider plus OIDC `sub`; Keycloak roles do not authorize workspaces, and no token values are stored.
 P3-C2A adds profile-gated local Keycloak infrastructure and a credential-free `workspace-dev` realm import. Do not treat the tracked realm import as a user fixture; it contains no users, passwords, client secrets, refresh tokens, access tokens, roles, or groups. P3-C2B `[ĐÃ SMOKE THỰC TẾ]` verified real Authorization Code + PKCE token issuance without direct grant, Spring validation of the real issuer/signature/audience, first-login local user/default-workspace provisioning, repeated-token idempotency, Spring-owned workspace isolation across two JWT subjects, and rejection of legacy login/session-only identity in JWT mode. P3-C4 `[ĐÃ SMOKE THỰC TẾ]` verified the local React/Vite browser path in opt-in `keycloak_jwt` mode: legacy auth stayed visually available by default, the browser used Authorization Code + PKCE through the public `workspace-web` client, the frontend held authenticated token/user state in memory only, Spring `/api/me` remained the product-user authority, no Keycloak roles authorized workspace access, and frontend logout cleared local state only. OIDC redirect transaction state may be temporarily session-scoped for callback completion. Token refresh, silent SSO, global Keycloak logout, production/default auth cutover, legacy-session removal, and collaboration/membership/RBAC remain future work.
 
@@ -57,15 +56,6 @@ make smoke \
 ```
 
 For the default localhost path, the helper can still fall back to convenience smoke credentials if those values are omitted. For any non-local `WORKSPACE_CORE_BASE_URL`, set `SMOKE_AUTH_EMAIL` and `SMOKE_AUTH_PASSWORD` explicitly.
-
-Explicit legacy fallback override:
-
-```bash
-make smoke \
-  MEDIA_FILE=/absolute/path/to/lecture-video.mp4 \
-  SMOKE_USE_LEGACY_AUTH_FALLBACK=1 \
-  SMOKE_LEGACY_USER_ID="smoke-dev-user"
-```
 
 With `SMOKE_WORKSPACE_NAME`, the helper creates a workspace, reads it back, uploads into it, checks workspace-scoped asset listing, indexes the transcript, and searches within that workspace.
 With `SMOKE_VERIFY_CONTEXT`, the helper also uses the top search hit to call `GET /api/assets/{assetId}/transcript/context` and prints the returned row window.
@@ -200,25 +190,20 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] Expect structured error JSON with:
   - [ ] `code = "AUTHENTICATION_REQUIRED"`
 
-### Local/Dev Fallback Path
+### Removed Identity Shortcuts Stay Rejected
 
-- [ ] Call `POST /api/auth/session` with JSON body:
-  - [ ] `userId`
-- [ ] Expect HTTP `200`.
-- [ ] Expect JSON with:
-  - [ ] `userId`
-- [ ] Repeat the same endpoint with a different `userId`.
-- [ ] Confirm the active session user changes to the new value.
-- [ ] Call `POST /api/auth/session` with an empty or missing `userId`.
-- [ ] Expect HTTP `400`.
+- [ ] Call `POST /api/auth/session` with any JSON body.
+- [ ] Expect HTTP `404` — the endpoint no longer exists.
+- [ ] Call `GET /api/me` without a session but with header `X-Current-User-Id: <any-user-id>`.
+- [ ] Expect HTTP `401`.
 - [ ] Expect structured error JSON with:
-  - [ ] `code = "INVALID_CURRENT_USER_ID"`
+  - [ ] `code = "AUTHENTICATION_REQUIRED"`
 
 ## 3. Product Workspace Management Checks
 
 ### Implemented And Testable Now
 
-- [ ] Call `GET /api/workspaces` after establishing an authenticated user through register/login or the local/dev auth-session fallback.
+- [ ] Call `GET /api/workspaces` after establishing an authenticated user through register/login.
 - [ ] Confirm Spring returns workspaces for that session user.
 - [ ] Call `POST /api/workspaces` with JSON body:
   - [ ] `name`

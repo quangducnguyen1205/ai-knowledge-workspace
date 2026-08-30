@@ -233,10 +233,6 @@ public class WorkspaceService implements WorkspaceUseCase, WorkspaceAccessUseCas
     }
 
     private UUID defaultWorkspaceIdFor(String currentUserId) {
-        if (currentUserService.isDefaultUser(currentUserId)) {
-            return workspaceProperties.getDefaultId();
-        }
-
         return UUID.nameUUIDFromBytes(("default-workspace:" + currentUserId).getBytes(StandardCharsets.UTF_8));
     }
 

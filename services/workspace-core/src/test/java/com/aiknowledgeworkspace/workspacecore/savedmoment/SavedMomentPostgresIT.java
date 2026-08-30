@@ -29,13 +29,19 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -98,6 +104,21 @@ class SavedMomentPostgresIT {
     @AfterAll
     static void stopPostgres() {
         POSTGRES.stop();
+    }
+
+    @BeforeEach
+    void establishCurrentUserSession() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("CURRENT_USER_ID", CURRENT_USER);
+        request.setSession(session);
+        // Inheritable so the concurrent-writer threads spawned inside tests see the same identity.
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request), true);
+    }
+
+    @AfterEach
+    void clearCurrentUserSession() {
+        RequestContextHolder.resetRequestAttributes();
     }
 
     @Test

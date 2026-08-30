@@ -52,25 +52,6 @@ class AuthControllerTest {
     }
 
     @Test
-    void createSessionStoresCurrentUserInHttpSession() throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/auth/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "  study-user-1  "
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value("study-user-1"))
-                .andReturn();
-
-        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
-        assertThat(session).isNotNull();
-        assertThat(session.getAttribute(currentUserProperties.getSessionAttributeName()))
-                .isEqualTo("study-user-1");
-    }
-
-    @Test
     void registerReturnsCreatedUserAndStoresSession() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userAccountRepository.findByEmail("learner@example.com")).thenReturn(Optional.empty());
@@ -272,9 +253,9 @@ class AuthControllerTest {
     }
 
     @Test
-    void getCurrentUserIgnoresHeaderFallbackWithoutAuthenticatedSession() throws Exception {
+    void getCurrentUserIgnoresIdentityHeaderWithoutAuthenticatedSession() throws Exception {
         mockMvc.perform(get("/api/me")
-                        .header(currentUserProperties.getHeaderName(), "header-user"))
+                        .header("X-Current-User-Id", "header-user"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
                 .andExpect(jsonPath("$.message").value("Authentication is required"));
@@ -288,42 +269,4 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Authentication is required"));
     }
 
-    @Test
-    void createSessionRejectsBlankUserId() throws Exception {
-        mockMvc.perform(post("/api/auth/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "   "
-                                }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_CURRENT_USER_ID"))
-                .andExpect(jsonPath("$.message").value("userId is required"));
-    }
-
-    @Test
-    void createSessionRejectsMissingBody() throws Exception {
-        mockMvc.perform(post("/api/auth/session")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_CURRENT_USER_ID"))
-                .andExpect(jsonPath("$.message").value("userId is required"));
-    }
-
-    @Test
-    void createSessionReturnsUnauthorizedWhenDevFallbackIsDisabled() throws Exception {
-        currentUserProperties.setDevFallbackEnabled(false);
-
-        mockMvc.perform(post("/api/auth/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "study-user-1"
-                                }
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
-                .andExpect(jsonPath("$.message").value("Authentication is required"));
-    }
 }

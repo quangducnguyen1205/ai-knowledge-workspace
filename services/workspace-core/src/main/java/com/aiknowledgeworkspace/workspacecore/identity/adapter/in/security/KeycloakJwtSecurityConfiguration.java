@@ -36,7 +36,6 @@ class KeycloakJwtSecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/health").permitAll()
                         .requestMatchers(
-                                "/api/auth/session",
                                 "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/auth/logout"

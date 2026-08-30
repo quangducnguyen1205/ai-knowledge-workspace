@@ -16,8 +16,7 @@ Spring now uses a minimal current-user identity foundation for ownership-aware w
 - `POST /api/auth/register` and `POST /api/auth/login` establish the current user in the Spring HTTP session.
 - `GET /api/me` reads the authenticated session user.
 - `POST /api/auth/logout` clears the authenticated session.
-- For local/dev support, Spring can still accept `POST /api/auth/session`, `X-Current-User-Id`, and a configured default user as secondary fallbacks.
-- Those local/dev shortcuts are controlled by `CURRENT_USER_DEV_FALLBACK_ENABLED`; the product path is register/login/session auth.
+- There is no other identity source: an unauthenticated request is rejected with `401`. A caller-supplied user-id header (formerly `X-Current-User-Id`), the former `POST /api/auth/session` shortcut, and the former configured default user are not accepted in any runtime profile.
 - This slice is intentionally not a full authentication platform.
 - Ownership is enforced first at the workspace boundary and then inherited by workspace-scoped asset listing, search, and asset-by-id flows.
 
@@ -114,42 +113,10 @@ Response:
 Current behavior:
 
 - `GET /api/me` only uses the authenticated session user.
-- Local/dev header or default-user fallback does not count as authenticated product auth for this endpoint.
 
 Common failure cases:
 
 - HTTP `401` with `code = "AUTHENTICATION_REQUIRED"` if no authenticated session user exists
-
-### `POST /api/auth/session`
-
-Establishes a secondary local/dev current-user session shortcut.
-
-This is a development fallback endpoint. The preferred product path is `POST /api/auth/register` or `POST /api/auth/login`.
-
-Request:
-
-- Content type: `application/json`
-- Body:
-  - `userId` required
-
-Response:
-
-- HTTP `200`
-- Body:
-  - `userId`
-
-Current behavior:
-
-- This is now a local/dev fallback path rather than the primary product auth path.
-- Spring trims `userId` before storing it in the session.
-- Repeating the call replaces the current session user with the new `userId`.
-- This remains useful for narrow local/dev ownership checks without going through register/login.
-
-Common failure cases:
-
-- HTTP `400` with `code = "INVALID_CURRENT_USER_ID"` if `userId` is missing, blank after trim, or longer than the current max length
-- HTTP `400` with `code = "INVALID_REQUEST_BODY"` if the request body is malformed JSON
-- HTTP `401` with `code = "AUTHENTICATION_REQUIRED"` if local/dev fallback auth is disabled
 
 ### `POST /api/workspaces`
 

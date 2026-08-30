@@ -16,6 +16,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 class CurrentUserServiceTest {
 
+    private static final String FORGED_IDENTITY_HEADER = "X-Current-User-Id";
+
     @AfterEach
     void tearDown() {
         RequestContextHolder.resetRequestAttributes();
@@ -36,7 +38,7 @@ class CurrentUserServiceTest {
     }
 
     @Test
-    void returnsSessionUserIdBeforeHeaderFallback() {
+    void returnsSessionUserIdAndIgnoresIdentityHeader() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
 
@@ -44,32 +46,19 @@ class CurrentUserServiceTest {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(properties.getSessionAttributeName(), "session-user");
         request.setSession(session);
-        request.addHeader(properties.getHeaderName(), "header-user");
+        request.addHeader(FORGED_IDENTITY_HEADER, "header-user");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         assertThat(currentUserService.getCurrentUserId()).isEqualTo("session-user");
     }
 
     @Test
-    void returnsHeaderUserIdWhenSessionIsMissing() {
+    void rejectsRequestCarryingOnlyAnIdentityHeader() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(properties.getHeaderName(), "  study-user-2  ");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        assertThat(currentUserService.getCurrentUserId()).isEqualTo("study-user-2");
-    }
-
-    @Test
-    void rejectsHeaderAndDefaultFallbackWhenDevFallbackIsDisabled() {
-        CurrentUserProperties properties = new CurrentUserProperties();
-        properties.setDevFallbackEnabled(false);
-        CurrentUserService currentUserService = new CurrentUserService(properties);
-
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(properties.getHeaderName(), "header-user");
+        request.addHeader(FORGED_IDENTITY_HEADER, "header-user");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         assertThatThrownBy(currentUserService::getCurrentUserId)
@@ -78,38 +67,27 @@ class CurrentUserServiceTest {
     }
 
     @Test
-    void sessionUserStillWorksWhenDevFallbackIsDisabled() {
-        CurrentUserProperties properties = new CurrentUserProperties();
-        properties.setDevFallbackEnabled(false);
-        CurrentUserService currentUserService = new CurrentUserService(properties);
-
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpSession session = new MockHttpSession();
-        session.setAttribute(properties.getSessionAttributeName(), "session-user");
-        request.setSession(session);
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        assertThat(currentUserService.getCurrentUserId()).isEqualTo("session-user");
-    }
-
-    @Test
-    void returnsDefaultUserIdWhenSessionAndHeaderAreMissing() {
+    void rejectsAnonymousRequest() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
 
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
 
-        assertThat(currentUserService.getCurrentUserId()).isEqualTo(properties.getDefaultId());
+        assertThatThrownBy(currentUserService::getCurrentUserId)
+                .isInstanceOf(AuthenticationRequiredException.class)
+                .hasMessage("Authentication is required");
     }
 
     @Test
-    void returnsDefaultUserIdWhenRequestContextIsNotServletBased() {
+    void rejectsNonServletRequestContext() {
         CurrentUserProperties properties = new CurrentUserProperties();
         CurrentUserService currentUserService = new CurrentUserService(properties);
 
         RequestContextHolder.setRequestAttributes(new NonServletRequestAttributes());
 
-        assertThat(currentUserService.getCurrentUserId()).isEqualTo(properties.getDefaultId());
+        assertThatThrownBy(currentUserService::getCurrentUserId)
+                .isInstanceOf(AuthenticationRequiredException.class)
+                .hasMessage("Authentication is required");
         assertThat(currentUserService.getAuthenticatedSessionUserId()).isNull();
     }
 
@@ -119,7 +97,7 @@ class CurrentUserServiceTest {
         CurrentUserService currentUserService = new CurrentUserService(properties);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(properties.getHeaderName(), "header-user");
+        request.addHeader(FORGED_IDENTITY_HEADER, "header-user");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         assertThat(currentUserService.getAuthenticatedSessionUserId()).isNull();

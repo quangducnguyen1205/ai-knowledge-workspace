@@ -75,7 +75,7 @@ class WorkspaceServiceTest {
         String currentUserId = "user-1";
 
         Workspace defaultWorkspace = workspace(
-                workspaceProperties.getDefaultId(),
+                UUID.randomUUID(),
                 workspaceProperties.getDefaultName(),
                 currentUserId,
                 true,
@@ -290,7 +290,6 @@ class WorkspaceServiceTest {
         );
 
         when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
         when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
         when(workspaceRepository.save(any(Workspace.class))).thenReturn(defaultWorkspace);
 
@@ -306,40 +305,6 @@ class WorkspaceServiceTest {
         assertThat(workspaceCaptor.getValue().getId())
                 .isEqualTo(UUID.nameUUIDFromBytes(("default-workspace:" + currentUserId)
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-    }
-
-    @Test
-    void resolveWorkspaceOrDefaultCreatesConfiguredDefaultWorkspaceForDefaultUser() {
-        WorkspaceProperties workspaceProperties = new WorkspaceProperties();
-        WorkspaceService workspaceService = new WorkspaceService(
-                workspaceRepository,
-                workspaceAssetUsagePort,
-                workspaceProperties,
-                currentUserService
-        );
-        String currentUserId = "local-dev-user";
-        Workspace savedWorkspace = workspace(
-                workspaceProperties.getDefaultId(),
-                workspaceProperties.getDefaultName(),
-                currentUserId,
-                true,
-                Instant.parse("2026-04-03T08:00:00Z")
-        );
-
-        when(currentUserService.getCurrentUserId()).thenReturn(currentUserId);
-        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
-        when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
-        when(workspaceRepository.save(any(Workspace.class))).thenReturn(savedWorkspace);
-
-        Workspace result = workspaceService.resolveOwnedWorkspaceOrDefault(null);
-
-        assertThat(result).isSameAs(savedWorkspace);
-
-        ArgumentCaptor<Workspace> workspaceCaptor = ArgumentCaptor.forClass(Workspace.class);
-        verify(workspaceRepository).save(workspaceCaptor.capture());
-        assertThat(workspaceCaptor.getValue().getId()).isEqualTo(workspaceProperties.getDefaultId());
-        assertThat(workspaceCaptor.getValue().getOwnerId()).isEqualTo(currentUserId);
-        assertThat(workspaceCaptor.getValue().isDefaultWorkspace()).isTrue();
     }
 
     @Test
@@ -365,7 +330,6 @@ class WorkspaceServiceTest {
                 Instant.parse("2026-04-03T08:00:00Z")
         );
 
-        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(false);
         when(workspaceRepository.findOwnedDefaults(currentUserId))
                 .thenReturn(List.of(), List.of(persistedDefaultWorkspace));
 
@@ -375,7 +339,7 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void ensureDefaultWorkspaceRejectsConfiguredDefaultWorkspaceIdOwnedByAnotherUser() {
+    void ensureDefaultWorkspaceRejectsDefaultWorkspaceIdOwnedByAnotherUser() {
         WorkspaceProperties workspaceProperties = new WorkspaceProperties();
         DefaultWorkspaceCreationExecutor defaultWorkspaceCreationExecutor = workspace -> {
             throw new DataIntegrityViolationException("duplicate key");
@@ -387,9 +351,8 @@ class WorkspaceServiceTest {
                 currentUserService,
                 defaultWorkspaceCreationExecutor
         );
-        String currentUserId = "local-dev-user";
+        String currentUserId = "user-2";
 
-        when(currentUserService.isDefaultUser(currentUserId)).thenReturn(true);
         when(workspaceRepository.findOwnedDefaults(currentUserId)).thenReturn(List.of());
 
         assertThatThrownBy(() -> workspaceService.ensureDefaultWorkspace(currentUserId))
