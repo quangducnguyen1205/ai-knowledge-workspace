@@ -95,6 +95,7 @@ integration:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
     connect-timeout: ${FASTAPI_CONNECT_TIMEOUT:5s}
     read-timeout: ${FASTAPI_READ_TIMEOUT:30s}
+    internal-token: ${FASTAPI_INTERNAL_TOKEN:}
     assistant-answer-path: ${FASTAPI_ASSISTANT_ANSWER_PATH:/internal/assistant/answer}
     assistant-read-timeout: ${FASTAPI_ASSISTANT_READ_TIMEOUT:75s}
   elasticsearch:

@@ -38,6 +38,16 @@ class FastApiPropertiesTest {
     }
 
     @Test
+    void defaultsToBlankInternalTokenAndBindsEnvironmentOverride() {
+        contextRunner.run(context ->
+                assertThat(context.getBean(FastApiProperties.class).getInternalToken()).isEmpty());
+        contextRunner
+                .withSystemProperties("FASTAPI_INTERNAL_TOKEN=local-test-internal-token")
+                .run(context -> assertThat(context.getBean(FastApiProperties.class).getInternalToken())
+                        .isEqualTo("local-test-internal-token"));
+    }
+
+    @Test
     void rejectsBaseUrlWithoutHttpSchemeOrHost() {
         contextRunner
                 .withPropertyValues("integration.fastapi.base-url=localhost:8000")

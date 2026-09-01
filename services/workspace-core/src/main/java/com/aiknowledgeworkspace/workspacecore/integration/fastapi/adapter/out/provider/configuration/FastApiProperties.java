@@ -11,6 +11,7 @@ public class FastApiProperties {
     private String baseUrl = "http://localhost:8000";
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(30);
+    private String internalToken = "";
     private String assistantAnswerPath = "/internal/assistant/answer";
     private Duration assistantReadTimeout = Duration.ofSeconds(75);
 
@@ -37,6 +38,14 @@ public class FastApiProperties {
 
     public void setReadTimeout(Duration readTimeout) {
         this.readTimeout = readTimeout;
+    }
+
+    public String getInternalToken() {
+        return internalToken;
+    }
+
+    public void setInternalToken(String internalToken) {
+        this.internalToken = internalToken == null ? "" : internalToken.trim();
     }
 
     public String getAssistantAnswerPath() {
