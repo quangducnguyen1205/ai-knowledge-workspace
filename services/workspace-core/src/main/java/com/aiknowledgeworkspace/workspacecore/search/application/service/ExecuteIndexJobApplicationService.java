@@ -18,11 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ExecuteIndexJobApplicationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecuteIndexJobApplicationService.class);
 
     private final IndexingAttemptTransactionService transactionService;
     private final TranscriptIndexWriter transcriptIndexWriter;
@@ -48,6 +52,13 @@ public class ExecuteIndexJobApplicationService {
             writeToElasticsearch(attempt.indexingSource());
         } catch (IndexingWriteFailure failure) {
             recordFailureDiagnostic(attempt, failure);
+            LOGGER.warn(
+                    "Indexing attempt failed assetId={} indexingJobId={} failureStage={} failureCategory={}",
+                    attempt.indexingSource().assetId(),
+                    attempt.indexingJobId(),
+                    failure.failureStage(),
+                    failure.category()
+            );
             throw failure.originalException();
         }
         return transactionService.finalizeSuccessfulAttempt(attempt.indexingJobId());

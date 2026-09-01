@@ -12,6 +12,7 @@ import com.aiknowledgeworkspace.workspacecore.outbox.application.service.OutboxR
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
@@ -24,9 +25,12 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -45,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
         "workspace.kafka.send-timeout=1s"
 })
 @Transactional
+@ExtendWith(OutputCaptureExtension.class)
 class KafkaOutboxRelayServiceTest {
 
     @Autowired
@@ -137,6 +142,28 @@ class KafkaOutboxRelayServiceTest {
         OutboxEvent savedEvent = outboxEventRepository.findById(event.getId()).orElseThrow();
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(savedEvent.getAttemptCount()).isEqualTo(1);
+    }
+
+    @Test
+    void publishedAndFailedRelayLogsCarryEventTypeAndAggregateIdentifiers(CapturedOutput output) {
+        when(kafkaSender.send(eq("asset.processing.requested.v1"), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        when(kafkaSender.send(eq("asset.indexing.requested.v1"), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")));
+        OutboxEvent publishedEvent = outboxEventRepository.save(newOutboxEvent());
+        OutboxEvent failingEvent = outboxEventRepository.save(newIndexingOutboxEvent());
+
+        outboxRelayService.relay(RelayRequest.scheduledAll(20));
+
+        assertThat(output.getAll())
+                .contains("Outbox event published eventId=" + publishedEvent.getId()
+                        + " eventType=" + ProcessingRequestedEventContract.EVENT_TYPE
+                        + " aggregateId=" + publishedEvent.getAggregateId())
+                .contains("Outbox event publication failed eventId=" + failingEvent.getId()
+                        + " eventType=" + IndexingRequestedEventContract.EVENT_TYPE
+                        + " aggregateId=" + failingEvent.getAggregateId())
+                .contains("status=PENDING failureCategory=UNKNOWN_PUBLICATION_FAILURE")
+                .doesNotContain("broker unavailable");
     }
 
     @Test

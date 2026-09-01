@@ -21,8 +21,12 @@ import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRe
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ProcessingRequestApplicationServiceTest {
 
     private final ProcessingJobStore repository = mock(ProcessingJobStore.class);
@@ -106,6 +110,39 @@ class ProcessingRequestApplicationServiceTest {
         var ordered = inOrder(repository, outboxWriter);
         ordered.verify(repository).save(existing);
         ordered.verify(outboxWriter).enqueue(draft);
+    }
+
+    @Test
+    void createAndRetryLogCarryAssetJobAndRequestEventIdentifiers(CapturedOutput output) {
+        UUID assetId = UUID.randomUUID();
+        UUID createEventId = UUID.randomUUID();
+        UUID retryEventId = UUID.randomUUID();
+        ProcessingRequestCommand command = new ProcessingRequestCommand(
+                assetId, UUID.randomUUID(), "user-1", "bucket", "object", "lesson.mp4", "video/mp4", 12L
+        );
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventFactory.create(command)).thenReturn(new OutboxDraft(
+                createEventId, "asset.processing.requested", 1, "Asset", assetId, assetId.toString(), "{}"
+        ));
+
+        service.createKafkaJobAndRequest(command);
+
+        assertThat(output.getAll())
+                .contains("Processing request created assetId=" + assetId)
+                .contains("requestEventId=" + createEventId);
+
+        ProcessingJob existing = new ProcessingJob(assetId, ProcessingJobStatus.FAILED, "whisper_timeout");
+        existing.setProcessingRequestEventId(createEventId);
+        when(repository.findByAssetId(assetId)).thenReturn(Optional.of(existing));
+        when(eventFactory.create(command)).thenReturn(new OutboxDraft(
+                retryEventId, "asset.processing.requested", 1, "Asset", assetId, assetId.toString(), "{}"
+        ));
+
+        service.retryKafkaJobAndRequest(command);
+
+        assertThat(output.getAll())
+                .contains("Processing request retried assetId=" + assetId)
+                .contains("requestEventId=" + retryEventId);
     }
 
     @Test

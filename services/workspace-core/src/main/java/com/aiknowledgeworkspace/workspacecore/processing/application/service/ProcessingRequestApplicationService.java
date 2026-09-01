@@ -13,10 +13,14 @@ import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingRequestUs
 import com.aiknowledgeworkspace.workspacecore.processing.api.YouTubeProcessingRequestCommand;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ProcessingRequestApplicationService implements ProcessingRequestUseCase {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingRequestApplicationService.class);
 
     private final ProcessingJobStore processingJobStore;
     private final ProcessingRequestEventFactory eventFactory;
@@ -66,6 +70,12 @@ public class ProcessingRequestApplicationService implements ProcessingRequestUse
         job.setProcessingRequestEventId(draft.eventId());
         ProcessingJob savedJob = processingJobStore.save(job);
         outboxWriter.enqueue(draft);
+        LOGGER.info(
+                "Processing request created assetId={} processingJobId={} requestEventId={}",
+                assetId,
+                savedJob.getId(),
+                draft.eventId()
+        );
         return toView(savedJob);
     }
 
@@ -77,6 +87,12 @@ public class ProcessingRequestApplicationService implements ProcessingRequestUse
         job.setProcessingRequestEventId(draft.eventId());
         ProcessingJob savedJob = processingJobStore.save(job);
         outboxWriter.enqueue(draft);
+        LOGGER.info(
+                "Processing request retried assetId={} processingJobId={} requestEventId={}",
+                assetId,
+                savedJob.getId(),
+                draft.eventId()
+        );
         return toView(savedJob);
     }
 

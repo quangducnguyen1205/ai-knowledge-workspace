@@ -17,6 +17,8 @@ import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.asset.SearchAssetUnavailableException;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,6 +27,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class IndexingAttemptTransactionService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexingAttemptTransactionService.class);
     private static final int MAX_ERROR_DETAIL_LENGTH = 1024;
 
     private final SearchIndexJobStore searchIndexJobStore;
@@ -92,6 +95,12 @@ public class IndexingAttemptTransactionService {
                     List.of(), Category.INDEXING_SOURCE_INVALID, FailureStage.BEFORE_BULK, null
             ));
             searchIndexJobStore.save(indexingJob);
+            LOGGER.warn(
+                    "Indexing failed assetId={} indexingJobId={} failureCategory={}",
+                    indexingJob.getAssetId(),
+                    indexingJob.getId(),
+                    Category.INDEXING_SOURCE_INVALID
+            );
             return completed(indexingJob);
         }
 
@@ -99,11 +108,21 @@ public class IndexingAttemptTransactionService {
         if (!indexingJob.getSnapshotFingerprint().equals(currentSnapshotFingerprint)) {
             indexingJob.markSuperseded();
             searchIndexJobStore.save(indexingJob);
+            LOGGER.info(
+                    "Indexing superseded assetId={} indexingJobId={}",
+                    indexingJob.getAssetId(),
+                    indexingJob.getId()
+            );
             return completed(indexingJob);
         }
 
         indexingJob.markIndexing();
         searchIndexJobStore.save(indexingJob);
+        LOGGER.info(
+                "Indexing started assetId={} indexingJobId={}",
+                indexingJob.getAssetId(),
+                indexingJob.getId()
+        );
         return IndexingAttempt.started(indexingJob.getId(), indexingSource);
     }
 
@@ -129,6 +148,11 @@ public class IndexingAttemptTransactionService {
                 || !indexingJob.getSnapshotFingerprint().equals(fingerprintService.fingerprint(transcriptRows))) {
             indexingJob.markSuperseded();
             searchIndexJobStore.save(indexingJob);
+            LOGGER.info(
+                    "Indexing superseded assetId={} indexingJobId={}",
+                    indexingJob.getAssetId(),
+                    indexingJob.getId()
+            );
             return result(indexingJob, 0);
         }
 
@@ -141,6 +165,12 @@ public class IndexingAttemptTransactionService {
                     "Asset was not found for search indexing job: " + indexingJob.getAssetId()
             );
         }
+        LOGGER.info(
+                "Indexing completed assetId={} indexingJobId={} indexedRowCount={}",
+                indexingJob.getAssetId(),
+                indexingJob.getId(),
+                transcriptRows.size()
+        );
         return result(indexingJob, transcriptRows.size());
     }
 

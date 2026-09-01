@@ -60,8 +60,8 @@ class ApplyProcessingResultApplicationService {
         );
         if (duplicate.isPresent()) {
             LOGGER.info(
-                    "Ignoring duplicate processing result event {} with durable status {}",
-                    event.eventId(), consumedEvent.getStatus()
+                    "Ignoring duplicate processing result resultEventId={} assetId={} requestEventId={} durableStatus={}",
+                    event.eventId(), event.aggregateId(), event.causationEventId(), consumedEvent.getStatus()
             );
             return duplicate.orElseThrow();
         }
@@ -70,10 +70,25 @@ class ApplyProcessingResultApplicationService {
         try {
             applyBusinessChange(event);
             processingResultInbox.markApplied(consumedEvent);
+            LOGGER.info(
+                    "Processing result applied resultEventId={} resultType={} assetId={} requestEventId={} status={}",
+                    event.eventId(),
+                    event.eventType(),
+                    event.aggregateId(),
+                    event.causationEventId(),
+                    consumedEvent.getStatus()
+            );
             return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), true);
         } catch (ProcessingResultEventApplyException | TranscriptArtifactAccessException exception) {
             String safeError = safeErrorDetail(exception);
-            LOGGER.warn("Processing result event {} could not be applied safely: {}", event.eventId(), safeError);
+            LOGGER.warn(
+                    "Processing result apply failed resultEventId={} resultType={} assetId={} requestEventId={} error={}",
+                    event.eventId(),
+                    event.eventType(),
+                    event.aggregateId(),
+                    event.causationEventId(),
+                    safeError
+            );
             processingResultInbox.markFailed(consumedEvent, safeError, command.recoverableEventJson());
             return new ProcessingResultHandleResult(event.eventId(), consumedEvent.getStatus(), false);
         }

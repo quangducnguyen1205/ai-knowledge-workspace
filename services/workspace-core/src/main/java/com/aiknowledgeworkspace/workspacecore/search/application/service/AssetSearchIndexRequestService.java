@@ -13,11 +13,15 @@ import com.aiknowledgeworkspace.workspacecore.search.api.IndexingRequestRow;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AssetSearchIndexRequestService implements IndexingRequestUseCase {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AssetSearchIndexRequestService.class);
 
     private static final List<AssetSearchIndexJobStatus> ACTIVE_STATUSES = List.of(
             AssetSearchIndexJobStatus.PENDING,
@@ -98,6 +102,12 @@ public class AssetSearchIndexRequestService implements IndexingRequestUseCase {
 
         searchIndexJob = searchIndexJobStore.save(searchIndexJob);
         outboxWriter.enqueue(outboxEvent);
+        LOGGER.info(
+                "Indexing requested assetId={} indexingJobId={} requestEventId={}",
+                assetId,
+                searchIndexJob.getId(),
+                outboxEvent.eventId()
+        );
         return searchIndexJob;
     }
 

@@ -39,9 +39,12 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
@@ -54,6 +57,7 @@ import org.springframework.transaction.annotation.Propagation;
         "spring.flyway.enabled=true"
 })
 @Transactional
+@ExtendWith(OutputCaptureExtension.class)
 class ProcessingResultApplicationServiceTest {
 
     @Autowired
@@ -394,6 +398,69 @@ class ProcessingResultApplicationServiceTest {
         assertThat(consumedEventRepository.findEventById(eventId).orElseThrow().getStatus())
                 .isEqualTo(ConsumedProcessingResultEventStatus.APPLIED);
         verify(transcriptArtifactGateway, never()).loadRows(processingRequestEventId);
+    }
+
+    @Test
+    void appliedResultLogsCarryAssetRequestAndResultEventIdentifiers(CapturedOutput output) {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        when(transcriptArtifactGateway.loadRows(processingRequestEventId)).thenReturn(List.of(
+                transcriptRow("row-1", 0, "Confidential lecture wording")
+        ));
+
+        processingResultEventHandler.handle(
+                transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
+        );
+
+        assertThat(output.getAll())
+                .contains("Processing result received resultEventId=" + eventId)
+                .contains("resultType=transcript.ready assetId=" + asset.getId()
+                        + " requestEventId=" + processingRequestEventId)
+                .contains("Processing result applied resultEventId=" + eventId)
+                .contains("status=APPLIED")
+                .doesNotContain("Confidential lecture wording");
+    }
+
+    @Test
+    void failedApplyLogRetainsTheSameCorrelationChain(CapturedOutput output) {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        when(transcriptArtifactGateway.loadRows(processingRequestEventId))
+                .thenThrow(new TranscriptArtifactAccessException(
+                        "FastAPI returned HTTP 503 while trying to read transcript artifact rows"
+                ));
+
+        processingResultEventHandler.handle(
+                transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId)
+        );
+
+        assertThat(output.getAll())
+                .contains("Processing result apply failed resultEventId=" + eventId)
+                .contains("assetId=" + asset.getId() + " requestEventId=" + processingRequestEventId)
+                .doesNotContain("Processing result applied resultEventId=" + eventId);
+    }
+
+    @Test
+    void duplicateResultDispositionIsObservableWithoutASecondApplyLog(CapturedOutput output) {
+        UUID processingRequestEventId = UUID.randomUUID();
+        Asset asset = persistedAsset(AssetStatus.PROCESSING, ProcessingJobStatus.RUNNING, processingRequestEventId);
+        UUID eventId = UUID.randomUUID();
+        String eventJson = transcriptReadyEvent(eventId, asset.getId(), processingRequestEventId, processingRequestEventId);
+        when(transcriptArtifactGateway.loadRows(processingRequestEventId)).thenReturn(List.of(
+                transcriptRow("row-1", 0, "One durable transcript row")
+        ));
+
+        processingResultEventHandler.handle(eventJson);
+        processingResultEventHandler.handle(eventJson);
+
+        assertThat(output.getAll())
+                .containsOnlyOnce("Processing result applied resultEventId=" + eventId)
+                .contains("Ignoring duplicate processing result resultEventId=" + eventId
+                        + " assetId=" + asset.getId()
+                        + " requestEventId=" + processingRequestEventId
+                        + " durableStatus=APPLIED");
     }
 
     @Test

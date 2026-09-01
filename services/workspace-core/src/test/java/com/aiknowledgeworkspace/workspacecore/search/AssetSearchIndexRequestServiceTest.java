@@ -31,8 +31,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class AssetSearchIndexRequestServiceTest {
 
     @Mock
@@ -98,6 +100,23 @@ class AssetSearchIndexRequestServiceTest {
         assertThat(payload.path("indexingJobId").asText()).isEqualTo(job.getId().toString());
         assertThat(payload.path("snapshotFingerprint").asText()).isEqualTo(job.getSnapshotFingerprint());
         assertThat(outboxEvent.payload()).doesNotContain("Secret transcript text", "objectKey", "credential", "password");
+    }
+
+    @Test
+    void automaticRequestLogCarriesAssetJobAndRequestEventIdentifiersWithoutTranscriptText(CapturedOutput output) {
+        properties.setAutoRequestEnabled(true);
+        UUID assetId = UUID.randomUUID();
+
+        service().requestIndexingIfEnabled(assetId, List.of(row(0, "Secret transcript text")));
+
+        ArgumentCaptor<AssetSearchIndexJob> jobCaptor = ArgumentCaptor.forClass(AssetSearchIndexJob.class);
+        verify(searchIndexJobRepository).save(jobCaptor.capture());
+        AssetSearchIndexJob job = jobCaptor.getValue();
+        assertThat(output.getAll())
+                .contains("Indexing requested assetId=" + assetId
+                        + " indexingJobId=" + job.getId()
+                        + " requestEventId=" + job.getRequestOutboxEventId())
+                .doesNotContain("Secret transcript text");
     }
 
     @Test

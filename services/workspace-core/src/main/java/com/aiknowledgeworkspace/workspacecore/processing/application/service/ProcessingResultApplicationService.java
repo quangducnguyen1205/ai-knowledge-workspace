@@ -6,12 +6,15 @@ import com.aiknowledgeworkspace.workspacecore.processing.application.model.Proce
 import com.aiknowledgeworkspace.workspacecore.processing.application.port.in.ProcessingResultUseCase;
 
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProcessingResultApplicationService implements ProcessingResultUseCase {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProcessingResultApplicationService.class);
     private static final int MAX_RECOVERABLE_EVENT_JSON_LENGTH = 8192;
 
     private final ProcessingResultEventParser eventParser;
@@ -47,6 +50,14 @@ public class ProcessingResultApplicationService implements ProcessingResultUseCa
 
     private ProcessingResultHandleResult parseAndApply(String rawEventJson, boolean manualRecovery) {
         ProcessingResultEventEnvelope event = parseEvent(rawEventJson);
+        LOGGER.info(
+                "Processing result received resultEventId={} resultType={} assetId={} requestEventId={} manualRecovery={}",
+                event.eventId(),
+                event.eventType(),
+                event.aggregateId(),
+                event.causationEventId(),
+                manualRecovery
+        );
         String recoverableEventJson = eventParser.recoverableEnvelopeJson(rawEventJson, event);
         if (recoverableEventJson.length() > MAX_RECOVERABLE_EVENT_JSON_LENGTH) {
             throw new ProcessingResultEventRejectedException(

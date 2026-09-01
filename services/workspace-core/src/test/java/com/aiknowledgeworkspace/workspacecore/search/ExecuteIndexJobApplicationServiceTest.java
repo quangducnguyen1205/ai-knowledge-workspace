@@ -40,6 +40,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -50,7 +52,7 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.web.client.RestClient;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class ExecuteIndexJobApplicationServiceTest {
 
     @Mock
@@ -316,6 +318,35 @@ class ExecuteIndexJobApplicationServiceTest {
                 .doesNotContain(assetId.toString());
         verify(indexingAssetPort, never()).markSearchable(assetId);
         mockServer.verify();
+    }
+
+    @Test
+    void elasticsearchFailureLogRetainsAssetAndJobCorrelation(CapturedOutput output) {
+        UUID assetId = UUID.randomUUID();
+        IndexingAssetSource indexingSource = source(assetId, UUID.randomUUID(), "Lecture 4", List.of(
+                transcriptRow("row-1", 0, "Private transcript sentence")
+        ));
+        String fingerprint = new TranscriptSnapshotFingerprintService()
+                .fingerprint(indexingSource.transcriptRows());
+        AssetSearchIndexJob indexingJob = new AssetSearchIndexJob(UUID.randomUUID(), assetId, fingerprint);
+
+        when(searchIndexJobRepository.findById(indexingJob.getId())).thenReturn(Optional.of(indexingJob));
+        when(indexingAssetPort.findCurrentIndexingSource(assetId)).thenReturn(Optional.of(indexingSource));
+
+        expectIndexExists();
+        mockServer.expect(once(), requestTo("http://localhost:9201/asset-transcript-rows/_delete_by_query?refresh=true&ignore_unavailable=true"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> executor.execute(indexingJob.getId()))
+                .isInstanceOf(SearchIndexOperationException.class);
+
+        assertThat(output.getAll())
+                .contains("Indexing started assetId=" + assetId + " indexingJobId=" + indexingJob.getId())
+                .contains("Indexing attempt failed assetId=" + assetId
+                        + " indexingJobId=" + indexingJob.getId()
+                        + " failureStage=BEFORE_BULK failureCategory=ELASTICSEARCH_RESPONSE_INVALID")
+                .doesNotContain("Private transcript sentence");
     }
 
     @Test

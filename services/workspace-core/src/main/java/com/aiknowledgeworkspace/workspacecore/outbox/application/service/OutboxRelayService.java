@@ -14,18 +14,23 @@ import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayExecutionPolicy;
 import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayOutcome;
 import com.aiknowledgeworkspace.workspacecore.outbox.api.RelayRequest;
 import com.aiknowledgeworkspace.workspacecore.outbox.api.RelaySelection;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureClassification;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class OutboxRelayService implements OutboxRelay {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OutboxRelayService.class);
 
     private final OutboxEventStore outboxEventStore;
     private final OutboxMessagePublisher outboxMessagePublisher;
@@ -160,9 +165,16 @@ public class OutboxRelayService implements OutboxRelay {
 
         try {
             outboxMessagePublisher.publish(claimedEvent);
-            return markPublished(claimedEvent.getId());
+            OutboxEventStatus publishedStatus = markPublished(claimedEvent.getId());
+            LOGGER.info(
+                    "Outbox event published eventId={} eventType={} aggregateId={}",
+                    claimedEvent.getId(),
+                    claimedEvent.getEventType(),
+                    claimedEvent.getAggregateId()
+            );
+            return publishedStatus;
         } catch (RuntimeException exception) {
-            return recordPublishFailure(claimedEvent.getId(), exception);
+            return recordPublishFailure(claimedEvent, exception);
         }
     }
 
@@ -194,13 +206,15 @@ public class OutboxRelayService implements OutboxRelay {
         });
     }
 
-    private OutboxEventStatus recordPublishFailure(UUID eventId, RuntimeException exception) {
-        return transactionTemplate.execute(status -> {
+    private OutboxEventStatus recordPublishFailure(OutboxEvent claimedEvent, RuntimeException exception) {
+        UUID eventId = claimedEvent.getId();
+        OutboxFailureClassification classification = failureClassifier.classify(exception);
+        OutboxEventStatus recordedStatus = transactionTemplate.execute(status -> {
             OutboxEvent event = outboxEventStore.findById(eventId)
                     .orElseThrow(() -> new IllegalStateException("Outbox event was not found after publish failure: " + eventId));
             Instant failedAt = Instant.now(clock);
             event.recordPublishFailure(
-                    failureClassifier.classify(exception),
+                    classification,
                     failedAt,
                     failedAt.plus(resolvedRetryDelay()),
                     resolvedMaxAttempts(),
@@ -210,6 +224,15 @@ public class OutboxRelayService implements OutboxRelay {
             outboxEventStore.save(event);
             return event.getStatus();
         });
+        LOGGER.warn(
+                "Outbox event publication failed eventId={} eventType={} aggregateId={} status={} failureCategory={}",
+                eventId,
+                claimedEvent.getEventType(),
+                claimedEvent.getAggregateId(),
+                recordedStatus,
+                classification.safeCategory()
+        );
+        return recordedStatus;
     }
 
     private void validateSelectedEvent(OutboxEvent event, Instant now, EventTypeConstraint constraint) {
