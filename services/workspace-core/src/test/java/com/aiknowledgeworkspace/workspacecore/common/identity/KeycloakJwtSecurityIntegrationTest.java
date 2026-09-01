@@ -110,6 +110,20 @@ class KeycloakJwtSecurityIntegrationTest {
     }
 
     @Test
+    void healthProbesStayAnonymouslyReachableWhileManagementStaysBehindAuthentication() throws Exception {
+        // Deployment probes cannot carry a user JWT: liveness, readiness, and the /health
+        // alias must answer anonymously. Everything else on the management surface stays
+        // behind the authenticated perimeter — no /api/** weakening, no other anonymous path.
+        mockMvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
+        mockMvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+        mockMvc.perform(get("/health")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.service").value("workspace-core"));
+
+        mockMvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/configprops")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void workspaceOwnershipStillUsesSpringProductUser() throws Exception {
         MvcResult createWorkspaceResult = mockMvc.perform(post("/api/workspaces")
                         .with(jwt().jwt(jwtFor("owner-subject", "owner@example.com")))

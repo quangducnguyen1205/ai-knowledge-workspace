@@ -25,6 +25,27 @@ spring:
 server:
   port: ${SERVER_PORT:8081}
 
+# Health semantics, not tunables: liveness answers "should the orchestrator restart this
+# process", readiness answers "can this instance safely take core product traffic". Only
+# PostgreSQL participates in readiness — every authenticated product request needs canonical
+# state, while Elasticsearch/FastAPI are capability components that must not pull the whole
+# instance out of traffic. Only the health endpoint is exposed over the web; details stay
+# hidden because the probe surface is reachable without authentication.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-components: always
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,db
+
 workspace:
   default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
   security:

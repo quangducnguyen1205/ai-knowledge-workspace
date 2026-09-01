@@ -87,4 +87,27 @@ class FastApiClientConfigTest {
 
         assertThat(authorizationHeadersByPath.get("/processing")).isEmpty();
     }
+
+    @Test
+    void healthProbeClientNeverSendsTheInternalBearerTokenEvenWhenConfigured() {
+        FastApiProperties properties = propertiesWithToken("local-test-internal-token");
+
+        config.fastApiHealthRestClient(properties).get().uri("/health").retrieve().toBodilessEntity();
+
+        assertThat(authorizationHeadersByPath.get("/health")).isEmpty();
+    }
+
+    @Test
+    void healthProbeClientUsesItsOwnShortReadTimeoutNotTheProcessingOne() {
+        FastApiProperties properties = spy(new FastApiProperties());
+        properties.setConnectTimeout(Duration.ofSeconds(5));
+        properties.setReadTimeout(Duration.ofSeconds(30));
+
+        RestClient client = new FastApiClientConfig().fastApiHealthRestClient(properties);
+
+        assertThat(client).isNotNull();
+        verify(properties).getConnectTimeout();
+        verify(properties, never()).getReadTimeout();
+        verify(properties, never()).getAssistantReadTimeout();
+    }
 }

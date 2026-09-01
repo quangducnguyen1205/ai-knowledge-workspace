@@ -10,6 +10,8 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class FastApiClientConfig {
 
+    private static final Duration HEALTH_PROBE_READ_TIMEOUT = Duration.ofSeconds(2);
+
     @Bean("fastApiRestClient")
     RestClient fastApiRestClient(FastApiProperties properties) {
         return buildRestClient(properties, properties.getReadTimeout());
@@ -18,6 +20,20 @@ public class FastApiClientConfig {
     @Bean("fastApiAssistantRestClient")
     RestClient fastApiAssistantRestClient(FastApiProperties properties) {
         return buildRestClient(properties, properties.getAssistantReadTimeout());
+    }
+
+    @Bean("fastApiHealthRestClient")
+    RestClient fastApiHealthRestClient(FastApiProperties properties) {
+        // The processor's /health is intentionally unauthenticated, so the probe client
+        // carries no bearer token; a hung processor must stall the health surface for at
+        // most this short bound, not the full processing read timeout.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeout().toMillis()));
+        requestFactory.setReadTimeout(Math.toIntExact(HEALTH_PROBE_READ_TIMEOUT.toMillis()));
+        return RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(requestFactory)
+                .build();
     }
 
     private RestClient buildRestClient(FastApiProperties properties, Duration readTimeout) {

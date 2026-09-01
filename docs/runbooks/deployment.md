@@ -133,12 +133,35 @@ kill was originally observed.
 | Elasticsearch | `GET /_cluster/health` must report `green` or `yellow`, 30 s start period |
 | Kafka | `kafka-topics.sh --list` against the internal listener |
 | MinIO | `GET /minio/health/live` |
-| Spring | `GET /api/build-info` answers once the context is up; `GET /api/me` returns `401` or `200` |
+| Spring | liveness/readiness probes below; `GET /api/build-info` reports the running revision |
 | FastAPI | its own compose health configuration in `DemoFastAPI` |
 | Frontend | `GET http://localhost:5173` returns `200` |
 
 `kafka-create-topics` and `minio-create-bucket` are one-shot jobs. They exit `0` after doing their
 work; an `Exited (0)` status for those two is the healthy steady state.
+
+### Spring liveness, readiness, and capability health
+
+Spring exposes the standard actuator health surface, anonymously and on the application port.
+Only the `health` endpoint is exposed; every other management endpoint (`env`, `configprops`,
+`beans`, …) is not reachable. Responses carry component names and statuses only — never
+connection details or exception text.
+
+| Probe | Path | Meaning of `DOWN` / non-200 |
+|---|---|---|
+| Liveness | `GET /actuator/health/liveness` | The process itself is broken — restarting it may be appropriate. Never depends on any remote service; a PostgreSQL outage does **not** fail liveness |
+| Readiness | `GET /actuator/health/readiness` | Do not send product traffic. Includes exactly `readinessState` + `db`: without canonical PostgreSQL state no authenticated product request can be served |
+| Aggregate | `GET /actuator/health` | Diagnostic view — worst status across all components, including capabilities. `503` here with readiness still `200` means a capability is degraded, not that the instance must leave traffic |
+| Compatibility alias | `GET /health` | Same verdict as readiness, in the legacy shape `{"status","service"}` used by the smoke tooling. No longer a static `UP`: it returns `503`/`DOWN` when readiness fails |
+
+Capability components in the aggregate view: `elasticsearch` (search — `_cluster/health`
+green/yellow is up, red or unreachable is down) and `fastapi` (processing/assistant — its
+unauthenticated `GET /health`, probed without the internal bearer token). A degraded capability
+means that feature is unavailable while workspace, library, and authentication continue to work,
+so these components are deliberately excluded from readiness. Kafka is not probed: publication
+goes through the durable outbox and retries when the broker returns, so broker health belongs to
+the later Kafka-operability task. MinIO likewise stays unprobed rather than gaining a
+write-or-list probe that no traffic decision would consume.
 
 ## Build identity
 

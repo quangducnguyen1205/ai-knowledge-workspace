@@ -121,7 +121,9 @@ Use the legacy fallback path only when you intentionally want a local/dev shortc
 - [ ] P3-B2 verified the controlled runtime path with Kafka and Elasticsearch: a stable Spring-owned snapshot produced one indexing job and one metadata-only outbox event, a scoped relay published exactly that selected event, the disabled-by-default indexing listener marked the job `INDEXED` and asset `SEARCHABLE`, search/context APIs returned the expected selected asset, and PostgreSQL state blocked stale Elasticsearch documents after the asset was set back to `TRANSCRIPT_READY`. This smoke did not run FastAPI media processing.
 - [ ] Indexing completion rechecks the current transcript fingerprint before marking an asset `SEARCHABLE`; stale or superseded jobs must not make a newer snapshot searchable.
 - [ ] Start Spring Boot for `services/workspace-core`.
-- [ ] Check Spring Boot health:
+- [ ] Check Spring Boot health (`/health` reports readiness, not a static answer — it returns
+      `503`/`DOWN` when PostgreSQL is unavailable; liveness and per-capability components live
+      under `/actuator/health*`, see `docs/runbooks/deployment.md`):
   - [ ] `curl http://localhost:8081/health`
   - [ ] Expect HTTP `200`
   - [ ] Expect JSON with:
