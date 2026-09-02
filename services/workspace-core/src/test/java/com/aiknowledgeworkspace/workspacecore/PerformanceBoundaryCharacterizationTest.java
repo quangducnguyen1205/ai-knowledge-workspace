@@ -3,10 +3,12 @@ package com.aiknowledgeworkspace.workspacecore;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiknowledgeworkspace.workspacecore.asset.application.model.AssetTranscriptRowInput;
+import com.aiknowledgeworkspace.workspacecore.asset.application.port.in.AssetQueryUseCase;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.CanonicalTranscriptStore;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
 import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
+import com.aiknowledgeworkspace.workspacecore.identity.application.configuration.CurrentUserProperties;
 import com.aiknowledgeworkspace.workspacecore.workspace.application.port.out.WorkspaceStore;
 import com.aiknowledgeworkspace.workspacecore.workspace.domain.Workspace;
 import jakarta.persistence.EntityManagerFactory;
@@ -15,16 +17,21 @@ import java.util.List;
 import java.util.UUID;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Measures a boundary an audit flagged, so it is classified from numbers rather than from reading
  * the code. Nothing here asserts a latency budget — wall time on in-memory H2 is not a production
  * number. What it does assert is the structural cost that does not depend on the engine: how many
- * JDBC statements one transcript write costs. That count is what scales with the input.
+ * JDBC statements one transcript write costs, and how many Asset rows one page of the Asset
+ * list loads. Those two counts are what scale with the input.
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:workspace-core-perf-boundary;"
@@ -50,6 +57,9 @@ class PerformanceBoundaryCharacterizationTest {
     private CanonicalTranscriptStore transcriptStore;
 
     @Autowired
+    private AssetQueryUseCase assetQueries;
+
+    @Autowired
     private AssetStore assetStore;
 
     @Autowired
@@ -60,6 +70,9 @@ class PerformanceBoundaryCharacterizationTest {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private CurrentUserProperties currentUserProperties;
 
     private Statistics statistics() {
         return entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
@@ -90,6 +103,48 @@ class PerformanceBoundaryCharacterizationTest {
                 ENFORCED_TRANSCRIPT_CEILING, statements, millis
         );
         assertBatched(statements, ENFORCED_TRANSCRIPT_CEILING);
+    }
+
+    @Test
+    void onePageOfTheAssetListLoadsOnlyThatPage() {
+        UUID workspaceId = workspace("owner-perf-3");
+        int assetCount = 400;
+        transactionTemplate.executeWithoutResult(status -> {
+            for (int index = 0; index < assetCount; index++) {
+                uploadAsset(workspaceId, "Lecture " + index);
+            }
+        });
+        authenticateAs("owner-perf-3");
+
+        Statistics statistics = statistics();
+        statistics.clear();
+        var page = assetQueries.listAssets(workspaceId, 0, 20, null);
+        long loaded = statistics.getEntityLoadCount();
+
+        System.out.printf(
+                "PERF asset_list workspace_assets=%d page_size=%d entities_loaded=%d%n",
+                assetCount, page.size(), loaded
+        );
+        assertThat(page.items()).hasSize(20);
+        assertThat(page.totalElements()).isEqualTo(assetCount);
+        // The cost of one page must not scale with how large the workspace is. The count sits a
+        // little above the page size because resolving the workspace loads its own row.
+        assertThat(loaded)
+                .withFailMessage(
+                        "one page of %d loaded %d of %d Assets; pagination is not applied by the database",
+                        page.size(), loaded, assetCount)
+                .isLessThan(assetCount / 4L);
+    }
+
+    private void authenticateAs(String userId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession(true).setAttribute(currentUserProperties.getSessionAttributeName(), userId);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    }
+
+    @AfterEach
+    void clearRequestContext() {
+        RequestContextHolder.resetRequestAttributes();
     }
 
     /**

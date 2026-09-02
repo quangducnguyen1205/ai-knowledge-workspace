@@ -41,9 +41,6 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
     private static final int DEFAULT_ASSET_LIST_PAGE = 0;
     private static final int DEFAULT_ASSET_LIST_SIZE = 20;
     private static final int MAX_ASSET_LIST_SIZE = 100;
-    private static final Comparator<Asset> ASSET_LIST_COMPARATOR = Comparator
-            .comparing(Asset::getCreatedAt, Comparator.reverseOrder())
-            .thenComparing(Asset::getId, Comparator.reverseOrder());
     private static final int DEFAULT_TRANSCRIPT_CONTEXT_WINDOW = 2;
     private static final int MAX_TRANSCRIPT_CONTEXT_WINDOW = 5;
     private static final Pattern SAFE_FAILURE_CODE = Pattern.compile("[A-Z0-9_.-]{1,64}");
@@ -75,14 +72,15 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
         int resolvedPage = resolvePage(page);
         int resolvedSize = resolveSize(size);
         WorkspaceAccess workspace = workspaceQueryApplication.resolveWorkspaceOrDefault(workspaceId);
-        List<Asset> filteredAssets = loadAssetsForWorkspace(workspace).stream()
-                .filter(asset -> assetStatus == null || asset.getStatus() == assetStatus)
-                .toList();
-        int totalElements = filteredAssets.size();
-        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / resolvedSize);
-        int startIndex = (int) Math.min((long) resolvedPage * resolvedSize, totalElements);
-        int endIndex = Math.min(startIndex + resolvedSize, totalElements);
-        List<AssetSummary> items = filteredAssets.subList(startIndex, endIndex).stream()
+        // The page is cut by the database. Loading the whole workspace and slicing it here made
+        // every request cost one row read per Asset the workspace has ever held.
+        int totalElements = (int) assetStore.countWorkspaceAssets(workspace.workspaceId(), assetStatus);
+        int totalPages = totalElements == 0
+                ? 0
+                : (int) Math.ceil((double) totalElements / resolvedSize);
+        List<AssetSummary> items = assetStore
+                .findWorkspacePage(workspace.workspaceId(), assetStatus, resolvedPage, resolvedSize)
+                .stream()
                 .map(this::toSummary)
                 .toList();
         return new AssetPage(
@@ -233,14 +231,6 @@ public class AssetQueryApplicationService implements AssetQueryUseCase {
             );
         }
         return size;
-    }
-
-    private List<Asset> loadAssetsForWorkspace(WorkspaceAccess workspace) {
-        List<Asset> assets = new ArrayList<>(
-                assetStore.findByWorkspaceId(workspace.workspaceId())
-        );
-        assets.sort(ASSET_LIST_COMPARATOR);
-        return assets;
     }
 
     private AssetSummary toSummary(Asset asset) {

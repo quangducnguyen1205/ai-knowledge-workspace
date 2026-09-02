@@ -10,6 +10,8 @@ import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetSourceType;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -141,23 +143,20 @@ class AssetQueryApplicationServiceTest {
     }
 
     @Test
-    void listAppliesStableOrderingFilteringAndPaginationInApplicationLayer() {
+    void listDelegatesOrderingFilteringAndPaginationToTheStore() {
         UUID workspaceId = UUID.randomUUID();
         when(workspaceAccess.resolveWorkspaceOrDefault(workspaceId))
                 .thenReturn(new WorkspaceAccess(workspaceId, "owner-1"));
-        Asset older = asset(
-                UUID.fromString("00000000-0000-0000-0000-000000000001"),
-                workspaceId,
-                AssetStatus.SEARCHABLE,
-                Instant.parse("2026-01-01T00:00:00Z")
-        );
         Asset newer = asset(
                 UUID.fromString("00000000-0000-0000-0000-000000000002"),
                 workspaceId,
                 AssetStatus.SEARCHABLE,
                 Instant.parse("2026-01-02T00:00:00Z")
         );
-        when(assetStore.findByWorkspaceId(workspaceId)).thenReturn(List.of(older, newer));
+        // The database returns the page; the service must not re-slice or re-sort it.
+        when(assetStore.countWorkspaceAssets(workspaceId, AssetStatus.SEARCHABLE)).thenReturn(2L);
+        when(assetStore.findWorkspacePage(workspaceId, AssetStatus.SEARCHABLE, 0, 1))
+                .thenReturn(List.of(newer));
 
         AssetPage page = service.listAssets(workspaceId, 0, 1, AssetStatus.SEARCHABLE);
 
@@ -168,6 +167,25 @@ class AssetQueryApplicationServiceTest {
             assertThat(item.sourceType()).isEqualTo(AssetSourceType.UPLOAD);
             assertThat(item.youtubeVideoId()).isNull();
         });
+        verify(assetStore, never()).findByWorkspaceId(workspaceId);
+    }
+
+    @Test
+    void listAsksTheStoreForTheRequestedPageAndFilterUnchanged() {
+        UUID workspaceId = UUID.randomUUID();
+        when(workspaceAccess.resolveWorkspaceOrDefault(workspaceId))
+                .thenReturn(new WorkspaceAccess(workspaceId, "owner-1"));
+        when(assetStore.countWorkspaceAssets(workspaceId, null)).thenReturn(97L);
+        when(assetStore.findWorkspacePage(workspaceId, null, 3, 20)).thenReturn(List.of());
+
+        AssetPage page = service.listAssets(workspaceId, 3, 20, null);
+
+        assertThat(page.page()).isEqualTo(3);
+        assertThat(page.size()).isEqualTo(20);
+        assertThat(page.totalElements()).isEqualTo(97);
+        assertThat(page.totalPages()).isEqualTo(5);
+        assertThat(page.hasNext()).isTrue();
+        verify(assetStore).findWorkspacePage(workspaceId, null, 3, 20);
     }
 
     @Test

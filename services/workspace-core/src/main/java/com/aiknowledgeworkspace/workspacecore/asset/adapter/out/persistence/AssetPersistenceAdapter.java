@@ -1,11 +1,14 @@
 package com.aiknowledgeworkspace.workspacecore.asset.adapter.out.persistence;
 
 import com.aiknowledgeworkspace.workspacecore.asset.domain.Asset;
+import com.aiknowledgeworkspace.workspacecore.asset.domain.AssetStatus;
 import com.aiknowledgeworkspace.workspacecore.asset.application.exception.DuplicateYouTubeAssetException;
 import com.aiknowledgeworkspace.workspacecore.asset.application.port.out.AssetStore;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.hibernate.exception.ConstraintViolationException;
@@ -37,8 +40,25 @@ class AssetPersistenceAdapter implements AssetStore {
     }
 
     @Override
+    public List<Asset> findWorkspacePage(UUID workspaceId, AssetStatus status, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return status == null
+                ? assetRepository.findByWorkspaceIdOrderByCreatedAtDescIdDesc(workspaceId, pageable)
+                : assetRepository.findByWorkspaceIdAndStatusOrderByCreatedAtDescIdDesc(
+                        workspaceId, status, pageable
+                );
+    }
+
+    @Override
     public long countByWorkspaceId(UUID workspaceId) {
         return assetRepository.countByWorkspaceId(workspaceId);
+    }
+
+    @Override
+    public long countWorkspaceAssets(UUID workspaceId, AssetStatus status) {
+        return status == null
+                ? assetRepository.countByWorkspaceId(workspaceId)
+                : assetRepository.countByWorkspaceIdAndStatus(workspaceId, status);
     }
 
     @Override
