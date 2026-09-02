@@ -11,8 +11,14 @@ spring:
     open-in-view: false
     properties:
       hibernate:
+        # A transcript replacement writes one row per segment, up to the 20 000 the artifact
+        # validator accepts. Without batching that is one round trip per row inside a single
+        # transaction. Ordering inserts lets Hibernate group a mixed flush into full batches.
         jdbc:
           time_zone: UTC
+          batch_size: ${WORKSPACE_CORE_JDBC_BATCH_SIZE:100}
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: ${WORKSPACE_CORE_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
