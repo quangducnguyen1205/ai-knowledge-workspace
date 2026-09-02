@@ -1,6 +1,6 @@
 .PHONY: help test test-core test-workspace-core compile smoke smoke-workspace \
         infra-up infra-down infra-logs infra-wait kafka-config-check run run-project3 \
-        require-media-file build-identity stack-up stack-down
+        require-media-file build-identity stack-up stack-down search-rebuild
 
 WORKSPACE_CORE_MODULE ?= services/workspace-core
 WORKSPACE_CORE_POM ?= $(WORKSPACE_CORE_MODULE)/pom.xml
@@ -18,6 +18,7 @@ ENV_FILE ?= .env
 COMPOSE_FILE ?= infra/docker-compose.dev.yml
 KAFKA_CONFIG_VALIDATOR ?= infra/scripts/validate-kafka-runtime-config.py
 SPRING_PROFILE ?= project3
+SEARCH_REBUILD_COMMAND ?= rebuild_all
 
 help:
 	@printf '%s\n' \
@@ -32,6 +33,7 @@ help:
 		'  make kafka-config-check  Statically validate rendered local Kafka resource/restart settings' \
 		'  make run                 Run workspace-core with the coherent project3 profile' \
 		'  make run-project3        Alias for the normal integrated run target' \
+		'  make search-rebuild      Rebuild the Elasticsearch projection from PostgreSQL, then exit' \
 		'  make test                Run workspace-core tests' \
 		'  make test-core           Run workspace-core tests' \
 		'  make test-workspace-core Run workspace-core tests' \
@@ -101,6 +103,14 @@ run:
 
 run-project3:
 	$(MAKE) run SPRING_PROFILE=project3
+
+# Rebuilds the Elasticsearch projection from canonical PostgreSQL transcripts, then exits.
+# PostgreSQL is never written to; search is degraded per asset while its documents are replaced.
+# SEARCH_REBUILD_COMMAND=report_candidates reports what a rebuild would touch without writing.
+search-rebuild:
+	set -a && . "$(ENV_FILE)" && set +a && cd "$(WORKSPACE_CORE_MODULE)" && \
+	mvn spring-boot:run -Dspring-boot.run.profiles="$(SPRING_PROFILE)" \
+	-Dspring-boot.run.arguments="--workspace.search.rebuild.command=$(SEARCH_REBUILD_COMMAND)"
 
 test:
 	mvn -q -f "$(WORKSPACE_CORE_POM)" test

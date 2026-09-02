@@ -194,6 +194,57 @@ copy, and a wedge detector has no deployment reason to vary.
 **Backlog is not a wedge.** A high `pending` count while Kafka is down is work queued correctly;
 the outbox is doing its job. Read `stuck` for corruption and `pending` for pressure.
 
+### Rebuilding the search projection from PostgreSQL
+
+PostgreSQL holds the truth; Elasticsearch is a projection of it. When that projection is lost —
+index deleted, emptied, or holding documents that no longer match the transcripts — rebuild it:
+
+```bash
+make search-rebuild
+```
+
+That starts workspace-core with `--workspace.search.rebuild.command=rebuild_all`, rebuilds, prints
+a summary, and exits. Nothing else runs it: no scheduler and no ordinary start ever rebuilds,
+because the command defaults to `none`. To see the scope first without writing anything:
+
+```bash
+make search-rebuild SEARCH_REBUILD_COMMAND=report_candidates
+```
+
+Expected output, one line on stdout plus the same counts in the logs:
+
+```text
+SPRING_SEARCH_REBUILD eligible=42 indexed=41 superseded=1 skipped=0 failed=0
+```
+
+`indexed` reached Elasticsearch; `superseded` means the transcript changed mid-run and a newer job
+owns that asset; `skipped` means no canonical rows, or live indexing already had that exact
+snapshot in flight. **A run with `failed` above zero exits non-zero** and never reports success —
+rerun it once the cause is fixed.
+
+**What it does.** It pages through the assets that hold canonical transcript rows (50 per batch),
+and for each one records a new indexing job carrying the fingerprint of the transcript as it stands
+now, then runs the ordinary indexing path: read the canonical transcript, verify the fingerprint,
+replace that asset's documents, finalise. Old job history is never edited — the earlier success was
+real. The rebuild job carries no request event id, because no `asset.indexing.requested` event
+happened; an operator asked for this.
+
+**What it needs.** PostgreSQL and Elasticsearch, and nothing else. It does not use Kafka or the
+outbox, so a broker outage does not block recovery.
+
+**What it touches.** PostgreSQL is only read (plus the new job rows). In Elasticsearch each asset's
+documents are deleted and rewritten, so **search for an asset is briefly incomplete while its turn
+runs**; readiness stays UP because core product traffic is unaffected. The index itself is created
+if absent with the current mapping. Rerunning is safe: document ids are derived from the asset and
+transcript row, so a second run converges on the same documents rather than duplicating them.
+
+If the index exists but its *mapping* is wrong, delete the index first (`DELETE /<index>` against
+Elasticsearch) and then rebuild — the rebuild recreates it with the current mapping. The command
+never deletes anything outside the configured transcript index.
+
+**Not the same as stale-`INDEXING` recovery** below: that finishes a single attempt a crash
+interrupted, and runs automatically. This reconstructs the whole projection, and only when asked.
+
 ### Automatic recovery of stale indexing claims
 
 An indexing job that is still `INDEXING` long after it was claimed means the worker running that

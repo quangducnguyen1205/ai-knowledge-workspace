@@ -12,6 +12,13 @@ public interface CanonicalTranscriptStore {
     List<AssetTranscriptRowView> load(UUID assetId);
 
     /**
+     * Ids of assets that hold canonical transcript rows, ordered by asset and starting after
+     * {@code afterAssetId} (or from the beginning when it is {@code null}). Bounded by
+     * {@code limit} so a caller can page through the whole set without loading it.
+     */
+    List<UUID> findAssetIdsWithCanonicalRows(UUID afterAssetId, int limit);
+
+    /**
      * Loads only the requested canonical rows of one Asset. Identity is the stored
      * {@code transcriptRowId}; rows that never received one keep the {@code segment-<index>}
      * convention. A supplied identifier never falls back to a different row.

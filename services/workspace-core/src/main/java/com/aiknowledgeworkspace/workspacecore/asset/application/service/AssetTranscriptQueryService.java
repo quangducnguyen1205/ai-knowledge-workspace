@@ -60,6 +60,16 @@ public class AssetTranscriptQueryService {
                 .toList();
     }
 
+    /**
+     * Assets that hold canonical transcript rows, paged by asset id. This is the same condition the
+     * normal indexing path requires — an asset without usable rows produces no projection — so a
+     * rebuild driven by this list cannot resurrect anything ordinary indexing would exclude.
+     */
+    @Transactional(readOnly = true)
+    public List<UUID> findAssetIdsWithCanonicalTranscript(UUID afterAssetId, int limit) {
+        return transcriptStore.findAssetIdsWithCanonicalRows(afterAssetId, limit);
+    }
+
     @Transactional(readOnly = true)
     public Optional<AssetIndexingSource> findCurrentIndexingSource(UUID assetId) {
         return assetStore.findById(assetId)

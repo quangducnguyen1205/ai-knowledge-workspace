@@ -54,6 +54,11 @@ public class SearchAssetPortAdapter implements IndexingAssetPort, SearchAssetQue
     }
 
     @Override
+    public List<UUID> findProjectionSourceAssetIds(UUID afterAssetId, int limit) {
+        return transcriptQueryService.findAssetIdsWithCanonicalTranscript(afterAssetId, limit);
+    }
+
+    @Override
     public IndexingAssetSource loadAuthorizedIndexingSource(UUID assetId) {
         try {
             AssetDetails details = transcriptQueryService.getAuthorizedAssetDetails(assetId);

@@ -14,6 +14,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -33,6 +35,14 @@ class CanonicalTranscriptPersistenceAdapter implements CanonicalTranscriptStore 
     @Override
     public List<AssetTranscriptRowView> load(UUID assetId) {
         return sorted(transcriptRepository.findByAssetId(assetId));
+    }
+
+    @Override
+    public List<UUID> findAssetIdsWithCanonicalRows(UUID afterAssetId, int limit) {
+        Pageable page = PageRequest.of(0, limit);
+        return afterAssetId == null
+                ? transcriptRepository.findDistinctAssetIds(page)
+                : transcriptRepository.findDistinctAssetIdsAfter(afterAssetId, page);
     }
 
     @Override
