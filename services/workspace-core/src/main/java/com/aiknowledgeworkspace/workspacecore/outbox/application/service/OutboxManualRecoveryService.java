@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.outbox.application.service;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxRecoveryOrigin;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxEventStore;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDeliveryStatus;
@@ -33,7 +34,7 @@ class OutboxManualRecoveryService implements OutboxManualRecovery {
         OutboxEvent event = repository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalStateException("Outbox event was not found: " + request.eventId()));
         validate(event, request, Instant.now(clock));
-        event.requeueFromPublishing();
+        event.requeueFromPublishing(OutboxRecoveryOrigin.OPERATOR_COMMAND);
         repository.save(event);
         return OutboxDeliveryStatus.valueOf(event.getStatus().name());
     }

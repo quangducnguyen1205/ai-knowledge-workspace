@@ -33,4 +33,22 @@ class OutboxRecoveryDisabledTest {
         assertThat(result.requeued()).isZero();
         verifyNoInteractions(repository, transactionTemplate);
     }
+
+    @Test
+    void disabledRecoveryDoesNotScanForOrRequeueStalePublishingClaims() {
+        OutboxEventStore repository = mock(OutboxEventStore.class);
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        OutboxRecoveryService service = new OutboxRecoveryService(
+                repository,
+                new OutboxRecoveryProperties(),
+                transactionTemplate,
+                Clock.systemUTC()
+        );
+
+        OutboxRecoveryResult result = service.recoverStalePublishing();
+
+        assertThat(result.disabled()).isTrue();
+        assertThat(result.requeued()).isZero();
+        verifyNoInteractions(repository, transactionTemplate);
+    }
 }

@@ -169,10 +169,17 @@ public class OutboxEvent {
         nextRecoveryAt = null;
     }
 
-    public void requeueFromPublishing() {
+    /**
+     * Returns a claimed event to the relay queue. The claim is abandoned rather than failed, so the
+     * attempt and recovery budgets are left alone: a crash between claim and publish is not
+     * evidence that publication was rejected, and must not consume the retry allowance. The origin
+     * is recorded as the row's last category so the recovery is visible after the fact.
+     */
+    public void requeueFromPublishing(OutboxRecoveryOrigin origin) {
         status = OutboxEventStatus.PENDING;
         nextAttemptAt = null;
         publishedAt = null;
+        lastFailureCategory = origin.name();
     }
 
     @PrePersist

@@ -194,6 +194,45 @@ copy, and a wedge detector has no deployment reason to vary.
 **Backlog is not a wedge.** A high `pending` count while Kafka is down is work queued correctly;
 the outbox is doing its job. Read `stuck` for corruption and `pending` for pressure.
 
+### Automatic recovery of stale publication claims
+
+When `WORKSPACE_CORE_OUTBOX_RECOVERY_ENABLED=true` (the Project3 profile sets it), the recovery
+scheduler that already requeues transient failures also clears abandoned publication claims. Every
+`WORKSPACE_CORE_OUTBOX_RECOVERY_INTERVAL` (30s) it takes up to
+`WORKSPACE_CORE_OUTBOX_RECOVERY_BATCH_SIZE` (50) rows that are still `PUBLISHING` with a claim older
+than `WORKSPACE_CORE_OUTBOX_RECOVERY_STALE_PUBLISHING_AGE` (5m) and returns them to `PENDING`. The
+scheduler never talks to Kafka: the normal relay stays the only publisher, and simply picks the row
+up again on its next pass.
+
+The margin is deliberate. A healthy publish holds the claim for at most the Kafka send timeout
+(`WORKSPACE_CORE_KAFKA_SEND_TIMEOUT`, 10s), so a five-minute-old claim is thirty times beyond any
+healthy send and means the process holding it is gone. The same threshold drives
+`project3.outbox.stuck`, so what the gauge counts is exactly what recovery will act on.
+
+**This is at-least-once, and it can duplicate.** A stale row does not prove Kafka never received the
+event — the process may have died after the broker accepted it and before the row was marked
+`PUBLISHED`. Recovery republishes anyway, because a duplicate is recoverable and a silently dropped
+event is not. Safety comes from stable identity: the event keeps its original id, and both consumers
+are keyed on it. The processor stores `event_id` as the primary key of its request table and
+short-circuits a repeat without dispatching a second transcription; the indexing consumer requires
+the event id to match the job's recorded request id and returns immediately for a job that already
+finished. Recovery must therefore never mint a new event id.
+
+Rows show where they have been: an automatically recovered row carries
+`last_failure_category = AUTOMATIC_STALE_PUBLISHING`, an operator-requeued one `OPERATOR_COMMAND`,
+and an ordinary retry keeps the category of the failure that caused it. Attempt and recovery-cycle
+counters are left alone, because an abandoned claim is not a rejected publish and must not consume
+the retry budget.
+
+Manual recovery (`REQUEUE_STUCK_OUTBOX_EVENT_ONCE`) remains for incidents, investigation, and hosts
+where the scheduler is disabled. Both paths perform the same transition; they differ only in what
+sets the age. `WORKSPACE_CORE_OUTBOX_RECOVERY_STALE_PUBLISHING_AGE` is the standing policy for the
+scheduler and the gauge, while `WORKSPACE_CORE_PROCESSING_RECOVERY_MINIMUM_PUBLISHING_AGE` is the
+minimum age the operator asserts for the one event they are requeuing by hand — a per-incident
+argument to that command, not a second policy. If `project3.outbox.stuck` stays above zero across
+several recovery intervals, automatic recovery is not clearing it: that is a real wedge worth
+investigating rather than a claim in flight.
+
 Processing has **no** stuck gauge on purpose. A `PENDING` job is waiting on the external processor,
 and Spring cannot distinguish a long transcription from a dead worker — it holds no lease or
 heartbeat, only the eventual result event. Backlog and oldest-wait are reported; classifying the

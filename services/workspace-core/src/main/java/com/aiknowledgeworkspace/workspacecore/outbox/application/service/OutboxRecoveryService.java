@@ -3,6 +3,7 @@ package com.aiknowledgeworkspace.workspacecore.outbox.application.service;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.configuration.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
+import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxRecoveryOrigin;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxEventStore;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxFailureRecovery;
@@ -75,5 +76,39 @@ public class OutboxRecoveryService implements OutboxFailureRecovery {
         }
 
         return new OutboxRecoveryResult(eligibleIds.size(), requeued, eligibleIds.size() - requeued, false);
+    }
+
+    @Override
+    public OutboxRecoveryResult recoverStalePublishing() {
+        if (!properties.isEnabled()) {
+            return OutboxRecoveryResult.disabledResult();
+        }
+
+        Instant now = Instant.now(clock);
+        Instant cutoff = now.minus(properties.getStalePublishingAge());
+        List<UUID> staleIds = repository.findStalePublishingIds(
+                OutboxEventStatus.PUBLISHING,
+                cutoff,
+                properties.getBatchSize()
+        );
+
+        int requeued = 0;
+        for (UUID eventId : staleIds) {
+            // The conditional update decides, not this loop: a row the relay finished, or another
+            // instance already recovered, no longer matches and reports zero rows changed.
+            Integer updated = transactionTemplate.execute(status -> repository.requeueStalePublishing(
+                    eventId,
+                    OutboxEventStatus.PUBLISHING,
+                    OutboxEventStatus.PENDING,
+                    cutoff,
+                    OutboxRecoveryOrigin.AUTOMATIC_STALE_PUBLISHING.name(),
+                    now
+            ));
+            if (updated != null && updated == 1) {
+                requeued++;
+            }
+        }
+
+        return new OutboxRecoveryResult(staleIds.size(), requeued, staleIds.size() - requeued, false);
     }
 }

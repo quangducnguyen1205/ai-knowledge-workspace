@@ -135,6 +135,11 @@ selected result envelope for smoke evidence, retry one selected durable failed r
 selected stale publishing outbox event, and explicitly index one authorized transcript-ready
 asset. There is no generic all-event worker, broad failed-row scan, retry topic or Kafka DLQ.
 
+The manual stale-publishing requeue stays available for incidents, investigation, and hosts where
+the recovery scheduler is disabled, but it is no longer the only route: the scheduler now clears
+stale publication claims on its own — see
+[`deployment.md`](deployment.md) under "Automatic recovery of stale publication claims".
+
 ## Expected runtime checks
 
 1. Flyway applies the single baseline and Hibernate validates it.

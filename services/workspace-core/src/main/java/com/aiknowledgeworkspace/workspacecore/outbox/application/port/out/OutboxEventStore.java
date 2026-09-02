@@ -28,6 +28,26 @@ public interface OutboxEventStore {
             int limit
     );
 
+    /**
+     * Ids of events whose publication claim was taken at or before {@code cutoff}, oldest first.
+     * The claim instant is the row's {@code updatedAt}, stamped when the relay took it.
+     */
+    List<UUID> findStalePublishingIds(OutboxEventStatus publishing, Instant cutoff, int limit);
+
+    /**
+     * Returns one stale claim to the relay queue, conditional on it still being claimed and still
+     * being stale. Returns the number of rows changed, so a caller that loses the race to another
+     * instance — or to the relay finishing the send — sees {@code 0} rather than overwriting it.
+     */
+    int requeueStalePublishing(
+            UUID eventId,
+            OutboxEventStatus publishing,
+            OutboxEventStatus pending,
+            Instant cutoff,
+            String recoveryCategory,
+            Instant now
+    );
+
     int requeueFailedForRecovery(
             UUID eventId,
             OutboxEventStatus failed,

@@ -20,6 +20,11 @@ public class OutboxRecoveryScheduler {
     }
 
     public void reconcileOnSchedule() {
+        reconcileEligibleFailures();
+        recoverStalePublishing();
+    }
+
+    private void reconcileEligibleFailures() {
         try {
             OutboxRecoveryResult result = recoveryService.reconcileEligibleFailures();
             if (result.eligible() > 0) {
@@ -32,6 +37,30 @@ public class OutboxRecoveryScheduler {
             }
         } catch (RuntimeException exception) {
             LOGGER.warn("Outbox recovery reconciliation failed category={}", exception.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Kept independent of the failure pass: a database error in one must not skip the other, and
+     * either is safe to retry on the next tick because both are conditional on current row state.
+     */
+    private void recoverStalePublishing() {
+        try {
+            OutboxRecoveryResult result = recoveryService.recoverStalePublishing();
+            if (result.eligible() > 0) {
+                // Counts only — the event ids are already in the lifecycle logs and the rows.
+                LOGGER.info(
+                        "Stale outbox publishing recovery completed eligible={} requeued={} skipped={}",
+                        result.eligible(),
+                        result.requeued(),
+                        result.skipped()
+                );
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.warn(
+                    "Stale outbox publishing recovery failed category={}",
+                    exception.getClass().getSimpleName()
+            );
         }
     }
 }

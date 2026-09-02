@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.adapter.in.metrics;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.configuration.OutboxRecoveryProperties;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxEventStore;
 import io.micrometer.core.instrument.Gauge;
@@ -17,17 +18,14 @@ import org.springframework.stereotype.Component;
  * values survive a process restart instead of resetting the way in-memory counters would.
  *
  * <p><strong>Stuck definition.</strong> An event is stuck when it is still {@code PUBLISHING} and
- * was claimed at least {@link #STUCK_PUBLISHING_AFTER} ago. The relay claims an event, publishes it
- * within the Kafka send timeout (10s by default), and immediately moves it on, so an event that has
- * held the claim for minutes means the claiming process died between the claim and the publish.
- * Nothing requeues it automatically — that is the wedge this gauge exists to reveal.
+ * was claimed at least {@code outbox.recovery.stale-publishing-age} ago. The relay claims an event,
+ * publishes it within the Kafka send timeout (10s by default), and immediately moves it on, so an
+ * event that has held the claim for minutes means the claiming process died between the claim and
+ * the publish.
  *
- * <p>The threshold deliberately mirrors the operator recovery contract's
- * {@code workspace.processing.recovery.minimum-publishing-age} default, so a non-zero stuck count
- * means "this many events the manual PUBLISHING requeue command would accept". It is a constant
- * rather than configuration: the recovery command already owns the tunable copy, module boundaries
- * keep the outbox independent of the processing module, and a wedge detector has no deployment
- * reason to vary.
+ * <p>The threshold is read from the recovery configuration rather than kept here, so this gauge
+ * counts exactly the rows automatic recovery accepts: a non-zero value that persists across
+ * recovery runs is a wedge recovery could not clear, not merely a claim in flight.
  *
  * <p>Only actionable statuses are exposed. {@code PUBLISHED} rows are retained history and would
  * report table growth rather than work still waiting.
@@ -35,26 +33,32 @@ import org.springframework.stereotype.Component;
 @Component
 class OutboxBacklogMetrics {
 
-    static final Duration STUCK_PUBLISHING_AFTER = Duration.ofMinutes(5);
     private static final Duration DEFAULT_SNAPSHOT_TTL = Duration.ofSeconds(1);
 
     private final OutboxEventStore outboxEventRepository;
+    private final OutboxRecoveryProperties recoveryProperties;
     private final Clock clock;
     private final long snapshotTtlNanos;
     private final AtomicReference<CachedSnapshot> cachedSnapshot = new AtomicReference<>();
 
     @Autowired
-    OutboxBacklogMetrics(MeterRegistry meterRegistry, OutboxEventStore outboxEventRepository) {
-        this(meterRegistry, outboxEventRepository, Clock.systemUTC(), DEFAULT_SNAPSHOT_TTL);
+    OutboxBacklogMetrics(
+            MeterRegistry meterRegistry,
+            OutboxEventStore outboxEventRepository,
+            OutboxRecoveryProperties recoveryProperties
+    ) {
+        this(meterRegistry, outboxEventRepository, recoveryProperties, Clock.systemUTC(), DEFAULT_SNAPSHOT_TTL);
     }
 
     OutboxBacklogMetrics(
             MeterRegistry meterRegistry,
             OutboxEventStore outboxEventRepository,
+            OutboxRecoveryProperties recoveryProperties,
             Clock clock,
             Duration snapshotTtl
     ) {
         this.outboxEventRepository = outboxEventRepository;
+        this.recoveryProperties = recoveryProperties;
         this.clock = clock;
         this.snapshotTtlNanos = snapshotTtl.toNanos();
         registerMeters(meterRegistry);
@@ -108,7 +112,8 @@ class OutboxBacklogMetrics {
         if (cached != null && readingNanos - cached.takenAtNanos() < snapshotTtlNanos) {
             return cached.snapshot();
         }
-        OutboxBacklogSnapshot fresh = outboxEventRepository.loadBacklogSnapshot(now.minus(STUCK_PUBLISHING_AFTER));
+        OutboxBacklogSnapshot fresh = outboxEventRepository.loadBacklogSnapshot(
+                now.minus(recoveryProperties.getStalePublishingAge()));
         cachedSnapshot.set(new CachedSnapshot(readingNanos, fresh));
         return fresh;
     }

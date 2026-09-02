@@ -44,6 +44,44 @@ interface OutboxEventJpaRepository extends JpaRepository<OutboxEvent, UUID> {
     );
 
     @Query("""
+            select event.id from OutboxEvent event
+            where event.status = :publishingStatus
+              and event.updatedAt <= :cutoff
+            order by event.updatedAt asc, event.id asc
+            """)
+    List<UUID> findStalePublishingIds(
+            @Param("publishingStatus") OutboxEventStatus publishingStatus,
+            @Param("cutoff") Instant cutoff,
+            Pageable pageable
+    );
+
+    /**
+     * The predicate is the lock: two instances may both select the same id, but only the update
+     * that still finds the row claimed and stale changes it, and it moves the row out of
+     * {@code PUBLISHING} while stamping a fresh {@code updatedAt}, so the loser changes nothing.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update OutboxEvent event
+            set event.status = :pendingStatus,
+                event.nextAttemptAt = null,
+                event.publishedAt = null,
+                event.lastFailureCategory = :recoveryCategory,
+                event.updatedAt = :now
+            where event.id = :id
+              and event.status = :publishingStatus
+              and event.updatedAt <= :cutoff
+            """)
+    int requeueStalePublishing(
+            @Param("id") UUID id,
+            @Param("publishingStatus") OutboxEventStatus publishingStatus,
+            @Param("pendingStatus") OutboxEventStatus pendingStatus,
+            @Param("cutoff") Instant cutoff,
+            @Param("recoveryCategory") String recoveryCategory,
+            @Param("now") Instant now
+    );
+
+    @Query("""
             select new com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxBacklogSnapshot(
                 count(case when event.status = :pendingStatus then 1 end),
                 count(case when event.status = :publishingStatus then 1 end),

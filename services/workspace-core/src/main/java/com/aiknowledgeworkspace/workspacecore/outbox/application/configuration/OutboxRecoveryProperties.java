@@ -9,6 +9,13 @@ public class OutboxRecoveryProperties {
     private boolean enabled = false;
     private Duration interval = Duration.ofSeconds(30);
     private Duration cooldown = Duration.ofSeconds(60);
+    /**
+     * How long a publication claim may stand before the relay that took it is presumed dead. This
+     * module owns the definition: automatic recovery accepts a row past it, and the stuck gauge
+     * counts the same rows, so detection and repair cannot drift apart. The default leaves a wide
+     * margin over a healthy send — the Kafka send timeout is seconds, this is minutes.
+     */
+    private Duration stalePublishingAge = Duration.ofMinutes(5);
     private int batchSize = 50;
     private int maxCycles = 3;
 
@@ -36,6 +43,15 @@ public class OutboxRecoveryProperties {
     public void setCooldown(Duration cooldown) {
         requirePositive(cooldown, "outbox.recovery.cooldown");
         this.cooldown = cooldown;
+    }
+
+    public Duration getStalePublishingAge() {
+        return stalePublishingAge;
+    }
+
+    public void setStalePublishingAge(Duration stalePublishingAge) {
+        requirePositive(stalePublishingAge, "outbox.recovery.stale-publishing-age");
+        this.stalePublishingAge = stalePublishingAge;
     }
 
     public int getBatchSize() {

@@ -77,6 +77,23 @@ class OutboxPersistenceAdapter implements OutboxWriter, OutboxEventStore {
     }
 
     @Override
+    public List<UUID> findStalePublishingIds(OutboxEventStatus publishing, Instant cutoff, int limit) {
+        return repository.findStalePublishingIds(publishing, cutoff, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public int requeueStalePublishing(
+            UUID eventId,
+            OutboxEventStatus publishing,
+            OutboxEventStatus pending,
+            Instant cutoff,
+            String recoveryCategory,
+            Instant now
+    ) {
+        return repository.requeueStalePublishing(eventId, publishing, pending, cutoff, recoveryCategory, now);
+    }
+
+    @Override
     public int requeueFailedForRecovery(
             UUID eventId,
             OutboxEventStatus failed,
