@@ -30,6 +30,20 @@ public interface SearchIndexJobStore {
      */
     IndexingBacklogSnapshot loadBacklogSnapshot(Instant stuckBefore);
 
+    /**
+     * Ids of jobs whose indexing claim was taken at or before {@code cutoff}, oldest first. The
+     * claim instant is the job's {@code updatedAt}, stamped when the attempt began.
+     */
+    List<UUID> findStaleIndexingIds(AssetSearchIndexJobStatus indexing, Instant cutoff, int limit);
+
+    /**
+     * Takes over a stale indexing claim by refreshing it, conditional on the job still being
+     * claimed and still being stale. Returns the number of rows changed, so a worker that loses the
+     * race — to another instance, or to the attempt finishing — sees {@code 0} and stands down.
+     * The status is deliberately unchanged: the job stays claimed, now by this worker.
+     */
+    int claimStaleIndexingJob(UUID jobId, AssetSearchIndexJobStatus indexing, Instant cutoff, Instant now);
+
     AssetSearchIndexJob save(AssetSearchIndexJob job);
 
     void deleteByAssetId(UUID assetId);

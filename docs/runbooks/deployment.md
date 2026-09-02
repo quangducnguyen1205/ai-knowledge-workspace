@@ -194,6 +194,38 @@ copy, and a wedge detector has no deployment reason to vary.
 **Backlog is not a wedge.** A high `pending` count while Kafka is down is work queued correctly;
 the outbox is doing its job. Read `stuck` for corruption and `pending` for pressure.
 
+### Automatic recovery of stale indexing claims
+
+An indexing job that is still `INDEXING` long after it was claimed means the worker running that
+attempt died. Nothing else will finish it: the Kafka record that started it is acknowledged on a
+terminal outcome, but a rejected event is acknowledged while the job is still claimed, a record the
+container's error handler gives up on is committed the same way, and an offset reset or topic
+retention can drop it entirely. Until the job finishes, the asset never becomes searchable.
+
+With `WORKSPACE_CORE_SEARCH_INDEXING_RECOVERY_ENABLED=true` (the Project3 profile sets it), a
+scheduler every `WORKSPACE_CORE_SEARCH_INDEXING_RECOVERY_INTERVAL` (60s) takes up to
+`WORKSPACE_CORE_SEARCH_INDEXING_RECOVERY_BATCH_SIZE` (20) jobs whose claim is older than
+`WORKSPACE_CORE_SEARCH_INDEXING_STALE_AGE` (5m) and replays them. Replay runs the ordinary indexing
+path — read the canonical transcript, check the fingerprint, write Elasticsearch, finalise the job —
+so there is exactly one implementation of indexing. A healthy attempt is bounded by the
+Elasticsearch connect and read timeouts (3s and 10s), so a five-minute-old claim is far past any
+attempt still making progress.
+
+**Replay is safe because an attempt replaces rather than appends.** It deletes every document for
+the asset and bulk-writes the full projection under document ids derived from the asset and
+transcript row, so replaying converges on the same documents whether the dead attempt had written
+nothing, part of the set, or all of it. That is what makes the dangerous window — Elasticsearch
+wrote everything, the process died before the job was finalised — safe to repeat.
+
+**A stale job cannot overwrite newer content.** Before writing, the attempt recomputes the
+fingerprint of the current canonical transcript; if the transcript has moved on, the job is marked
+`SUPERSEDED` and Elasticsearch is left alone for the newer job to own.
+
+`project3.search.index.stuck` uses the same threshold, so it counts exactly the jobs recovery will
+act on. A value that stays above zero across several recovery intervals is a wedge recovery could
+not clear — worth investigating. This is per-job repair only; reconstructing a missing or corrupt
+index in bulk is a separate future task.
+
 ### Automatic recovery of stale publication claims
 
 When `WORKSPACE_CORE_OUTBOX_RECOVERY_ENABLED=true` (the Project3 profile sets it), the recovery

@@ -12,6 +12,7 @@ workspace:
   search:
     indexing:
       auto-request-enabled: true
+      recovery-enabled: true
     indexing-relay:
       enabled: true
   kafka:

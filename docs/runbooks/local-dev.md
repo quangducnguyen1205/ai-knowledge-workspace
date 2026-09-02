@@ -140,6 +140,10 @@ the recovery scheduler is disabled, but it is no longer the only route: the sche
 stale publication claims on its own — see
 [`deployment.md`](deployment.md) under "Automatic recovery of stale publication claims".
 
+Indexing jobs abandoned mid-attempt are likewise replayed automatically rather than waiting for the
+explicit index command; the bounded scan covers claims older than the stale threshold only, and it
+replays through the ordinary indexing path. See "Automatic recovery of stale indexing claims".
+
 ## Expected runtime checks
 
 1. Flyway applies the single baseline and Hibernate validates it.

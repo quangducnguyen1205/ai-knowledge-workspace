@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.search.adapter.in.metrics;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.configuration.SearchIndexingProperties;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.IndexingBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
 import io.micrometer.core.instrument.Gauge;
@@ -17,41 +18,45 @@ import org.springframework.stereotype.Component;
  * survive a process restart instead of resetting the way in-memory counters would.
  *
  * <p><strong>Stuck definition.</strong> A job is stuck when it is still {@code INDEXING} and was
- * claimed at least {@link #STUCK_INDEXING_AFTER} ago. Indexing runs inside one Kafka message
- * handling bounded by the Elasticsearch connect and read timeouts (3s and 10s by default), so a job
- * holding the claim for minutes means the worker died mid-attempt. Nothing reclaims it: an
- * interrupted attempt stays {@code INDEXING} across restarts, and the asset never becomes
- * searchable until someone intervenes.
+ * claimed at least {@code workspace.search.indexing.stale-age} ago. Indexing runs inside one Kafka
+ * message handling bounded by the Elasticsearch connect and read timeouts (3s and 10s by default),
+ * so a job holding the claim for minutes means the worker died mid-attempt.
  *
- * <p>The threshold is a constant rather than configuration. It is derived from the attempt's own
- * bound rather than from an operator policy, and it is kept separate from the outbox threshold so
- * that retuning one subsystem never silently redefines the other.
+ * <p>The threshold is read from the indexing configuration rather than kept here, so this gauge
+ * counts exactly the jobs automatic recovery accepts: a value that persists across recovery
+ * intervals is a wedge recovery could not clear, not an attempt in flight.
  *
  * <p>{@code INDEXED} and {@code SUPERSEDED} are excluded: they are terminal history that only grows.
  */
 @Component
 class SearchIndexBacklogMetrics {
 
-    static final Duration STUCK_INDEXING_AFTER = Duration.ofMinutes(5);
     private static final Duration DEFAULT_SNAPSHOT_TTL = Duration.ofSeconds(1);
 
     private final SearchIndexJobStore searchIndexJobRepository;
+    private final SearchIndexingProperties indexingProperties;
     private final Clock clock;
     private final long snapshotTtlNanos;
     private final AtomicReference<CachedSnapshot> cachedSnapshot = new AtomicReference<>();
 
     @Autowired
-    SearchIndexBacklogMetrics(MeterRegistry meterRegistry, SearchIndexJobStore searchIndexJobRepository) {
-        this(meterRegistry, searchIndexJobRepository, Clock.systemUTC(), DEFAULT_SNAPSHOT_TTL);
+    SearchIndexBacklogMetrics(
+            MeterRegistry meterRegistry,
+            SearchIndexJobStore searchIndexJobRepository,
+            SearchIndexingProperties indexingProperties
+    ) {
+        this(meterRegistry, searchIndexJobRepository, indexingProperties, Clock.systemUTC(), DEFAULT_SNAPSHOT_TTL);
     }
 
     SearchIndexBacklogMetrics(
             MeterRegistry meterRegistry,
             SearchIndexJobStore searchIndexJobRepository,
+            SearchIndexingProperties indexingProperties,
             Clock clock,
             Duration snapshotTtl
     ) {
         this.searchIndexJobRepository = searchIndexJobRepository;
+        this.indexingProperties = indexingProperties;
         this.clock = clock;
         this.snapshotTtlNanos = snapshotTtl.toNanos();
         registerMeters(meterRegistry);
@@ -102,7 +107,7 @@ class SearchIndexBacklogMetrics {
             return cached.snapshot();
         }
         IndexingBacklogSnapshot fresh =
-                searchIndexJobRepository.loadBacklogSnapshot(now.minus(STUCK_INDEXING_AFTER));
+                searchIndexJobRepository.loadBacklogSnapshot(now.minus(indexingProperties.getStaleAge()));
         cachedSnapshot.set(new CachedSnapshot(readingNanos, fresh));
         return fresh;
     }

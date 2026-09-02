@@ -6,6 +6,7 @@ import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearch
 import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
 import java.time.Instant;
 import java.util.Collection;
+import org.springframework.data.domain.PageRequest;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,6 +65,21 @@ class SearchIndexJobPersistenceAdapter implements SearchIndexJobStore {
                 AssetSearchIndexJobStatus.FAILED,
                 stuckBefore
         );
+    }
+
+    @Override
+    public List<UUID> findStaleIndexingIds(AssetSearchIndexJobStatus indexing, Instant cutoff, int limit) {
+        return repository.findStaleIndexingIds(indexing, cutoff, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public int claimStaleIndexingJob(
+            UUID jobId,
+            AssetSearchIndexJobStatus indexing,
+            Instant cutoff,
+            Instant now
+    ) {
+        return repository.claimStaleIndexingJob(jobId, indexing, cutoff, now);
     }
 
     @Override
