@@ -1,5 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.processing.adapter.out.persistence;
 
+import com.aiknowledgeworkspace.workspacecore.processing.api.ProcessingJobStatus;
+import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.processing.application.port.out.ProcessingJobStore;
 import com.aiknowledgeworkspace.workspacecore.processing.domain.ProcessingJob;
 import java.util.Optional;
@@ -28,6 +30,11 @@ class ProcessingJobPersistenceAdapter implements ProcessingJobStore {
     @Override
     public Optional<ProcessingJob> findByAssetIdAndRequestEventId(UUID assetId, UUID requestEventId) {
         return jobRepository.findByAssetIdAndProcessingRequestEventId(assetId, requestEventId);
+    }
+
+    @Override
+    public ProcessingBacklogSnapshot loadBacklogSnapshot() {
+        return jobRepository.loadBacklogSnapshot(ProcessingJobStatus.PENDING);
     }
 
     @Override

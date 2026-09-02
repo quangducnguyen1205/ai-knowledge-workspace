@@ -37,5 +37,11 @@ public interface OutboxEventStore {
             int maxCycles
     );
 
+    /**
+     * Counts publication pressure by status in one pass. An event claimed for publication at or
+     * before {@code stuckBefore} is reported as stuck.
+     */
+    OutboxBacklogSnapshot loadBacklogSnapshot(Instant stuckBefore);
+
     OutboxEvent save(OutboxEvent event);
 }

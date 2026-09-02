@@ -185,6 +185,8 @@ class HealthProbeSemanticsTest {
     void sensitiveManagementEndpointsAreNotExposedAtAll() {
         for (String endpoint : new String[] {
                 "/actuator/env",
+                "/actuator/metrics",
+                "/actuator/prometheus",
                 "/actuator/configprops",
                 "/actuator/beans",
                 "/actuator/mappings",

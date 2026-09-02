@@ -163,6 +163,52 @@ goes through the durable outbox and retries when the broker returns, so broker h
 the later Kafka-operability task. MinIO likewise stays unprobed rather than gaining a
 write-or-list probe that no traffic decision would consume.
 
+## Async workflow metrics
+
+Spring registers Micrometer gauges for the asynchronous state machines it owns, so an operator can
+answer "how much work is waiting, how much failed, is anything stuck, and how old is the oldest
+stuck item" without opening PostgreSQL. Every value is a `COUNT`/`MIN` over canonical rows, so it
+is correct immediately after a restart rather than counting from zero.
+
+| Metric | Tag | Meaning |
+|---|---|---|
+| `project3.outbox.events` | `status` = `pending` · `publishing` · `failed` | Outbox events in an actionable status. `PUBLISHED` is excluded — it is retained history, not work |
+| `project3.outbox.stuck` | `status=publishing` | Events that have held a publication claim past the stuck threshold |
+| `project3.outbox.stuck.age.oldest` | `status=publishing` | Seconds the oldest such event has held its claim; `0` when nothing is stuck |
+| `project3.search.index.jobs` | `status` = `pending` · `indexing` · `failed` | Indexing jobs in an actionable status. `INDEXED` and `SUPERSEDED` are excluded as terminal history |
+| `project3.search.index.stuck` | `status=indexing` | Jobs that have held an indexing claim past the stuck threshold |
+| `project3.search.index.stuck.age.oldest` | `status=indexing` | Seconds the oldest such job has held its claim |
+| `project3.processing.jobs` | `status=pending` | Jobs still waiting for a result from the processor |
+| `project3.processing.wait.age.oldest` | `status=pending` | Seconds the longest-waiting job has waited |
+
+**Stuck means a specific thing.** An outbox event is stuck when it is still `PUBLISHING` **and** was
+claimed at least **5 minutes** ago: the relay claims, publishes within the Kafka send timeout, and
+moves on, so a claim held for minutes means the claiming process died mid-publish. That threshold
+mirrors `workspace.processing.recovery.minimum-publishing-age`, so a non-zero count is also the
+number of events the manual PUBLISHING requeue command would accept. An indexing job is stuck when
+it is still `INDEXING` after **5 minutes**, which exceeds any healthy attempt (bounded by the
+Elasticsearch connect and read timeouts) — nothing reclaims it, so the asset stays unsearchable
+until someone acts. Both thresholds are constants in code: the recovery command owns the tunable
+copy, and a wedge detector has no deployment reason to vary.
+
+**Backlog is not a wedge.** A high `pending` count while Kafka is down is work queued correctly;
+the outbox is doing its job. Read `stuck` for corruption and `pending` for pressure.
+
+Processing has **no** stuck gauge on purpose. A `PENDING` job is waiting on the external processor,
+and Spring cannot distinguish a long transcription from a dead worker — it holds no lease or
+heartbeat, only the eventual result event. Backlog and oldest-wait are reported; classifying the
+wedge needs the processor and is deferred.
+
+**Identifiers never become tags.** `status` is the only label, and its values are enum constants.
+Asset, event, job, workspace, and user ids belong in the correlated logs, which answer "what
+happened to this specific job"; metrics answer "is this class of jobs healthy". A test over the
+whole meter registry enforces this.
+
+These meters are **registered but not exported.** Actuator still exposes only `health`, so there is
+no `/actuator/metrics` and no `/actuator/prometheus` — nothing consumes them over HTTP yet, and the
+probe surface is unauthenticated. Choosing an exporter is a later task; the metric model is what
+this one establishes.
+
 ## Build identity
 
 ```bash

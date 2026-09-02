@@ -2,6 +2,7 @@ package com.aiknowledgeworkspace.workspacecore.search.application.port.out.index
 
 import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,12 @@ public interface SearchIndexJobStore {
     Optional<AssetSearchIndexJob> findLatestIndexed(UUID assetId, String fingerprint);
 
     Optional<AssetSearchIndexJob> findByRequestOutboxEventId(UUID eventId);
+
+    /**
+     * Counts indexing pressure by status in one pass. A job claimed for indexing at or before
+     * {@code stuckBefore} is reported as stuck.
+     */
+    IndexingBacklogSnapshot loadBacklogSnapshot(Instant stuckBefore);
 
     AssetSearchIndexJob save(AssetSearchIndexJob job);
 

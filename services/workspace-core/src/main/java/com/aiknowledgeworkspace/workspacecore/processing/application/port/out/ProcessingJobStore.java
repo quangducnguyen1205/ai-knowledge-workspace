@@ -12,6 +12,9 @@ public interface ProcessingJobStore {
 
     Optional<ProcessingJob> findByAssetIdAndRequestEventId(UUID assetId, UUID requestEventId);
 
+    /** Counts the jobs still waiting for a processing result, and when the longest wait began. */
+    ProcessingBacklogSnapshot loadBacklogSnapshot();
+
     ProcessingJob save(ProcessingJob job);
 
     void delete(ProcessingJob job);

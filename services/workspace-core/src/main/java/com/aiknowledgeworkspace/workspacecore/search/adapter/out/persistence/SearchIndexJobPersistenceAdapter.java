@@ -1,8 +1,10 @@
 package com.aiknowledgeworkspace.workspacecore.search.adapter.out.persistence;
 
+import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.IndexingBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.search.application.port.out.indexing.SearchIndexJobStore;
 import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJob;
 import com.aiknowledgeworkspace.workspacecore.search.domain.indexing.AssetSearchIndexJobStatus;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -52,6 +54,16 @@ class SearchIndexJobPersistenceAdapter implements SearchIndexJobStore {
     @Override
     public Optional<AssetSearchIndexJob> findByRequestOutboxEventId(UUID eventId) {
         return repository.findByRequestOutboxEventId(eventId);
+    }
+
+    @Override
+    public IndexingBacklogSnapshot loadBacklogSnapshot(Instant stuckBefore) {
+        return repository.loadBacklogSnapshot(
+                AssetSearchIndexJobStatus.PENDING,
+                AssetSearchIndexJobStatus.INDEXING,
+                AssetSearchIndexJobStatus.FAILED,
+                stuckBefore
+        );
     }
 
     @Override

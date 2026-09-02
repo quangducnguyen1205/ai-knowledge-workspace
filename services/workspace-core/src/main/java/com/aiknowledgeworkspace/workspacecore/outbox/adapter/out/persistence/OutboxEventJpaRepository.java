@@ -1,5 +1,6 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.persistence;
 
+import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEventStatus;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxFailureDisposition;
@@ -40,6 +41,25 @@ interface OutboxEventJpaRepository extends JpaRepository<OutboxEvent, UUID> {
             @Param("eventType") String eventType,
             @Param("now") Instant now,
             Pageable pageable
+    );
+
+    @Query("""
+            select new com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxBacklogSnapshot(
+                count(case when event.status = :pendingStatus then 1 end),
+                count(case when event.status = :publishingStatus then 1 end),
+                count(case when event.status = :failedStatus then 1 end),
+                count(case when event.status = :publishingStatus and event.updatedAt <= :stuckBefore then 1 end),
+                min(case when event.status = :publishingStatus and event.updatedAt <= :stuckBefore
+                    then event.updatedAt end)
+            )
+            from OutboxEvent event
+            where event.status in (:pendingStatus, :publishingStatus, :failedStatus)
+            """)
+    OutboxBacklogSnapshot loadBacklogSnapshot(
+            @Param("pendingStatus") OutboxEventStatus pendingStatus,
+            @Param("publishingStatus") OutboxEventStatus publishingStatus,
+            @Param("failedStatus") OutboxEventStatus failedStatus,
+            @Param("stuckBefore") Instant stuckBefore
     );
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)

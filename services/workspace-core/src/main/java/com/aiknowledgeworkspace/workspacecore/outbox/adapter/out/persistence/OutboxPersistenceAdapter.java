@@ -1,6 +1,7 @@
 package com.aiknowledgeworkspace.workspacecore.outbox.adapter.out.persistence;
 
 import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxDraft;
+import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxBacklogSnapshot;
 import com.aiknowledgeworkspace.workspacecore.outbox.application.port.out.OutboxEventStore;
 import com.aiknowledgeworkspace.workspacecore.outbox.api.OutboxWriter;
 import com.aiknowledgeworkspace.workspacecore.outbox.domain.OutboxEvent;
@@ -85,6 +86,16 @@ class OutboxPersistenceAdapter implements OutboxWriter, OutboxEventStore {
             int maxCycles
     ) {
         return repository.requeueFailedForRecovery(eventId, failed, pending, disposition, now, maxCycles);
+    }
+
+    @Override
+    public OutboxBacklogSnapshot loadBacklogSnapshot(Instant stuckBefore) {
+        return repository.loadBacklogSnapshot(
+                OutboxEventStatus.PENDING,
+                OutboxEventStatus.PUBLISHING,
+                OutboxEventStatus.FAILED,
+                stuckBefore
+        );
     }
 
     @Override
