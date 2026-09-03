@@ -5,7 +5,11 @@ spring:
 
 workspace:
   security:
-    authentication-mode: legacy_session
+    # Same default as the base configuration, but reached the same way: a literal here silently
+    # won every environment setting, so `WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt`
+    # was accepted, documented in `.env.example`, and then ignored by the only profile the product
+    # actually runs under. Sessions stay the default; the knob now decides.
+    authentication-mode: ${WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE:legacy_session}
   processing:
     request-relay:
       enabled: true

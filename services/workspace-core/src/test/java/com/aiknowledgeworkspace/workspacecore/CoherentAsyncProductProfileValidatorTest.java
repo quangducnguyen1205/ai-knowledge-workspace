@@ -57,6 +57,25 @@ class CoherentAsyncProductProfileValidatorTest {
     }
 
     @Test
+    void project3ProfileHonoursTheDocumentedAuthenticationModeVariable() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.profiles.active=project3",
+                        "WORKSPACE_CORE_SECURITY_AUTHENTICATION_MODE=keycloak_jwt"
+                )
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    // The profile used to pin this to a literal, which quietly outranked the very
+                    // variable `.env.example` documents for it: keycloak_jwt could be set, and the
+                    // application would still start on sessions. Sessions remain the default (the
+                    // test above still asserts it); what changed is that the setting is reachable.
+                    assertThat(context.getBean(WorkspaceSecurityProperties.class).isKeycloakJwtMode())
+                            .isTrue();
+                });
+    }
+
+    @Test
     void incompleteKafkaRequestConfigurationFailsFastWithSafePropertyNames() {
         contextRunner
                 .withPropertyValues(
