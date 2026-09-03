@@ -1,0 +1,655 @@
+/**
+ * AI Knowledge Workspace — authentication host styling.
+ *
+ * The values here are transcribed from the product's own design tokens
+ * (`ai-knowledge-workspace-fe/src/shared/theme/tokens.css`) rather than invented: deep teal on
+ * warm ivory, the same serif display / sans body pairing, the same 13px control radius and 26px
+ * card radius, the same 3px focus ring. Keycloak cannot import the frontend's token file, so the
+ * values are restated once, at the top, and everything below consumes them. When a product token
+ * changes, this block is the only place that has to follow.
+ *
+ * Fonts are the product's bundled system stacks. The authentication host deliberately has no
+ * remote font dependency: a sign-in page that waits on a third party to render is a worse page.
+ */
+:root {
+  color-scheme: light;
+
+  --font-body: "Avenir Next", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+
+  --text-caption: 0.7rem;
+  --text-label: 0.75rem;
+  --text-meta: 0.8rem;
+  --text-body: 0.875rem;
+  --text-body-lg: 1rem;
+
+  --bg-warm: #f6f2eb;
+  --bg-cool: #eef3f7;
+  --bg-glow-warm: rgba(231, 188, 145, 0.22);
+  --bg-glow-cool: rgba(107, 141, 215, 0.14);
+
+  --surface: rgba(255, 255, 255, 0.88);
+  --surface-strong: #ffffff;
+
+  --border: rgba(25, 34, 52, 0.11);
+  --border-strong: rgba(25, 34, 52, 0.18);
+
+  --text: #192234;
+  --text-secondary: #354052;
+  --text-muted: #5e6980;
+  --text-inverse: #ffffff;
+
+  --primary: #176f64;
+  --primary-strong: #10564f;
+  --primary-border: rgba(23, 111, 100, 0.2);
+
+  --blue: #3159cb;
+  --focus: #3159cb;
+
+  --danger: #ae4141;
+  --danger-soft: #fff1f1;
+  --danger-border: rgba(174, 65, 65, 0.17);
+  --warning: #9c5c20;
+  --warning-soft: #fff5e8;
+  --warning-border: rgba(156, 92, 32, 0.16);
+  --success: #1f7657;
+  --success-soft: #edf8f2;
+  --success-border: rgba(31, 118, 87, 0.15);
+  --info: #3159cb;
+  --info-soft: #edf2ff;
+  --info-border: rgba(49, 89, 203, 0.15);
+
+  --shadow-lg: 0 26px 70px rgba(25, 34, 52, 0.12);
+
+  --radius-xl: 26px;
+  --radius-control: 13px;
+  --space-1: 0.375rem;
+  --space-2: 0.625rem;
+  --space-3: 0.875rem;
+  --space-4: 1.125rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --motion-base: 160ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.p3-html {
+  -webkit-text-size-adjust: 100%;
+}
+
+.p3-body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  font-size: var(--text-body-lg);
+  line-height: 1.5;
+  color: var(--text);
+  /* The product's own page wash, so arriving here does not read as leaving the product. */
+  background:
+    radial-gradient(circle at top left, var(--bg-glow-warm), transparent 30rem),
+    radial-gradient(circle at top right, var(--bg-glow-cool), transparent 28rem),
+    linear-gradient(180deg, var(--bg-warm), var(--bg-cool));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input,
+button,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--primary-strong);
+  text-decoration: none;
+  font-weight: 650;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.p3-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Page frame ------------------------------------------------------------- */
+
+.p3-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-4) var(--space-7, 2.75rem);
+}
+
+/* Brand lockup ----------------------------------------------------------- */
+
+.p3-brand {
+  width: min(100%, 510px);
+}
+
+.p3-brand__lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text);
+}
+
+.p3-brand__lockup:empty {
+  display: none;
+}
+
+.p3-brand__mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--text-inverse);
+  background: linear-gradient(145deg, var(--primary), var(--blue));
+  border-radius: var(--radius-control);
+  font-size: var(--text-body);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 20px rgba(49, 89, 203, 0.15);
+}
+
+.p3-brand__word {
+  font-size: var(--text-body-lg);
+  font-weight: 700;
+}
+
+/* Card ------------------------------------------------------------------- */
+
+.p3-card {
+  width: min(100%, 510px);
+  display: grid;
+  gap: var(--space-5);
+  padding: clamp(1.5rem, 5vw, 2.7rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.p3-card__header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* On a form that marks required fields, the parent template puts the "* Required" legend above
+   the heading. The heading is what orients the reader, so it goes first and the legend follows. */
+.p3-card__header > .p3-content {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+}
+
+#kc-page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.85rem, 4.6vw, 2.4rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* Shown once a username has been attempted: who the flow is continuing as, and a way back. */
+#kc-username {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+#kc-attempted-username {
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.kc-login-tooltip {
+  display: inline-flex;
+  align-items: center;
+}
+
+.kc-tooltip-text {
+  font-size: var(--text-meta);
+}
+
+.p3-restart-icon {
+  display: none;
+}
+
+.subtitle {
+  font-size: var(--text-label);
+  color: var(--text-muted);
+}
+
+/* Fields ----------------------------------------------------------------- */
+
+/* The gap is wider than the product's own form because focus here is a 3px ring at a 3px offset
+   and every control in these forms can take it; at a tighter rhythm the ring on one field reaches
+   the label of the next.
+
+   `#kc-form-login` is listed by id on purpose: the sign-in template is the one form upstream
+   renders without a class of its own, so a class selector alone leaves exactly that form — the
+   most-used page in the theme — stacked with no rhythm at all. */
+.p3-form,
+#kc-form-login,
+#kc-form,
+#kc-form-wrapper,
+#kc-content,
+#kc-content-wrapper {
+  display: grid;
+  gap: var(--space-5);
+}
+
+/* The options row holds remember-me and the password-reset link. This realm enables neither, so
+   the row renders as an empty grid item that still spends a gap. Hidden by what it contains
+   rather than by realm setting, so enabling either one brings the row back on its own. */
+.p3-form-settings:not(:has(input, a, button)) {
+  display: none;
+}
+
+#kc-content,
+#kc-content-wrapper,
+#kc-form,
+#kc-form-wrapper {
+  min-width: 0;
+}
+
+.p3-field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.p3-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+/* Transcribed from the product's own `.field__label`, down to the tracking. */
+.p3-label {
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.required {
+  color: var(--danger);
+  font-size: var(--text-label);
+}
+
+.p3-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.72rem 0.9rem;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  transition: border-color var(--motion-base) var(--ease-standard);
+}
+
+.p3-input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.p3-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.p3-input--textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.p3-input-wrap {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Password field: the input and its reveal button share one control surface. */
+.p3-input-group {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.p3-input-group .p3-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.p3-reveal {
+  flex: 0 0 auto;
+  width: 46px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  transition: color var(--motion-base) var(--ease-standard);
+}
+
+.p3-reveal:hover {
+  color: var(--text);
+}
+
+/* Drawn rather than loaded: the parent theme's icon fonts are not inherited, and one masked
+   glyph per state is cheaper than a font for two icons. */
+.p3-reveal__icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.p3-reveal__icon--show {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+}
+
+.p3-reveal__icon--hide {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3l18 18'/%3E%3Cpath d='M10.6 5.2A9.9 9.9 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1'/%3E%3Cpath d='M6.3 6.4A17 17 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 4.2-.9'/%3E%3Cpath d='M9.9 9.9a3 3 0 0 0 4.2 4.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3l18 18'/%3E%3Cpath d='M10.6 5.2A9.9 9.9 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1'/%3E%3Cpath d='M6.3 6.4A17 17 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 4.2-.9'/%3E%3Cpath d='M9.9 9.9a3 3 0 0 0 4.2 4.2'/%3E%3C/svg%3E");
+}
+
+.p3-field__error {
+  display: block;
+  font-size: var(--text-meta);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.p3-field__help {
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+/* Options row and buttons ------------------------------------------------ */
+
+.p3-form-settings,
+.p3-form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.p3-form-options__links {
+  font-size: var(--text-meta);
+}
+
+#kc-form-options:empty {
+  display: none;
+}
+
+.p3-check,
+.checkbox label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.p3-check__input,
+.checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.p3-form-buttons {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Sign-up ends with a back link and a submit button in one group, in that order. The primary
+   action belongs above the way out of the form, and the way out reads as a footer beneath it. */
+.p3-field:has(> #kc-form-buttons):has(> #kc-form-options) {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-4);
+}
+
+.p3-field:has(> #kc-form-buttons) > #kc-form-options {
+  justify-content: center;
+}
+
+.p3-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0.68rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-weight: 750;
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    transform var(--motion-base) var(--ease-standard),
+    background var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.p3-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+.p3-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.p3-button--primary {
+  color: var(--text-inverse);
+  background: var(--primary);
+  box-shadow: 0 8px 18px var(--primary-border);
+}
+
+.p3-button--primary:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+.p3-button--ghost {
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.p3-button--block {
+  width: 100%;
+}
+
+/* Notices ---------------------------------------------------------------- */
+
+.p3-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-control);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.p3-alert__title {
+  font-size: var(--text-body);
+  font-weight: 650;
+}
+
+.p3-alert__icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5'/%3E%3Cpath d='M12 16.5h.01'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5'/%3E%3Cpath d='M12 16.5h.01'/%3E%3C/svg%3E");
+}
+
+.alert-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.alert-success {
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.alert-info {
+  border-color: var(--info-border);
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+/* Aside: the "new here? create an account" line under the form. */
+.p3-aside {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+#kc-registration-container,
+#kc-registration {
+  display: inline;
+}
+
+/* Card footer ------------------------------------------------------------ */
+
+.p3-footer {
+  padding-top: var(--space-3);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.p3-footer__line {
+  margin: 0;
+}
+
+/* Info and error pages --------------------------------------------------- */
+
+#kc-info-message,
+#kc-error-message {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+
+#kc-info-message p.instruction,
+#kc-error-message p.instruction {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* Narrow viewports ------------------------------------------------------- */
+
+@media (max-width: 480px) {
+  .p3-page {
+    justify-content: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-3) var(--space-6);
+  }
+
+  .p3-card {
+    border-radius: 20px;
+  }
+
+  /* Comfortably above the 44px touch target minimum on the smallest supported width, and the
+     same height across the three controls so the form reads as one column. */
+  .p3-input,
+  .p3-reveal,
+  .p3-button {
+    min-height: 48px;
+  }
+
+  .p3-reveal {
+    width: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p3-button,
+  .p3-input,
+  .p3-reveal {
+    transition: none;
+  }
+
+  .p3-button:hover:not(:disabled) {
+    transform: none;
+  }
+}

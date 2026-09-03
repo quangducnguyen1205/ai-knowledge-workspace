@@ -38,5 +38,12 @@
         }
       ]
     }
-  ]
+  ],
+  "displayName": "AI Knowledge Workspace",
+  "displayNameHtml": "<span class=\"p3-brand__mark\" aria-hidden=\"true\">AK</span><span class=\"p3-brand__word\">AI Knowledge Workspace</span>",
+  "loginTheme": "project3",
+  "loginWithEmailAllowed": true,
+  "rememberMe": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false
 }

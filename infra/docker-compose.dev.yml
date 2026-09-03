@@ -62,6 +62,10 @@ services:
       - "${KEYCLOAK_PORT:-8180}:8080"
     volumes:
       - ./keycloak/realm-import:/opt/keycloak/data/import:ro
+      # The product's login theme, mounted rather than baked into an image so it survives a
+      # container restart and a stack recreation without a rebuild. start-dev does not cache
+      # themes, so an edit here is visible on the next page load.
+      - ./keycloak/themes:/opt/keycloak/themes:ro
 
   elasticsearch:
     image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.11.1}
